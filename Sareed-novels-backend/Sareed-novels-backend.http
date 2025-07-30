@@ -1,0 +1,6 @@
+@Sareed_novels_backend_HostAddress = http://localhost:5273
+
+GET {{Sareed_novels_backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
