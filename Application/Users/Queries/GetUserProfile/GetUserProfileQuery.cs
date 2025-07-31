@@ -3,8 +3,8 @@ using MediatR;
 
 namespace Application.Users.Queries.GetUserProfile;
 
-public class GetUserProfileQuery : IRequest<UserProfile>
+public class GetUserProfileQuery(string userName) : IRequest<UserProfile>
 {
-    public string UserName { get; set; } = default!;
+    public string UserName { get; set; } = userName;
 
 }

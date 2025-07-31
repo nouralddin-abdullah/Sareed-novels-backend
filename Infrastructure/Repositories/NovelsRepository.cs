@@ -22,8 +22,21 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         return novel;
     }
 
+    public async Task<(IEnumerable<Novel?>, int)> GetWorks(string userId, int PageNumber, int PageSize)
+    {
+        var userWork = dbContext.Novels.Where(n => n.AuthorId == userId).AsQueryable();
+        var totalCount = await userWork.CountAsync();
+        if (PageNumber > 0 && PageSize > 0)
+        {
+            userWork = userWork.OrderBy(f => f.CreatedAt).Skip(PageSize * (PageNumber - 1)).Take(PageSize);
+        }
+        var userWorkList = await userWork.ToListAsync();
+        return (userWorkList, totalCount);
+    }
+
     public async Task<bool> UpdateOne(Novel novel)
     {
+        dbContext.Novels.Update(novel);
         var result = await dbContext.SaveChangesAsync();
         return result > 0;
     }

@@ -1,6 +1,8 @@
 ﻿using Application.Novels.Commands.ChangeCover;
 using Application.Novels.Commands.CreateNovel;
 using Application.Novels.Commands.UpdateNovel;
+using Application.Novels.Queries.GetMyWorks;
+using Application.Novels.Queries.GetWork;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -32,6 +34,19 @@ namespace Sareed_novels_backend.Controllers
             var command = new UpdateNovelCommand(novelId, request.Title, request.Summary, request.Status);
             var result = await mediator.Send(command);
             return Ok(result);
+        }
+        [HttpGet]
+        public async Task<IActionResult> GetMyWorks([FromQuery] GetMyWorksQuery query)
+        {
+            var worksListPaged = await mediator.Send(query);
+            return Ok(worksListPaged);
+        }
+        [HttpGet("{workId}")]
+        public async Task<IActionResult> GetWork([FromRoute] Guid workId)
+        {
+            var query = new GetWorkQuery(workId);
+            var workData = await mediator.Send(query);
+            return Ok(workData);
         }
     }
 }

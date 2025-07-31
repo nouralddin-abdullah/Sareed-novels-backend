@@ -24,7 +24,6 @@
 
   <ItemGroup>
     <Folder Include="Configuration\" />
-    <Folder Include="Novels\Queries\" />
   </ItemGroup>
 
 </Project>

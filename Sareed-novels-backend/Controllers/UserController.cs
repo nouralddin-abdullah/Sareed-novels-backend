@@ -6,6 +6,7 @@ using Application.Users.Queries.GetFollowersList;
 using Application.Users.Queries.GetFollowingList;
 using Application.Users.Queries.GetMyProfile;
 using Application.Users.Queries.GetUserProfile;
+using Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -71,27 +72,30 @@ namespace Sareed_novels_backend.Controllers
             return Ok(result);
         }
 
-        [HttpGet("followers-list")]
+        [HttpGet("followers-list/{userId}")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetFollowersList([FromQuery] GetFollowersListQuery command)
+        public async Task<IActionResult> GetFollowersList([FromRoute] string userId,[FromQuery] GetFollowersListQueryRequest request)
         {
-            var paginatedFollowersList = await mediator.Send(command);
+            var query = new GetFollowersListQuery(userId, request.PageSize, request.PageNumber);
+            var paginatedFollowersList = await mediator.Send(query);
             return Ok(paginatedFollowersList);
         }
 
-        [HttpGet("following-list")]
+        [HttpGet("following-list/{userId}")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetFollowingList([FromQuery] GetFollowingListQuery command)
+        public async Task<IActionResult> GetFollowingList([FromRoute] string userId, [FromQuery] GetFollowingListQueryRequest request)
         {
-            var paginatedFollowingList = await mediator.Send(command);
+            var query = new GetFollowingListQuery(userId, request.PageSize, request.PageNumber);
+            var paginatedFollowingList = await mediator.Send(query);
             return Ok(paginatedFollowingList);
         }
 
-        [HttpGet("user")]
+        [HttpGet("{userName}")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetUser([FromQuery] GetUserProfileQuery command)
+        public async Task<IActionResult> GetUser([FromRoute] string userName)
         {
-            var userDto = await mediator.Send(command);
+            var query = new GetUserProfileQuery(userName);
+            var userDto = await mediator.Send(query);
             return Ok(userDto);
         }
     }

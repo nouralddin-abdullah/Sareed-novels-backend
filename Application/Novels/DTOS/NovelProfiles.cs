@@ -13,5 +13,9 @@ public class NovelProfiles : Profile
         CreateMap<UpdateNovelCommand, Novel>()
             .ForAllMembers(opt => opt.Condition((src, dest, srcMember) => srcMember != null));
 
+        //Quires
+        CreateMap<Novel, MyWorksDTO>();
+        CreateMap<Novel, WorkDTO>();
+
     }
 }
