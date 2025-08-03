@@ -25,6 +25,13 @@ namespace Application.Novels.Commands.CreateNovel
                 .Must(ImageValidationUtils.IsValidImageFile)
                 .When(dto => dto.CoverImageUrl != null)
                 .WithMessage("Profile photo must be a valid image file (JPEG, PNG, WebP) and less than 5MB");
+
+            RuleFor(x => x.GenreIds)
+            .NotEmpty()
+            .WithMessage("At least one genre is required")
+            .Must(genres => genres.Count >= 1 && genres.Count <= 4)
+            .WithMessage("A novel must have between 1 and 4 genres");
+
         }
     }
 }

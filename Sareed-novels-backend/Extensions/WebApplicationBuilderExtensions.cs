@@ -11,6 +11,21 @@ public static class WebApplicationBuilderExtensions
 {
     public static void AddPresentation(this WebApplicationBuilder builder)
     {
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("AllowFrontend", policy =>
+            {
+                policy.WithOrigins(
+                        "http://localhost:5173",
+                        "https://localhost:5173",
+                        "https://hassany.com"
+                    )
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .AllowCredentials();
+            });
+        });
+
         // 1. Configure Authentication & JWT Bearer Validation
         builder.Services.AddAuthentication(options =>
         {
@@ -36,6 +51,7 @@ public static class WebApplicationBuilderExtensions
 
         // 3. Configure Swagger/OpenAPI
         builder.Services.AddEndpointsApiExplorer();
+
         builder.Services.AddSwaggerGen(c =>
         {
             // Define the "Bearer" security scheme

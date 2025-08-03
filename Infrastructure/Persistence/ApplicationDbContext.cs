@@ -8,6 +8,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 {
     internal DbSet<Novel> Novels { get; set; }
     internal DbSet<Follow> Follows { get; set; }
+    internal DbSet<Review> Reviews { get; set; }
+    internal DbSet<ReviewLike> ReviewLikes { get; set; }
+    internal DbSet<Genre> Genres { get; set; }
+    internal DbSet<NovelGenre> NovelGenres { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -39,6 +43,146 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                   .HasForeignKey(n => n.AuthorId);
 
             entity.HasIndex(n => n.AuthorId);
+
+            entity.Property(n => n.AverageWritingQualityScore)
+                  .HasPrecision(3, 2)
+                  .HasDefaultValue(0);
+
+            entity.Property(n => n.AverageUpdatingStabilityScore)
+                  .HasPrecision(3, 2)
+                  .HasDefaultValue(0);
+
+            entity.Property(n => n.AverageCharacterDevelopmentScore)
+                  .HasPrecision(3, 2)
+                  .HasDefaultValue(0);
+
+            entity.Property(n => n.AverageWorldBuildingScore)
+                  .HasPrecision(3, 2)
+                  .HasDefaultValue(0);
+
+            entity.Property(n => n.TotalAverageScore)
+                  .HasPrecision(3, 2)
+                  .HasDefaultValue(0);
+
+            entity.Property(n => n.ReviewCount)
+                  .HasDefaultValue(0);
+
+            // Add index for sorting by rating
+            entity.HasIndex(n => n.TotalAverageScore);
+        });
+
+        modelBuilder.Entity<Review>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+
+            entity.HasOne(r => r.ReviewOwner)
+                  .WithMany(u => u.Reviews) 
+                  .HasForeignKey(r => r.ReviewerId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(r => r.ReviewedNovel)
+                  .WithMany(n => n.Reviews) 
+                  .HasForeignKey(r => r.NovelId)
+                  .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(r => new { r.ReviewerId, r.NovelId })
+                  .IsUnique()
+                  .HasDatabaseName("IX_Reviews_ReviewerId_NovelId_Unique");
+
+            entity.Property(r => r.WritingQualityScore)
+                  .HasPrecision(3, 2);
+
+            entity.Property(r => r.UpdatingStabilityScore)
+                  .HasPrecision(3, 2);
+
+            entity.Property(r => r.CharacterDevelopmentScore)
+                  .HasPrecision(3, 2);
+
+            entity.Property(r => r.WorldBuildingScore)
+                  .HasPrecision(3, 2);
+
+            entity.Property(r => r.TotalAverageScore)
+                  .HasPrecision(3, 2);
+
+            // Configure Content max length
+            entity.Property(r => r.Content)
+                  .HasMaxLength(2000);
+
+            entity.Property(r => r.LikeCount)
+                  .HasDefaultValue(0);
+
+            // Add indexes for common queries
+            entity.HasIndex(r => r.ReviewerId);
+            entity.HasIndex(r => r.NovelId);
+            entity.HasIndex(r => r.CreatedAt);
+        });
+
+        modelBuilder.Entity<ReviewLike>(entity =>
+        {
+            entity.HasKey(rl => rl.Id);
+
+            entity.HasOne(rl => rl.User)
+                  .WithMany(u => u.ReviewLikes)
+                  .HasForeignKey(rl => rl.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(rl => rl.Review)
+                  .WithMany(r => r.Likes)
+                  .HasForeignKey(rl => rl.ReviewId)
+                  .OnDelete(DeleteBehavior.NoAction); 
+
+            entity.HasIndex(rl => new { rl.UserId, rl.ReviewId })
+                  .IsUnique()
+                  .HasDatabaseName("IX_ReviewLikes_UserId_ReviewId_Unique");
+
+            entity.HasIndex(rl => rl.UserId);
+            entity.HasIndex(rl => rl.ReviewId);
+        });
+
+        modelBuilder.Entity<Genre>(entity =>
+        {
+            entity.HasKey(g => g.Id);
+
+            entity.Property(g => g.Name)
+                  .HasMaxLength(50)
+                  .IsRequired();
+
+            entity.Property(g => g.Slug)
+                  .HasMaxLength(50)
+                  .IsRequired();
+
+            entity.Property(g => g.Description)
+                  .HasMaxLength(500);
+
+            entity.HasIndex(g => g.Slug)
+                  .IsUnique();
+
+            entity.HasIndex(g => g.Name)
+                  .IsUnique();
+        });
+
+        modelBuilder.Entity<NovelGenre>(entity =>
+        {
+            // Composite primary key
+            entity.HasKey(ng => new { ng.NovelId, ng.GenreId });
+
+            // Configure relationships
+            entity.HasOne(ng => ng.Novel)
+                  .WithMany(n => n.NovelGenres)
+                  .HasForeignKey(ng => ng.NovelId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(ng => ng.Genre)
+                  .WithMany(g => g.NovelGenres)
+                  .HasForeignKey(ng => ng.GenreId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // Future ranking fields configuration
+            entity.Property(ng => ng.GenreScore)
+                  .HasPrecision(5, 2); // Allow scores like 999.99
+
+            entity.HasIndex(ng => new { ng.GenreId, ng.GenreRank });
+            entity.HasIndex(ng => new { ng.GenreId, ng.GenreScore });
         });
     }
 }

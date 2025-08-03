@@ -20,6 +20,10 @@ namespace Sareed_novels_backend.Controllers
         public async Task<IActionResult> CreateUser(CreateUserCommand command)
         {
             var result = await mediator.Send(command);
+            if (!result.Result.Success)
+            {
+                return BadRequest(result);
+            }
             return Ok(result);
         }
 

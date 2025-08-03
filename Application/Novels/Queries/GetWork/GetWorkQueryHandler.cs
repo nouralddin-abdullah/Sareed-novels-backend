@@ -15,6 +15,7 @@ public class GetWorkQueryHandler(ILogger<GetMyWorksQueryHandler> logger, IUserCo
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
         var novel = await novelsRepository.GetOne(request.WorkGuid) ?? throw new NotFoundException("No work was found with this id");
+        logger.LogInformation("Getting work {@novel}", novel);
         if (novel.AuthorId != currentUser.Id)
         {
             throw new ForbidException("Forbidden");

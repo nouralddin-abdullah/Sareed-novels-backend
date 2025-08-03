@@ -6,7 +6,6 @@ using Application.Users.Queries.GetFollowersList;
 using Application.Users.Queries.GetFollowingList;
 using Application.Users.Queries.GetMyProfile;
 using Application.Users.Queries.GetUserProfile;
-using Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -74,7 +73,7 @@ namespace Sareed_novels_backend.Controllers
 
         [HttpGet("followers-list/{userId}")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetFollowersList([FromRoute] string userId,[FromQuery] GetFollowersListQueryRequest request)
+        public async Task<IActionResult> GetFollowersList([FromRoute] string userId, [FromQuery] GetFollowersListQueryRequest request)
         {
             var query = new GetFollowersListQuery(userId, request.PageSize, request.PageNumber);
             var paginatedFollowersList = await mediator.Send(query);

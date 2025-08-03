@@ -10,10 +10,10 @@ using Microsoft.Extensions.Logging;
 namespace Application.Users.Commands.CreateUser
 {
     public class CreateUserCommandHandler(ILogger<CreateUserCommandHandler> logger, IMapper mapper, IUsersRepository usersRepository, 
-        IFileUploadService fileUploadService) : IRequestHandler<CreateUserCommand, IdentityResult>
+        IFileUploadService fileUploadService, IJWTService jWTService, UserManager<User> userManager) : IRequestHandler<CreateUserCommand, CreateUserResponse>
     {
 
-        public async Task<IdentityResult> Handle(CreateUserCommand request, CancellationToken cancellationToken)
+        public async Task<CreateUserResponse> Handle(CreateUserCommand request, CancellationToken cancellationToken)
         {
             logger.LogInformation("Creating a new user {@user}", request);
             var userMapped = mapper.Map<User>(request);
@@ -33,9 +33,34 @@ namespace Application.Users.Commands.CreateUser
             {
                 logger.LogWarning("User creation failed for {Email}: {Errors}",
                     request.Email, string.Join(", ", result.Errors.Select(e => e.Description)));
-                await fileUploadService.DeleteImageAsync($"profile-images/{userMapped.UserName!}");
-            }
-            return result;
+
+                // Clean up uploaded profile photo if user creation fails
+                if (!string.IsNullOrEmpty(userMapped.ProfilePhoto))
+                {
+                    await fileUploadService.DeleteImageAsync($"profile-images/{userMapped.UserName!}");
+                }
+
+                return new CreateUserResponse
+                {
+                    Result = new FollowUser.OperationResult
+                    {
+                        Message = $"User creation failed: {string.Join("; ", result.Errors.Select(e => e.Description))}",
+                        Success = false
+                    }
+                };
+            };
+            var user = await userManager.FindByEmailAsync(request.Email);
+            return new CreateUserResponse
+            {
+                Result = new FollowUser.OperationResult
+                {
+                    Message = "User creation succeed",
+                    Success = true
+                },
+                AccessToken = jWTService.GenerateAccessToken(user!),
+                ExpiresAt = DateTime.UtcNow.AddDays(60)
+            };
+
         }
     }
 }

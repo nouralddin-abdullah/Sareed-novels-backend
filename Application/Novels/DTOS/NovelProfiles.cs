@@ -17,5 +17,16 @@ public class NovelProfiles : Profile
         CreateMap<Novel, MyWorksDTO>();
         CreateMap<Novel, WorkDTO>();
 
+
+        //Reading
+
+        //Commands
+
+        //Quires
+        CreateMap<User, AuthorDTO>();
+
+        CreateMap<Novel, NovelsDTO>()
+            .ForMember(dest => dest.Author, opt => opt.MapFrom(src => src.Owner));
+
     }
 }

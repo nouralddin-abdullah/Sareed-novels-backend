@@ -22,8 +22,8 @@ public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
             .WithMessage("A user should have a valid display name - minimum length is 3 and maximum is 20");
 
         RuleFor(dto => dto.Password)
-            .MinimumLength(8)
-            .WithMessage("A use should have password with minimum 8 characters");
+            .MinimumLength(6)
+            .WithMessage("A user should have password with minimum 8 characters");
         
         RuleFor(dto => dto.ProfilePhoto)
             .Must(ImageValidationUtils.IsValidImageFile)

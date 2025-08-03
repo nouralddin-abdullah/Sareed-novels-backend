@@ -22,6 +22,14 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         return novel;
     }
 
+    public async Task<Novel?> GetOneBySlug(string slug)
+    {
+        var novel = await dbContext.Novels
+            .Include(n=>n.Owner)
+            .FirstOrDefaultAsync(novel => novel.Slug == slug);
+        return novel;
+    }
+
     public async Task<(IEnumerable<Novel?>, int)> GetWorks(string userId, int PageNumber, int PageSize)
     {
         var userWork = dbContext.Novels.Where(n => n.AuthorId == userId).AsQueryable();

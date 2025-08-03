@@ -1,23 +1,17 @@
-﻿using Domain.Entities;
+﻿using Amazon.Runtime;
+using Amazon.S3;
+using Application.Services;
+using Domain.Entities;
+using Domain.Repositories;
+using Infrastructure.Authorization;
+using Infrastructure.Configuration;
 using Infrastructure.Persistence;
+using Infrastructure.Repositories;
+using Infrastructure.Services;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.Identity;
-using Domain.Repositories;
-using Infrastructure.Repositories;
-using Infrastructure.Configuration;
-using Amazon.S3;
-using Application.Services;
-using Infrastructure.Services;
-using Amazon.Runtime;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using Infrastructure.Authorization;
-using Application.Users;
-using Microsoft.AspNetCore.Authentication.Google;
-using Microsoft.AspNetCore.Authentication;
 namespace Infrastructure.Extensions;
 
 public static class ServiceCollectionExtensions
@@ -32,6 +26,14 @@ public static class ServiceCollectionExtensions
         services.AddIdentity<User, IdentityRole>(options =>
         {
             options.User.RequireUniqueEmail = true;
+
+            // Password options - Make them more user-friendly
+            options.Password.RequireDigit = false;              // Don't require numbers
+            options.Password.RequireLowercase = false;          // Don't require lowercase
+            options.Password.RequireUppercase = false;          // Don't require uppercase
+            options.Password.RequireNonAlphanumeric = false;    // Don't require special characters
+            options.Password.RequiredLength = 6;                // Minimum 6 characters
+            options.Password.RequiredUniqueChars = 0;           // At least 0 unique character
         })
         .AddEntityFrameworkStores<ApplicationDbContext>()
         .AddClaimsPrincipalFactory<SardUserClaimsPrincipalFactory>()
@@ -39,6 +41,10 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IUsersRepository, UsersRepositories>();
         services.AddScoped<INovelsRepository, NovelsRepository>();
+        services.AddScoped<IReviewsRepository, ReviewsRepository>();
+        services.AddScoped<IReviewLikesRepository, ReviewLikesRepository>();
+        services.AddScoped<INovelGenresRepository, NovelGenresRepository>();
+        services.AddScoped<IGenresRepository, GenresRepository>();
 
 
         //adding cloudflare settings

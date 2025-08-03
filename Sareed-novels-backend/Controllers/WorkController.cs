@@ -19,6 +19,10 @@ namespace Sareed_novels_backend.Controllers
         public async Task<IActionResult> CreateNovel(CreateNovelCommand command)
         {
             var result = await mediator.Send(command);
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
             return Ok(result);
         }
         [HttpPatch("novel-cover/{novelId}")]
@@ -26,13 +30,21 @@ namespace Sareed_novels_backend.Controllers
         {
             var command = new ChangerCoverCommand(novelId, request.CoverUrl);
             var result = await mediator.Send(command);
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
             return Ok(result);
         }
         [HttpPatch("{novelId}")]
         public async Task<IActionResult> UpdateNovel([FromRoute] Guid novelId, [FromBody] UpdateNovelCommandRequest request)
         {
-            var command = new UpdateNovelCommand(novelId, request.Title, request.Summary, request.Status);
+            var command = new UpdateNovelCommand(novelId, request.Title, request.Summary, request.Status, request.GenreIds ?? null);
             var result = await mediator.Send(command);
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
             return Ok(result);
         }
         [HttpGet]

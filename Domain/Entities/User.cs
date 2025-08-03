@@ -13,5 +13,7 @@ public class User : IdentityUser
     public ICollection<Follow> Following { get; set; } = new List<Follow>();
     public ICollection<Follow> Followers { get; set; } = new List<Follow>();
     public ICollection<Novel> Novels { get; set; } = new List<Novel>();
+    public ICollection<Review> Reviews { get; set; } = new List<Review>();
+    public ICollection<ReviewLike> ReviewLikes { get; set; } = new List<ReviewLike>();
 
 }
