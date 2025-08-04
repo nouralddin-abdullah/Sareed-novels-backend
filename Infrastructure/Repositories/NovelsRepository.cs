@@ -14,6 +14,24 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         return result > 0;
     }
 
+    public async Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber)
+    {
+        var query = dbContext.Novels
+        .Where(n => n.IsEligibleForRanking)
+        .Include(n => n.NovelGenres)
+            .ThenInclude(ng => ng.Genre)
+        .Include(n => n.Owner)
+        .OrderByDescending(n => n.CreatedAt); // Real-time ordering by creation date
+
+        var totalCount = await query.CountAsync();
+
+        var novels = await query
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (novels, totalCount);
+    }
 
     public async Task<Novel?> GetOne(Guid novelId)
     {

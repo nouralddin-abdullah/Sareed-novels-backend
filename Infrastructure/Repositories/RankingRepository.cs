@@ -36,4 +36,10 @@ public class RankingRepository(ApplicationDbContext dbContext) : IRankingReposit
             .Take(pageSize)
             .ToListAsync();
     }
+
+    public async Task<RankingList?> GetSiteWideRankingListByType(string rankingType)
+    {
+        return await dbContext.RankingLists
+        .FirstOrDefaultAsync(rl => rl.GenreId == null && rl.RankingType == rankingType);
+    }
 }

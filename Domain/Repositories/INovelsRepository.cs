@@ -8,5 +8,6 @@ public interface INovelsRepository
     Task<Novel?> GetOne(Guid novelId);
     Task<Novel?> GetOneBySlug(string slug);
     Task<bool> UpdateOne(Novel novel);
+    Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber);
     Task<(IEnumerable<Novel?>, int)> GetWorks(string userId, int PageNumber, int PageSize);
 }

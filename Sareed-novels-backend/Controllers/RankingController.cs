@@ -1,4 +1,6 @@
 ﻿using Application.Rankings.Queries.GetGenreRanking;
+using Application.Rankings.Queries.GetSiteWideRanking;
+
 //using Application.Rankings.Queries.GetSiteWideRanking;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -25,17 +27,17 @@ public class RankingController(IMediator mediator) : ControllerBase
         return Ok(result);
     }
 
-    //[HttpGet("site-wide/{rankingType}")]
-    //public async Task<IActionResult> GetSiteWideRanking(
-    //    [FromRoute] string rankingType,
-    //    [FromQuery] GetSiteWideRankingRequest request)
-    //{
-    //    var query = new GetSiteWideRankingQuery(
-    //        rankingType,
-    //        request.PageSize ?? 20,
-    //        request.PageNumber ?? 1);
+    [HttpGet("site-wide/{rankingType}")]
+    public async Task<IActionResult> GetSiteWideRanking(
+        [FromRoute] string rankingType,
+        [FromQuery] GetSiteWideRankingRequest request)
+    {
+        var query = new GetSiteWideRankingQuery(
+            rankingType,
+            request.PageSize ?? 10,
+            request.PageNumber ?? 1);
 
-    //    var result = await mediator.Send(query);
-    //    return Ok(result);
-    //}
+        var result = await mediator.Send(query);
+        return Ok(result);
+    }
 }

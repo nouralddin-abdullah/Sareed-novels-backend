@@ -144,7 +144,7 @@ namespace Infrastructure.Services
             var allTimeNovels = await dbContext.NovelGenres
                 .Include(ng => ng.Novel)
                 .Where(ng => ng.Novel.IsEligibleForRanking && 
-                            ng.Novel.ReviewCount >= 25) // Minimum 25 reviews for "all-time" status
+                            ng.Novel.ReviewCount >= 3) // Minimum 3 reviews for "all-time" status
                 .GroupBy(ng => ng.NovelId)
                 .Select(g => g.First()) // One entry per novel
                 .ToListAsync();
