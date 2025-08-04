@@ -24,9 +24,12 @@ public class NovelProfiles : Profile
 
         //Quires
         CreateMap<User, AuthorDTO>();
-
+        CreateMap<Genre, GenreSmallDto>();
         CreateMap<Novel, NovelsDTO>()
-            .ForMember(dest => dest.Author, opt => opt.MapFrom(src => src.Owner));
+            .ForMember(dest => dest.Author, opt => opt.MapFrom(src => src.Owner))
+            .ForMember(dest => dest.GenresList, opt => opt.MapFrom(src => src.NovelGenres.Select(ng => ng.Genre)));
 
+        CreateMap<Novel, NovelInRankingDto>()
+            .ForMember(dest => dest.GenresList, opt => opt.MapFrom(src => src.NovelGenres.Select(ng => ng.Genre)));
     }
 }

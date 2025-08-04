@@ -14,10 +14,13 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         return result > 0;
     }
 
+
     public async Task<Novel?> GetOne(Guid novelId)
     {
         var novel = await dbContext.Novels
             .Include(n=> n.Owner)
+            .Include(n => n.NovelGenres)
+                .ThenInclude(ng => ng.Genre)
             .FirstOrDefaultAsync(novel => novel.Id == novelId);
         return novel;
     }
@@ -26,9 +29,12 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
     {
         var novel = await dbContext.Novels
             .Include(n=>n.Owner)
+            .Include(n => n.NovelGenres)
+                .ThenInclude(ng => ng.Genre)
             .FirstOrDefaultAsync(novel => novel.Slug == slug);
         return novel;
     }
+
 
     public async Task<(IEnumerable<Novel?>, int)> GetWorks(string userId, int PageNumber, int PageSize)
     {

@@ -6,6 +6,7 @@ public class NovelsDTO
 {
     public Guid Id { get; set; }
     public string Title { get; set; } = default!;
+    public List<GenreSmallDto> GenresList { get; set; } = new List<GenreSmallDto>();
     public string Slug { get; set; } = default!;
     public string CoverImageUrl { get; set; } = default!;
     public string Summary { get; set; } = default!;
@@ -28,4 +29,25 @@ public class AuthorDTO
     public string UserName { get; set; } = default!;
     public string DisplayName { get; set; } = default!;
     public string ProfilePhoto { get; set; } = default!;
+}
+
+public class GenreSmallDto
+{
+    public int Id { get; set; } = default!;
+    public string Name { get; set; } = default!;
+    public string Slug { get; set; } = default!;
+}
+
+public class NovelInRankingDto
+{
+    public Guid Id { get; set; }
+    public string Title { get; set; } = default!;
+    public List<GenreSmallDto> GenresList { get; set; } = new List<GenreSmallDto>();
+    public string Slug { get; set; } = default!;
+    public string CoverImageUrl { get; set; } = default!;
+    public string Summary { get; set; } = default!;
+    public string Status { get; set; } = default!;
+    public int TotalViews { get; set; }
+    public decimal TotalAverageScore { get; set; }
+    public int ReviewCount { get; set; }
 }

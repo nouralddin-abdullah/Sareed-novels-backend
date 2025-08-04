@@ -12,6 +12,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<ReviewLike> ReviewLikes { get; set; }
     internal DbSet<Genre> Genres { get; set; }
     internal DbSet<NovelGenre> NovelGenres { get; set; }
+    internal DbSet<NovelViews> NovelViews { get; set; }
+    internal DbSet<RankingList> RankingLists { get; set; }
+    internal DbSet<RankingEntry> RankingEntries { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -177,12 +180,97 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                   .HasForeignKey(ng => ng.GenreId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            // Future ranking fields configuration
+            // Configure ranking score fields
             entity.Property(ng => ng.GenreScore)
-                  .HasPrecision(5, 2); // Allow scores like 999.99
+                  .HasPrecision(5, 2);
 
+            entity.Property(ng => ng.QualityScore)
+                  .HasPrecision(5, 2)
+                  .HasDefaultValue(0);
+
+            entity.Property(ng => ng.PopularityScore)
+                  .HasPrecision(10, 2)
+                  .HasDefaultValue(0);
+
+            entity.Property(ng => ng.TrendingScore)
+                  .HasPrecision(10, 2)
+                  .HasDefaultValue(0);
+
+            // Indexes for fast ranking queries
             entity.HasIndex(ng => new { ng.GenreId, ng.GenreRank });
-            entity.HasIndex(ng => new { ng.GenreId, ng.GenreScore });
+            entity.HasIndex(ng => new { ng.GenreId, ng.QualityScore });
+            entity.HasIndex(ng => new { ng.GenreId, ng.TrendingScore });
+        });
+
+        // ADD THIS CONFIGURATION for NovelViews
+        modelBuilder.Entity<NovelViews>(entity =>
+        {
+            entity.HasKey(nv => nv.Id);
+
+            entity.HasOne(nv => nv.Novel)
+                  .WithMany()
+                  .HasForeignKey(nv => nv.NovelId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // Unique constraint: one record per novel per day
+            entity.HasIndex(nv => new { nv.NovelId, nv.ViewDate })
+                  .IsUnique();
+
+            // Index for date-based queries
+            entity.HasIndex(nv => nv.ViewDate);
+        });
+
+        modelBuilder.Entity<RankingList>(entity =>
+        {
+            entity.HasKey(rl => rl.Id);
+
+            entity.Property(rl => rl.Name)
+                  .HasMaxLength(100)
+                  .IsRequired();
+
+            entity.Property(rl => rl.RankingType)
+                  .HasMaxLength(50)
+                  .IsRequired();
+
+            entity.HasOne(rl => rl.Genre)
+                  .WithMany()
+                  .HasForeignKey(rl => rl.GenreId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            // Unique constraint: one ranking list per genre per type
+            entity.HasIndex(rl => new { rl.GenreId, rl.RankingType })
+                  .IsUnique();
+        });
+
+        modelBuilder.Entity<RankingEntry>(entity =>
+        {
+            entity.HasKey(re => re.Id);
+
+            entity.HasOne(re => re.RankingList)
+                  .WithMany(rl => rl.Entries)
+                  .HasForeignKey(re => re.RankingListId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(re => re.Novel)
+                  .WithMany()
+                  .HasForeignKey(re => re.NovelId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(re => re.Score)
+                  .HasPrecision(10, 2);
+
+            entity.Property(re => re.QualityScore)
+                  .HasPrecision(5, 2);
+
+            entity.Property(re => re.PopularityScore)
+                  .HasPrecision(10, 2);
+
+            entity.Property(re => re.TrendingScore)
+                  .HasPrecision(10, 2);
+
+            // Indexes for fast ranking queries
+            entity.HasIndex(re => new { re.RankingListId, re.Rank });
+            entity.HasIndex(re => re.NovelId);
         });
     }
 }

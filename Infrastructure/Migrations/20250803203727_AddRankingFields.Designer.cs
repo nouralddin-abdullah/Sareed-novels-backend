@@ -4,6 +4,7 @@ using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250803203727_AddRankingFields")]
+    partial class AddRankingFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -254,87 +257,6 @@ namespace Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("NovelViews");
-                });
-
-            modelBuilder.Entity("Domain.Entities.RankingEntry", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("NovelId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<decimal>("PopularityScore")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
-
-                    b.Property<decimal>("QualityScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<int>("Rank")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RankingListId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("Score")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
-
-                    b.Property<decimal>("TrendingScore")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("NovelId");
-
-                    b.HasIndex("RankingListId", "Rank");
-
-                    b.ToTable("RankingEntries");
-                });
-
-            modelBuilder.Entity("Domain.Entities.RankingList", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("GenreId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("LastUpdated")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("RankingType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int>("TotalNovels")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GenreId", "RankingType")
-                        .IsUnique()
-                        .HasFilter("[GenreId] IS NOT NULL");
-
-                    b.ToTable("RankingLists");
                 });
 
             modelBuilder.Entity("Domain.Entities.Review", b =>
@@ -705,35 +627,6 @@ namespace Infrastructure.Migrations
                     b.Navigation("Novel");
                 });
 
-            modelBuilder.Entity("Domain.Entities.RankingEntry", b =>
-                {
-                    b.HasOne("Domain.Entities.Novel", "Novel")
-                        .WithMany()
-                        .HasForeignKey("NovelId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.RankingList", "RankingList")
-                        .WithMany("Entries")
-                        .HasForeignKey("RankingListId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Novel");
-
-                    b.Navigation("RankingList");
-                });
-
-            modelBuilder.Entity("Domain.Entities.RankingList", b =>
-                {
-                    b.HasOne("Domain.Entities.Genre", "Genre")
-                        .WithMany()
-                        .HasForeignKey("GenreId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Genre");
-                });
-
             modelBuilder.Entity("Domain.Entities.Review", b =>
                 {
                     b.HasOne("Domain.Entities.Novel", "ReviewedNovel")
@@ -833,11 +726,6 @@ namespace Infrastructure.Migrations
                     b.Navigation("NovelGenres");
 
                     b.Navigation("Reviews");
-                });
-
-            modelBuilder.Entity("Domain.Entities.RankingList", b =>
-                {
-                    b.Navigation("Entries");
                 });
 
             modelBuilder.Entity("Domain.Entities.Review", b =>

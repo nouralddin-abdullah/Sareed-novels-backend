@@ -21,6 +21,9 @@ public class Novel
     public decimal AverageWorldBuildingScore { get; set; } = 0;
     public decimal TotalAverageScore { get; set; } = 0;
     public int ReviewCount { get; set; } = 0;
+    public int ViewsToday { get; set; } = 0; // Quick access to today's views
+    public DateTime LastViewUpdate { get; set; } = DateTime.UtcNow; // Track when views were last calculated
+    public bool IsEligibleForRanking { get; set; } = true; // Allow excluding novels from ranking
     public ICollection<Review> Reviews { get; set; } = new List<Review>();
     public ICollection<NovelGenre> NovelGenres { get; set; } = new List<NovelGenre>();
 
@@ -102,37 +105,4 @@ public class Novel
         }
     }
     //Score Review System Ending
-
-
-
-    // Genres
-    public void AddGenre(Genre genre)
-    {
-        if (NovelGenres.Count >= 4)
-            throw new InvalidOperationException("A novel cannot have more than 4 genres");
-
-        if (NovelGenres.Any(ng => ng.GenreId == genre.Id))
-            return; // Genre already added
-
-        NovelGenres.Add(new NovelGenre
-        {
-            NovelId = Id,
-            GenreId = genre.Id,
-            Genre = genre
-        });
-    }
-
-    public void RemoveGenre(int genreId)
-    {
-        var novelGenre = NovelGenres.FirstOrDefault(ng => ng.GenreId == genreId);
-        if (novelGenre != null)
-            NovelGenres.Remove(novelGenre);
-    }
-
-    public List<Genre> GetGenres()
-    {
-        return NovelGenres.Select(ng => ng.Genre).ToList();
-    }
-
-    //Genres End
 }

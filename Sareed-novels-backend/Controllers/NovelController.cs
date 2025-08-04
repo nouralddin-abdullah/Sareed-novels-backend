@@ -1,4 +1,5 @@
 ﻿using Application.Novels.Queries.GetNovel;
+using Application.Novels.Queries.GetPopularByGenre;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,5 +16,7 @@ namespace Sareed_novels_backend.Controllers
             var novelDto = await mediator.Send(query);
             return Ok(novelDto);
         }
+
+
     }
 }

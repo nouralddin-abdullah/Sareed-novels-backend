@@ -12,6 +12,11 @@ public class GenresRepository(ApplicationDbContext dbContext) : IGenresRepositor
         return await dbContext.Genres.ToListAsync();
     }
 
+    public async Task<Genre?> GetBySlug(string slug)
+    {
+        return await dbContext.Genres.FirstOrDefaultAsync(g => g.Slug == slug);
+    }
+
     public async Task<Genre?> GetGenreBySlug(string slug)
     {
         return await dbContext.Genres.FirstOrDefaultAsync(g => g.Slug == slug);

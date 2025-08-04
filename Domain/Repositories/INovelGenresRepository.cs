@@ -8,5 +8,5 @@ public interface INovelGenresRepository
     Task<bool> RemoveGenresFromNovel(Guid novelId, IEnumerable<int> genreIds);
     Task<bool> UpdateNovelGenres(Guid novelId, IEnumerable<int> genreIds);
     Task<IEnumerable<Genre>> GetNovelGenres(Guid novelId);
-    Task<(IEnumerable<Novel>, int)> GetNovelsByGenre(string genreSlug, int pageSize, int pageNumber, string? sorting);
+    Task<(IEnumerable<Novel>, int)> GetNovelsByGenre(string genreSlug, int pageSize, int pageNumber, string? sorting, bool? isCompleted);
 }

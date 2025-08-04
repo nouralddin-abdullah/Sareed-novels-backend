@@ -43,27 +43,43 @@ public class NovelGenresRepository(ApplicationDbContext dbContext) : INovelGenre
         return await dbContext.NovelGenres.Where(ng => ng.NovelId == novelId).Include(g => g.Genre).Select(g => g.Genre).ToListAsync();
     }
 
-    public async Task<(IEnumerable<Novel>, int)> GetNovelsByGenre(string genreSlug, int pageSize, int pageNumber, string? sorting)
+    public async Task<(IEnumerable<Novel>, int)> GetNovelsByGenre(
+    string genreSlug,
+    int pageSize,
+    int pageNumber,
+    string? sorting = null,
+    bool? isCompleted = null) // Add completion filter
     {
         var query = dbContext.NovelGenres
-            .Where(ng => ng.Genre.Slug == genreSlug)
+            .Where(ng => ng.Genre.Slug == genreSlug && ng.Novel.IsEligibleForRanking)
             .Include(ng => ng.Novel)
+                .ThenInclude(n => n.Owner) // Include author info
             .Select(ng => ng.Novel)
             .Distinct();
+
+        // Apply completion filter if specified
+        if (isCompleted.HasValue)
+        {
+            if (isCompleted.Value)
+            {
+                query = query.Where(n => n.Status == "Completed");
+            }
+            else
+            {
+                query = query.Where(n => n.Status != "Completed");
+            }
+        }
 
         var totalCount = await query.CountAsync();
 
         if (pageNumber > 0 && pageSize > 0)
         {
-            // Apply sorting
-            query = sorting?.ToLower() switch
+            query = sorting switch
             {
                 "newest" => query.OrderByDescending(n => n.CreatedAt),
-                "oldest" => query.OrderBy(n => n.CreatedAt),
                 "rating" => query.OrderByDescending(n => n.TotalAverageScore),
-                "rating_asc" => query.OrderBy(n => n.TotalAverageScore),
                 "popular" => query.OrderByDescending(n => n.TotalViews),
-                "reviews" => query.OrderByDescending(n => n.ReviewCount),
+                "most_reviewed" => query.OrderByDescending(n => n.ReviewCount),
                 _ => query.OrderByDescending(n => n.TotalViews)
             };
 
