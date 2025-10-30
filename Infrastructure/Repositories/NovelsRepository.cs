@@ -46,6 +46,7 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
     public async Task<Novel?> GetOneBySlug(string slug)
     {
         var novel = await dbContext.Novels
+            .Where(n => !n.IsDraft)
             .Include(n=>n.Owner)
             .Include(n => n.NovelGenres)
                 .ThenInclude(ng => ng.Genre)
@@ -56,7 +57,11 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
 
     public async Task<(IEnumerable<Novel?>, int)> GetWorks(string userId, int PageNumber, int PageSize)
     {
-        var userWork = dbContext.Novels.Where(n => n.AuthorId == userId).AsQueryable();
+        var userWork = dbContext.Novels
+            .Where(n => n.AuthorId == userId)
+            .Include(n => n.NovelGenres)
+                .ThenInclude(ng => ng.Genre)
+            .AsQueryable();
         var totalCount = await userWork.CountAsync();
         if (PageNumber > 0 && PageSize > 0)
         {

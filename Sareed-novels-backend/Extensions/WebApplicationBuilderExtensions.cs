@@ -18,7 +18,9 @@ public static class WebApplicationBuilderExtensions
                 policy.WithOrigins(
                         "http://localhost:5173",
                         "https://localhost:5173",
-                        "https://hassany.com"
+                        "https://hassany.com",
+                        "https://localhost:4173",
+                        "http://localhost:4173"
                     )
                     .AllowAnyHeader()
                     .AllowAnyMethod()

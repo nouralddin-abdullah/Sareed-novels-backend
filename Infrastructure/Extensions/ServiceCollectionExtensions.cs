@@ -48,6 +48,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IViewTrackingService, ViewTrackingService>();
         services.AddScoped<IRankingService, RankingService>();
         services.AddScoped<IRankingRepository, RankingRepository>();
+        services.AddScoped<IChaptersRepository, ChaptersRepository>();
+        services.AddScoped<ICharacterRepository, CharacterRepository>();
+        services.AddScoped<ICommentsRepository, CommentsRepository>();
+        services.AddScoped<ICommentLikesRepository, CommentLikesRepository>();
 
 
         //adding cloudflare settings

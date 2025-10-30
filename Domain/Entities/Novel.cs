@@ -13,6 +13,7 @@ public class Novel
     public DateTime CreatedAt { get; set; }
     public DateTime LastUpdatedAt { get; set; }
     public int TotalViews { get; set; }
+    public int ChapterCount { get; set; } = 0;
 
     // Denormalized Reviews
     public decimal AverageWritingQualityScore { get; set; } = 0;
@@ -23,12 +24,15 @@ public class Novel
     public int ReviewCount { get; set; } = 0;
     public int ViewsToday { get; set; } = 0; // Quick access to today's views
     public DateTime LastViewUpdate { get; set; } = DateTime.UtcNow; // Track when views were last calculated
+    public bool IsDraft { get; set; } = false;
+    public bool IsDeleted { get; set; } = false;
     public bool IsEligibleForRanking { get; set; } = true; // Allow excluding novels from ranking
     public ICollection<Review> Reviews { get; set; } = new List<Review>();
     public ICollection<NovelGenre> NovelGenres { get; set; } = new List<NovelGenre>();
+    public ICollection<Chapter> Chapters { get; set; } = new List<Chapter>();
+    public ICollection<Character> Characters { get; set; } = new List<Character>();
 
-
-
+    public bool IsPubliclyVisible => !IsDraft && !IsDeleted;
     //Score Review System
     public void RecalculateAverageScores()
     {

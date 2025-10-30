@@ -15,5 +15,6 @@ public class User : IdentityUser
     public ICollection<Novel> Novels { get; set; } = new List<Novel>();
     public ICollection<Review> Reviews { get; set; } = new List<Review>();
     public ICollection<ReviewLike> ReviewLikes { get; set; } = new List<ReviewLike>();
-
+    public ICollection<CommentLikes> CommentLikes { get; set; } = new List<CommentLikes>();
+    public ICollection<Comments> Comments { get; set; } = new List<Comments>();
 }

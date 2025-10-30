@@ -20,6 +20,7 @@ public class NovelsDTO
     public decimal AverageWorldBuildingScore { get; set; }
     public decimal TotalAverageScore { get; set; }
     public int ReviewCount { get; set; }
+    public int ChapterCount { get; set; }
     public AuthorDTO Author { get; set; } = default!;
 }
 

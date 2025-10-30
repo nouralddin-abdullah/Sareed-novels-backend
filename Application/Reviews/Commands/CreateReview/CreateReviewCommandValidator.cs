@@ -2,7 +2,7 @@
 
 namespace Application.Reviews.Commands.CreateReview;
 
-public class CreateReviewCommandValidator : AbstractValidator<CreateReviewCommand>
+public class CreateReviewCommandValidator : AbstractValidator<CreateReviewCommandrRequest>
 {
     public CreateReviewCommandValidator()
     {

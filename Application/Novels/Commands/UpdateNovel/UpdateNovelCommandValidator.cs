@@ -14,7 +14,7 @@ namespace Application.Novels.Commands.UpdateNovel
                 .WithMessage("Title must be between 4 and 40 characters");
 
             RuleFor(x => x.Summary)
-            .Length(4, 500)
+            .Length(4, 2000)
             .When(x => x.Summary != null)
             .WithMessage("Summary must be between 4 and 500 characters");
 

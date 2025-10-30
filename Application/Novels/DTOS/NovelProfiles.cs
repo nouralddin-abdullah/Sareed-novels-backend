@@ -14,8 +14,10 @@ public class NovelProfiles : Profile
             .ForAllMembers(opt => opt.Condition((src, dest, srcMember) => srcMember != null));
 
         //Quires
-        CreateMap<Novel, MyWorksDTO>();
-        CreateMap<Novel, WorkDTO>();
+        CreateMap<Novel, MyWorksDTO>()
+            .ForMember(dest => dest.GenresList, opt => opt.MapFrom(src => src.NovelGenres.Select(ng => ng.Genre)));
+        CreateMap<Novel, WorkDTO>()
+            .ForMember(dest => dest.GenresList, opt => opt.MapFrom(src => src.NovelGenres.Select(ng => ng.Genre)));
 
 
         //Reading

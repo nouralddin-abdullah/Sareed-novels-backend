@@ -11,6 +11,10 @@ namespace Application.Novels.DTOS
         public string Status { get; set; } = default!;
         public DateTime LastUpdatedAt { get; set; }
         public int TotalViews { get; set; }
+        public int TotalAverageScore { get; set; }
+        public int ChapterCount { get; set; }
+        public bool IsDraft { get; set; } 
+        public List<GenreSmallDto> GenresList { get; set; } = new List<GenreSmallDto>();
     }
 
     public class WorkDTO : MyWorksDTO

@@ -20,7 +20,7 @@ public class CreateNovelCommandHandler(ILogger<CreateNovelCommandHandler> logger
         var novel = mapper.Map<Novel>(request);
         novel.Id = Guid.NewGuid();
         novel.Status = NovelStatus.Ongoing.ToString();
-        novel.Slug = $"{novel.Id.ToString().Substring(0, 5)}-{request.Title.Replace(" ", "-").ToLower()}";
+        novel.Slug = $"{novel.Id.ToString()[..5]}-{CreateUrlSafeSlug(request.Title)}";
         novel.CreatedAt = DateTime.UtcNow;
         novel.LastUpdatedAt = DateTime.UtcNow;
         novel.TotalViews = 0;
@@ -59,5 +59,19 @@ public class CreateNovelCommandHandler(ILogger<CreateNovelCommandHandler> logger
             Message = "Novel was created successfully",
             Success = true
         };
+    }
+    private static string CreateUrlSafeSlug(string title)
+    {
+        return title
+            .Replace(" ", "-")
+            .Replace("/", "-")
+            .Replace("\\", "-")
+            .Replace("?", "")
+            .Replace("#", "")
+            .Replace("&", "-and-")
+            .Replace("%", "")
+            .Replace(":", "")
+            .Replace(";", "")
+            .ToLower();
     }
 }

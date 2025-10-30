@@ -22,6 +22,191 @@ namespace Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.Entities.Chapter", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("ChapterIndex")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CommentsCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("NovelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("Draft");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_Chapters_CreatedAt");
+
+                    b.HasIndex("NovelId", "ChapterIndex")
+                        .HasDatabaseName("IX_Chapters_Novel_Index");
+
+                    b.HasIndex("NovelId", "Status")
+                        .HasDatabaseName("IX_Chapters_Novel_Status");
+
+                    b.HasIndex("NovelId", "Status", "ChapterIndex")
+                        .HasDatabaseName("IX_Chapters_Novel_Status_Index");
+
+                    b.ToTable("Chapters");
+                });
+
+            modelBuilder.Entity("Domain.Entities.Character", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("CharacterAge")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CharacterDescription")
+                        .IsRequired()
+                        .HasMaxLength(3000)
+                        .HasColumnType("nvarchar(3000)");
+
+                    b.Property<string>("CharacterImageUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("CharacterName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("NovelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NovelId")
+                        .HasDatabaseName("IX_Characters_NovelId");
+
+                    b.HasIndex("NovelId", "CharacterName")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Characters_Novel_Name_Unique");
+
+                    b.ToTable("Characters");
+                });
+
+            modelBuilder.Entity("Domain.Entities.CommentLikes", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<Guid>("CommentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommentId")
+                        .HasDatabaseName("IX_CommentLikes_CommentId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_CommentLikes_UserId");
+
+                    b.HasIndex("UserId", "CommentId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_CommentLikes_UserId_CommentId_Unique");
+
+                    b.ToTable("CommentLikes");
+                });
+
+            modelBuilder.Entity("Domain.Entities.Comments", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AttachedImageUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid?>("ChapterId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("LikesCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<Guid?>("ParentCommentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId")
+                        .HasDatabaseName("IX_Comments_ChapterId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_Comments_CreatedAt");
+
+                    b.HasIndex("ParentCommentId")
+                        .HasDatabaseName("IX_Comments_ParentCommentId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_Comments_UserId");
+
+                    b.HasIndex("ChapterId", "ParentCommentId")
+                        .HasDatabaseName("IX_Comments_Chapter_Parent");
+
+                    b.ToTable("Comments");
+                });
+
             modelBuilder.Entity("Domain.Entities.Follow", b =>
                 {
                     b.Property<string>("FollowerId")
@@ -112,12 +297,21 @@ namespace Infrastructure.Migrations
                         .HasColumnType("decimal(3,2)")
                         .HasDefaultValue(0m);
 
+                    b.Property<int>("ChapterCount")
+                        .HasColumnType("int");
+
                     b.Property<string>("CoverImageUrl")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDraft")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsEligibleForRanking")
                         .HasColumnType("bit");
@@ -645,6 +839,72 @@ namespace Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.Chapter", b =>
+                {
+                    b.HasOne("Domain.Entities.Novel", "Novel")
+                        .WithMany("Chapters")
+                        .HasForeignKey("NovelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Novel");
+                });
+
+            modelBuilder.Entity("Domain.Entities.Character", b =>
+                {
+                    b.HasOne("Domain.Entities.Novel", "Novel")
+                        .WithMany("Characters")
+                        .HasForeignKey("NovelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Novel");
+                });
+
+            modelBuilder.Entity("Domain.Entities.CommentLikes", b =>
+                {
+                    b.HasOne("Domain.Entities.Comments", "Comment")
+                        .WithMany("Likes")
+                        .HasForeignKey("CommentId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("CommentLikes")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Comment");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.Comments", b =>
+                {
+                    b.HasOne("Domain.Entities.Chapter", "Chapter")
+                        .WithMany()
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Domain.Entities.Comments", "ParentComment")
+                        .WithMany("Replies")
+                        .HasForeignKey("ParentCommentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("Comments")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Chapter");
+
+                    b.Navigation("ParentComment");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Domain.Entities.Follow", b =>
                 {
                     b.HasOne("Domain.Entities.User", "Followed")
@@ -823,6 +1083,13 @@ namespace Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Domain.Entities.Comments", b =>
+                {
+                    b.Navigation("Likes");
+
+                    b.Navigation("Replies");
+                });
+
             modelBuilder.Entity("Domain.Entities.Genre", b =>
                 {
                     b.Navigation("NovelGenres");
@@ -830,6 +1097,10 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Entities.Novel", b =>
                 {
+                    b.Navigation("Chapters");
+
+                    b.Navigation("Characters");
+
                     b.Navigation("NovelGenres");
 
                     b.Navigation("Reviews");
@@ -847,6 +1118,10 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Entities.User", b =>
                 {
+                    b.Navigation("CommentLikes");
+
+                    b.Navigation("Comments");
+
                     b.Navigation("Followers");
 
                     b.Navigation("Following");

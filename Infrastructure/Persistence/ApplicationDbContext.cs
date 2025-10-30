@@ -15,6 +15,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<NovelViews> NovelViews { get; set; }
     internal DbSet<RankingList> RankingLists { get; set; }
     internal DbSet<RankingEntry> RankingEntries { get; set; }
+    internal DbSet<Chapter> Chapters { get; set; }
+    internal DbSet<Character> Characters { get; set; }
+    internal DbSet<Comments> Comments { get; set; }
+    internal DbSet<CommentLikes> CommentLikes { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -37,6 +41,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(f => f.FollowedId);
         });
 
+        modelBuilder.Entity<Novel>().HasQueryFilter(n => !n.IsDeleted);
         modelBuilder.Entity<Novel>(entity =>
         {
             entity.HasKey(n => n.Id);
@@ -271,6 +276,178 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             // Indexes for fast ranking queries
             entity.HasIndex(re => new { re.RankingListId, re.Rank });
             entity.HasIndex(re => re.NovelId);
+        });
+
+        modelBuilder.Entity<Chapter>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+
+            // String properties with constraints
+            entity.Property(c => c.Title)
+                  .IsRequired()
+                  .HasMaxLength(500);
+
+            entity.Property(c => c.Content)
+                  .IsRequired();
+
+            entity.Property(c => c.Status)
+                  .IsRequired()
+                  .HasMaxLength(20)
+                  .HasDefaultValue("Draft");
+
+            // Required fields
+            entity.Property(c => c.ChapterIndex)
+                  .IsRequired();
+
+            entity.Property(c => c.CreatedAt)
+                  .IsRequired();
+
+            //Comments count with default value
+            entity.Property(c => c.CommentsCount)
+                  .HasDefaultValue(0);
+
+            // Foreign key relationship
+            entity.HasOne(c => c.Novel)
+                  .WithMany(n => n.Chapters)
+                  .HasForeignKey(c => c.NovelId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // Performance indexes
+            entity.HasIndex(c => new { c.NovelId, c.ChapterIndex })
+                  .HasDatabaseName("IX_Chapters_Novel_Index");
+
+            entity.HasIndex(c => new { c.NovelId, c.Status, c.ChapterIndex })
+                  .HasDatabaseName("IX_Chapters_Novel_Status_Index");
+
+            entity.HasIndex(c => new { c.NovelId, c.Status })
+                  .HasDatabaseName("IX_Chapters_Novel_Status");
+
+            entity.HasIndex(c => c.CreatedAt)
+                  .HasDatabaseName("IX_Chapters_CreatedAt");
+        });
+
+        modelBuilder.Entity<Character>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+
+            // String properties with constraints
+            entity.Property(c => c.CharacterName)
+                  .IsRequired()
+                  .HasMaxLength(100);
+
+            entity.Property(c => c.CharacterDescription)
+                  .IsRequired()
+                  .HasMaxLength(3000);
+
+            entity.Property(c => c.CharacterImageUrl)
+                  .IsRequired()
+                  .HasMaxLength(500);
+
+            entity.Property(c => c.CharacterAge)
+                  .IsRequired();
+
+            // Foreign key relationship
+            entity.HasOne(c => c.Novel)
+                  .WithMany(n => n.Characters)
+                  .HasForeignKey(c => c.NovelId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // Performance indexes
+            entity.HasIndex(c => c.NovelId)
+                  .HasDatabaseName("IX_Characters_NovelId");
+
+            entity.HasIndex(c => new { c.NovelId, c.CharacterName })
+                  .HasDatabaseName("IX_Characters_Novel_Name");
+
+            // Ensure character names are unique within a novel
+            entity.HasIndex(c => new { c.NovelId, c.CharacterName })
+                  .IsUnique()
+                  .HasDatabaseName("IX_Characters_Novel_Name_Unique");
+        });
+
+        modelBuilder.Entity<Comments>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+
+            // String properties with constraints
+            entity.Property(c => c.Content)
+                .IsRequired()
+                .HasMaxLength(2000);
+
+            entity.Property(c => c.AttachedImageUrl)
+                .HasMaxLength(500);
+
+            // Self-referential relationship for replies
+            entity.HasOne(c => c.ParentComment)
+                .WithMany(c => c.Replies)
+                .HasForeignKey(c => c.ParentCommentId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent cascade delete issues
+
+            // User relationship
+            entity.HasOne(c => c.User)
+                .WithMany(u => u.Comments)
+                .HasForeignKey(c => c.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Chapter relationship
+            entity.HasOne(c => c.Chapter)
+                .WithMany() // No navigation property on Chapter
+                .HasForeignKey(c => c.ChapterId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Default values
+            entity.Property(c => c.LikesCount)
+                .HasDefaultValue(0);
+
+            // Performance indexes
+            entity.HasIndex(c => c.ChapterId)
+                .HasDatabaseName("IX_Comments_ChapterId");
+
+            entity.HasIndex(c => c.ParentCommentId)
+                .HasDatabaseName("IX_Comments_ParentCommentId");
+
+            entity.HasIndex(c => c.UserId)
+                .HasDatabaseName("IX_Comments_UserId");
+
+            entity.HasIndex(c => c.CreatedAt)
+                .HasDatabaseName("IX_Comments_CreatedAt");
+
+            // Composite index for chapter top-level comments
+            entity.HasIndex(c => new { c.ChapterId, c.ParentCommentId })
+                .HasDatabaseName("IX_Comments_Chapter_Parent");
+
+            // Soft delete query filter
+            entity.HasQueryFilter(c => !c.IsDeleted);
+        });
+
+        // CommentLikes configuration
+        modelBuilder.Entity<CommentLikes>(entity =>
+        {
+            entity.HasKey(cl => cl.Id);
+
+            // User relationship
+            entity.HasOne(cl => cl.User)
+                .WithMany(u => u.CommentLikes)
+                .HasForeignKey(cl => cl.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Comment relationship
+            entity.HasOne(cl => cl.Comment)
+                .WithMany(c => c.Likes)
+                .HasForeignKey(cl => cl.CommentId)
+                .OnDelete(DeleteBehavior.NoAction); // Prevent cascade conflicts
+
+            // Unique constraint: one like per user per comment
+            entity.HasIndex(cl => new { cl.UserId, cl.CommentId })
+                .IsUnique()
+                .HasDatabaseName("IX_CommentLikes_UserId_CommentId_Unique");
+
+            // Performance indexes
+            entity.HasIndex(cl => cl.UserId)
+                .HasDatabaseName("IX_CommentLikes_UserId");
+
+            entity.HasIndex(cl => cl.CommentId)
+                .HasDatabaseName("IX_CommentLikes_CommentId");
         });
     }
 }

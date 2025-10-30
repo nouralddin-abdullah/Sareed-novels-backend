@@ -15,7 +15,7 @@ namespace Application.Novels.Commands.CreateNovel
             .WithMessage("A novel should have valid title");
 
             RuleFor(dto => dto.Summary)
-            .Length(4, 500)
+            .Length(4, 2000)
             .NotNull()
             .NotEmpty()
             .WithMessage("A novel should have valid Summary");

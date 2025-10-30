@@ -61,4 +61,36 @@ public class CloudflareR2Service(IAmazonS3 s3Client, IOptions<CloudflareR2Settin
         await s3Client.PutObjectAsync(request);
         return $"{settings.Value.PublicUrl}/{key}";
     }
+
+    public async Task<string> UploadCharacterImageAsync(Stream fileStream, string contentType, string characterName)
+    {
+        var key = $"characters-images/{characterName}";
+        var request = new PutObjectRequest
+        {
+            BucketName = "sard",
+            Key = key,
+            InputStream = fileStream,
+            ContentType = contentType,
+            DisablePayloadSigning = true,
+            DisableDefaultChecksumValidation = true
+        };
+        await s3Client.PutObjectAsync(request);
+        return $"{settings.Value.PublicUrl}/{key}";
+    }
+
+    public async Task<string> UploadCommentImageAsync(Stream fileStream, string contentType, string commentId)
+    {
+        var key = $"comment-images/{commentId}";
+        var request = new PutObjectRequest
+        {
+            BucketName = "sard",
+            Key = key,
+            InputStream = fileStream,
+            ContentType = contentType,
+            DisablePayloadSigning = true,
+            DisableDefaultChecksumValidation = true
+        };
+        await s3Client.PutObjectAsync(request);
+        return $"{settings.Value.PublicUrl}/{key}";
+    }
 }
