@@ -1,0 +1,112 @@
+using Application.Users;
+using Application.Users.Commands.FollowUser;
+using Domain.Entities;
+using Domain.Exceptions;
+using Domain.Repositories;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+namespace Application.Comments.Commands.LikeComment;
+
+public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, OperationResult>
+{
+    private readonly ILogger<LikeCommentCommandHandler> _logger;
+    private readonly IUserContext _userContext;
+    private readonly ICommentLikesRepository _commentLikesRepository;
+    private readonly ICommentsRepository _commentsRepository;
+    private readonly IServiceProvider _serviceProvider;
+
+    public LikeCommentCommandHandler(
+        ILogger<LikeCommentCommandHandler> logger,
+        IUserContext userContext,
+        ICommentLikesRepository commentLikesRepository,
+        ICommentsRepository commentsRepository,
+        IServiceProvider serviceProvider)
+    {
+        _logger = logger;
+        _userContext = userContext;
+        _commentLikesRepository = commentLikesRepository;
+        _commentsRepository = commentsRepository;
+        _serviceProvider = serviceProvider;
+    }
+
+    public async Task<OperationResult> Handle(LikeCommentCommand request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Liking comment {CommentId}", request.CommentId);
+
+        var currentUser = _userContext.GetCurrentUser()
+            ?? throw new ForbidException("User not signed in");
+
+        var comment = await _commentsRepository.GetCommentById(request.CommentId)
+            ?? throw new NotFoundException("Comment not found");
+
+        if (comment.UserId == currentUser.Id)
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Message = "You cannot like your own comment"
+            };
+        }
+
+        var existingLike = await _commentLikesRepository.GetUserLikeForComment(currentUser.Id, request.CommentId);
+        if (existingLike != null)
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Message = "You already liked this comment"
+            };
+        }
+
+        var commentLike = new CommentLikes
+        {
+            UserId = currentUser.Id,
+            CommentId = request.CommentId,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var result = await _commentLikesRepository.LikeComment(commentLike);
+        if (!result)
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Message = "Failed to like this comment"
+            };
+        }
+
+        _ = UpdateCommentLikesCountInBackground(request.CommentId, increment: true);
+
+        _logger.LogInformation("Comment {CommentId} liked successfully by user {UserId}",
+            request.CommentId, currentUser.Id);
+
+        return new OperationResult
+        {
+            Success = true,
+            Message = "Comment liked successfully"
+        };
+    }
+
+    private async Task UpdateCommentLikesCountInBackground(Guid commentId, bool increment)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var backgroundCommentLikesRepository = scope.ServiceProvider.GetRequiredService<ICommentLikesRepository>();
+
+            if (increment)
+                await backgroundCommentLikesRepository.IncrementCommentLikesCount(commentId);
+            else
+                await backgroundCommentLikesRepository.DecrementCommentLikesCount(commentId);
+
+            _logger.LogDebug("Successfully updated likes count for comment {CommentId}: {Action}",
+                commentId, increment ? "increment" : "decrement");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to update likes count for comment {CommentId} in background", commentId);
+        }
+    }
+}

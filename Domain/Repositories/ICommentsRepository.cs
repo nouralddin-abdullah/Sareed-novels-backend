@@ -11,4 +11,6 @@ public interface ICommentsRepository
     Task<bool> DeleteComment(Guid commentId);
     Task<int> GetCommentCountForChapter(Guid chapterId);
     Task<int> GetRepliesCountForComment(Guid commentId);
+    Task<(IEnumerable<Comments>, int)> GetParagraphComments(Guid paragraphId, int pageNumber, int pageSize, string sorting = "recent");
+    Task DeleteParagraphComments(Guid paragraphId);
 }

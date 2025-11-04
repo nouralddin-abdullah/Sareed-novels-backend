@@ -16,5 +16,6 @@ public class ChapterProfiles : Profile
         CreateMap<Chapter, ChapterSingleAuthorDTO>();
         CreateMap<Chapter, ChapterSingleReaderDTO>()
             .ForMember(dest => dest.Author, opt => opt.MapFrom(src => src.Novel.Owner));
+        CreateMap<ChapterParagraph, ChapterParagraphDTO>();
     }
 }

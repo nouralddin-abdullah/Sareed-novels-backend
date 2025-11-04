@@ -19,6 +19,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<Character> Characters { get; set; }
     internal DbSet<Comments> Comments { get; set; }
     internal DbSet<CommentLikes> CommentLikes { get; set; }
+    internal DbSet<ChapterParagraph> ChapterParagraphs { get; set; }
+    internal DbSet<ReadingList> ReadingLists { get; set; }
+    internal DbSet<ReadingListNovel> ReadingListNovels { get; set; }
+    internal DbSet<ReadingListFollower> ReadingListFollowers { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -282,37 +287,37 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             entity.HasKey(c => c.Id);
 
-            // String properties with constraints
             entity.Property(c => c.Title)
                   .IsRequired()
                   .HasMaxLength(500);
 
-            entity.Property(c => c.Content)
-                  .IsRequired();
+            entity.Property(c => c.Content); // Made nullable in entity
 
             entity.Property(c => c.Status)
                   .IsRequired()
                   .HasMaxLength(20)
                   .HasDefaultValue("Draft");
 
-            // Required fields
             entity.Property(c => c.ChapterIndex)
                   .IsRequired();
 
             entity.Property(c => c.CreatedAt)
                   .IsRequired();
 
-            //Comments count with default value
             entity.Property(c => c.CommentsCount)
                   .HasDefaultValue(0);
+            
+            entity.Property(c => c.TotalCommentsCount)
+                  .HasDefaultValue(0);
+            
+            entity.Property(c => c.ParagraphsCount)
+                  .HasDefaultValue(0);
 
-            // Foreign key relationship
             entity.HasOne(c => c.Novel)
                   .WithMany(n => n.Chapters)
                   .HasForeignKey(c => c.NovelId)
                   .OnDelete(DeleteBehavior.Cascade);
 
-            // Performance indexes
             entity.HasIndex(c => new { c.NovelId, c.ChapterIndex })
                   .HasDatabaseName("IX_Chapters_Novel_Index");
 
@@ -324,6 +329,44 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(c => c.CreatedAt)
                   .HasDatabaseName("IX_Chapters_CreatedAt");
+        });
+
+        // NEW: ChapterParagraph configuration
+        modelBuilder.Entity<ChapterParagraph>(entity =>
+        {
+            entity.HasKey(cp => cp.Id);
+            
+            entity.Property(cp => cp.Content)
+                  .IsRequired();
+            
+            entity.Property(cp => cp.ContentHash)
+                  .IsRequired()
+                  .HasMaxLength(64); // SHA256 hash in base64 is 44 chars, 64 for safety
+            
+            entity.Property(cp => cp.OrderIndex)
+                  .IsRequired();
+            
+            entity.Property(cp => cp.ContentType)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("text");
+            
+            entity.Property(cp => cp.CommentsCount)
+                  .HasDefaultValue(0);
+            
+            entity.HasOne(cp => cp.Chapter)
+                  .WithMany(c => c.Paragraphs)
+                  .HasForeignKey(cp => cp.ChapterId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasIndex(cp => cp.ChapterId)
+                  .HasDatabaseName("IX_ChapterParagraphs_ChapterId");
+            
+            entity.HasIndex(cp => new { cp.ChapterId, cp.OrderIndex })
+                  .HasDatabaseName("IX_ChapterParagraphs_Chapter_Order");
+            
+            // NEW: Index on ContentHash for fast lookups
+            entity.HasIndex(cp => cp.ContentHash)
+                  .HasDatabaseName("IX_ChapterParagraphs_ContentHash");
         });
 
         modelBuilder.Entity<Character>(entity =>
@@ -368,55 +411,60 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<Comments>(entity =>
         {
             entity.HasKey(c => c.Id);
-
-            // String properties with constraints
+            
             entity.Property(c => c.Content)
                 .IsRequired()
                 .HasMaxLength(2000);
-
+            
             entity.Property(c => c.AttachedImageUrl)
                 .HasMaxLength(500);
-
-            // Self-referential relationship for replies
+            
             entity.HasOne(c => c.ParentComment)
                 .WithMany(c => c.Replies)
                 .HasForeignKey(c => c.ParentCommentId)
-                .OnDelete(DeleteBehavior.Restrict); // Prevent cascade delete issues
-
-            // User relationship
+                .OnDelete(DeleteBehavior.Restrict);
+            
             entity.HasOne(c => c.User)
                 .WithMany(u => u.Comments)
                 .HasForeignKey(c => c.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
-
-            // Chapter relationship
+            
             entity.HasOne(c => c.Chapter)
-                .WithMany() // No navigation property on Chapter
+                .WithMany()
                 .HasForeignKey(c => c.ChapterId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            // Default values
+            
+            // NEW: Paragraph relationship
+            entity.HasOne(c => c.Paragraph)
+                .WithMany()
+                .HasForeignKey(c => c.ParagraphId)
+                .OnDelete(DeleteBehavior.Restrict); // Changed from Cascade to Restrict
+            
             entity.Property(c => c.LikesCount)
                 .HasDefaultValue(0);
-
-            // Performance indexes
+            
             entity.HasIndex(c => c.ChapterId)
                 .HasDatabaseName("IX_Comments_ChapterId");
-
+            
             entity.HasIndex(c => c.ParentCommentId)
                 .HasDatabaseName("IX_Comments_ParentCommentId");
-
+            
             entity.HasIndex(c => c.UserId)
                 .HasDatabaseName("IX_Comments_UserId");
-
+            
             entity.HasIndex(c => c.CreatedAt)
                 .HasDatabaseName("IX_Comments_CreatedAt");
-
-            // Composite index for chapter top-level comments
+            
             entity.HasIndex(c => new { c.ChapterId, c.ParentCommentId })
                 .HasDatabaseName("IX_Comments_Chapter_Parent");
-
-            // Soft delete query filter
+            
+            // NEW: Paragraph indexes
+            entity.HasIndex(c => c.ParagraphId)
+                .HasDatabaseName("IX_Comments_ParagraphId");
+            
+            entity.HasIndex(c => new { c.ParagraphId, c.ParentCommentId })
+                .HasDatabaseName("IX_Comments_Paragraph_Parent");
+            
             entity.HasQueryFilter(c => !c.IsDeleted);
         });
 
@@ -448,6 +496,91 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(cl => cl.CommentId)
                 .HasDatabaseName("IX_CommentLikes_CommentId");
+        });
+        // ReadingList configuration
+        modelBuilder.Entity<ReadingList>(entity =>
+        {
+            entity.HasKey(rl => rl.Id);
+
+            entity.Property(rl => rl.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(rl => rl.Description)
+                .HasMaxLength(1000);
+
+            entity.Property(rl => rl.CoverImageUrl)
+                .HasMaxLength(500);
+
+            entity.Property(rl => rl.IsPublic)
+                .HasDefaultValue(false);
+
+            entity.Property(rl => rl.NovelsCount)
+                .HasDefaultValue(0);
+
+            entity.Property(rl => rl.FollowersCount)
+                .HasDefaultValue(0);
+
+            entity.HasOne(rl => rl.Owner)
+                .WithMany(u => u.ReadingLists)
+                .HasForeignKey(rl => rl.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(rl => rl.UserId)
+                .HasDatabaseName("IX_ReadingLists_UserId");
+
+            entity.HasIndex(rl => new { rl.UserId, rl.Name })
+                .HasDatabaseName("IX_ReadingLists_UserId_Name");
+
+            entity.HasIndex(rl => rl.IsPublic)
+                .HasDatabaseName("IX_ReadingLists_IsPublic");
+
+            entity.HasIndex(rl => new { rl.IsPublic, rl.FollowersCount })
+                .HasDatabaseName("IX_ReadingLists_Public_Followers");
+        });
+
+        // ReadingListNovel configuration (many-to-many)
+        modelBuilder.Entity<ReadingListNovel>(entity =>
+        {
+            entity.HasKey(rln => new { rln.ReadingListId, rln.NovelId });
+
+            entity.HasOne(rln => rln.ReadingList)
+                .WithMany(rl => rl.Novels)
+                .HasForeignKey(rln => rln.ReadingListId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(rln => rln.Novel)
+                .WithMany(n => n.ReadingListNovels)
+                .HasForeignKey(rln => rln.NovelId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.Property(rln => rln.OrderIndex)
+                .HasDefaultValue(0);
+
+            entity.HasIndex(rln => new { rln.ReadingListId, rln.OrderIndex })
+                .HasDatabaseName("IX_ReadingListNovels_List_Order");
+        });
+
+        // ReadingListFollower configuration (many-to-many)
+        modelBuilder.Entity<ReadingListFollower>(entity =>
+        {
+            entity.HasKey(rlf => new { rlf.ReadingListId, rlf.UserId });
+
+            entity.HasOne(rlf => rlf.ReadingList)
+                .WithMany(rl => rl.Followers)
+                .HasForeignKey(rlf => rlf.ReadingListId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(rlf => rlf.User)
+                .WithMany(u => u.FollowedReadingLists)
+                .HasForeignKey(rlf => rlf.UserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(rlf => rlf.UserId)
+                .HasDatabaseName("IX_ReadingListFollowers_UserId");
+
+            entity.HasIndex(rlf => rlf.ReadingListId)
+                .HasDatabaseName("IX_ReadingListFollowers_ReadingListId");
         });
     }
 }

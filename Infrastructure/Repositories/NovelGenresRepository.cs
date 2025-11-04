@@ -118,7 +118,7 @@ public class NovelGenresRepository(ApplicationDbContext dbContext) : INovelGenre
 
             //getting the current NovelGenre Relationships
             var currentNovelGenres = await dbContext.NovelGenres.Where(ng => ng.NovelId == novelId).ToListAsync();
-            if (currentNovelGenres.Count > 0) 
+            if (currentNovelGenres.Any()) 
             {
                 dbContext.NovelGenres.RemoveRange(currentNovelGenres);
             }

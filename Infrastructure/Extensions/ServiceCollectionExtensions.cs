@@ -52,7 +52,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICharacterRepository, CharacterRepository>();
         services.AddScoped<ICommentsRepository, CommentsRepository>();
         services.AddScoped<ICommentLikesRepository, CommentLikesRepository>();
-
+        services.AddScoped<IChapterParagraphsRepository, ChapterParagraphsRepository>();
+        services.AddScoped<IReadingListsRepository, ReadingListsRepository>();
+        services.AddScoped<IReadingListNovelsRepository, ReadingListNovelsRepository>();
+        services.AddScoped<IReadingListFollowersRepository, ReadingListFollowersRepository>();
 
         //adding cloudflare settings
         services.Configure<CloudflareR2Settings>(

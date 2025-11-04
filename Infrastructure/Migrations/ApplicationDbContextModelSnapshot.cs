@@ -37,7 +37,6 @@ namespace Infrastructure.Migrations
                         .HasDefaultValue(0);
 
                     b.Property<string>("Content")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAt")
@@ -45,6 +44,11 @@ namespace Infrastructure.Migrations
 
                     b.Property<Guid>("NovelId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("ParagraphsCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<string>("Slug")
                         .IsRequired()
@@ -62,6 +66,11 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<int>("TotalCommentsCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt")
@@ -77,6 +86,59 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("IX_Chapters_Novel_Status_Index");
 
                     b.ToTable("Chapters");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ChapterParagraph", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ChapterId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("CommentsCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChapterId")
+                        .HasDatabaseName("IX_ChapterParagraphs_ChapterId");
+
+                    b.HasIndex("ContentHash")
+                        .HasDatabaseName("IX_ChapterParagraphs_ContentHash");
+
+                    b.HasIndex("ChapterId", "OrderIndex")
+                        .HasDatabaseName("IX_ChapterParagraphs_Chapter_Order");
+
+                    b.ToTable("ChapterParagraphs");
                 });
 
             modelBuilder.Entity("Domain.Entities.Character", b =>
@@ -180,8 +242,14 @@ namespace Infrastructure.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(0);
 
+                    b.Property<Guid?>("ParagraphId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid?>("ParentCommentId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("UserId")
                         .IsRequired()
@@ -195,6 +263,9 @@ namespace Infrastructure.Migrations
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("IX_Comments_CreatedAt");
 
+                    b.HasIndex("ParagraphId")
+                        .HasDatabaseName("IX_Comments_ParagraphId");
+
                     b.HasIndex("ParentCommentId")
                         .HasDatabaseName("IX_Comments_ParentCommentId");
 
@@ -203,6 +274,9 @@ namespace Infrastructure.Migrations
 
                     b.HasIndex("ChapterId", "ParentCommentId")
                         .HasDatabaseName("IX_Comments_Chapter_Parent");
+
+                    b.HasIndex("ParagraphId", "ParentCommentId")
+                        .HasDatabaseName("IX_Comments_Paragraph_Parent");
 
                     b.ToTable("Comments");
                 });
@@ -531,6 +605,115 @@ namespace Infrastructure.Migrations
                     b.ToTable("RankingLists");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ReadingList", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CoverImageUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("FollowersCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("IsPublic")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("NovelsCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsPublic")
+                        .HasDatabaseName("IX_ReadingLists_IsPublic");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_ReadingLists_UserId");
+
+                    b.HasIndex("IsPublic", "FollowersCount")
+                        .HasDatabaseName("IX_ReadingLists_Public_Followers");
+
+                    b.HasIndex("UserId", "Name")
+                        .HasDatabaseName("IX_ReadingLists_UserId_Name");
+
+                    b.ToTable("ReadingLists");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ReadingListFollower", b =>
+                {
+                    b.Property<Guid>("ReadingListId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("FollowedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("ReadingListId", "UserId");
+
+                    b.HasIndex("ReadingListId")
+                        .HasDatabaseName("IX_ReadingListFollowers_ReadingListId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_ReadingListFollowers_UserId");
+
+                    b.ToTable("ReadingListFollowers");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ReadingListNovel", b =>
+                {
+                    b.Property<Guid>("ReadingListId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("NovelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("OrderIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("ReadingListId", "NovelId");
+
+                    b.HasIndex("NovelId");
+
+                    b.HasIndex("ReadingListId", "OrderIndex")
+                        .HasDatabaseName("IX_ReadingListNovels_List_Order");
+
+                    b.ToTable("ReadingListNovels");
+                });
+
             modelBuilder.Entity("Domain.Entities.Review", b =>
                 {
                     b.Property<Guid>("Id")
@@ -850,6 +1033,17 @@ namespace Infrastructure.Migrations
                     b.Navigation("Novel");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ChapterParagraph", b =>
+                {
+                    b.HasOne("Domain.Entities.Chapter", "Chapter")
+                        .WithMany("Paragraphs")
+                        .HasForeignKey("ChapterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Chapter");
+                });
+
             modelBuilder.Entity("Domain.Entities.Character", b =>
                 {
                     b.HasOne("Domain.Entities.Novel", "Novel")
@@ -887,6 +1081,11 @@ namespace Infrastructure.Migrations
                         .HasForeignKey("ChapterId")
                         .OnDelete(DeleteBehavior.Cascade);
 
+                    b.HasOne("Domain.Entities.ChapterParagraph", "Paragraph")
+                        .WithMany()
+                        .HasForeignKey("ParagraphId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Domain.Entities.Comments", "ParentComment")
                         .WithMany("Replies")
                         .HasForeignKey("ParentCommentId")
@@ -899,6 +1098,8 @@ namespace Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Chapter");
+
+                    b.Navigation("Paragraph");
 
                     b.Navigation("ParentComment");
 
@@ -994,6 +1195,55 @@ namespace Infrastructure.Migrations
                     b.Navigation("Genre");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ReadingList", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "Owner")
+                        .WithMany("ReadingLists")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ReadingListFollower", b =>
+                {
+                    b.HasOne("Domain.Entities.ReadingList", "ReadingList")
+                        .WithMany("Followers")
+                        .HasForeignKey("ReadingListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("FollowedReadingLists")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("ReadingList");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ReadingListNovel", b =>
+                {
+                    b.HasOne("Domain.Entities.Novel", "Novel")
+                        .WithMany("ReadingListNovels")
+                        .HasForeignKey("NovelId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.ReadingList", "ReadingList")
+                        .WithMany("Novels")
+                        .HasForeignKey("ReadingListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Novel");
+
+                    b.Navigation("ReadingList");
+                });
+
             modelBuilder.Entity("Domain.Entities.Review", b =>
                 {
                     b.HasOne("Domain.Entities.Novel", "ReviewedNovel")
@@ -1083,6 +1333,11 @@ namespace Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Domain.Entities.Chapter", b =>
+                {
+                    b.Navigation("Paragraphs");
+                });
+
             modelBuilder.Entity("Domain.Entities.Comments", b =>
                 {
                     b.Navigation("Likes");
@@ -1103,12 +1358,21 @@ namespace Infrastructure.Migrations
 
                     b.Navigation("NovelGenres");
 
+                    b.Navigation("ReadingListNovels");
+
                     b.Navigation("Reviews");
                 });
 
             modelBuilder.Entity("Domain.Entities.RankingList", b =>
                 {
                     b.Navigation("Entries");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ReadingList", b =>
+                {
+                    b.Navigation("Followers");
+
+                    b.Navigation("Novels");
                 });
 
             modelBuilder.Entity("Domain.Entities.Review", b =>
@@ -1122,11 +1386,15 @@ namespace Infrastructure.Migrations
 
                     b.Navigation("Comments");
 
+                    b.Navigation("FollowedReadingLists");
+
                     b.Navigation("Followers");
 
                     b.Navigation("Following");
 
                     b.Navigation("Novels");
+
+                    b.Navigation("ReadingLists");
 
                     b.Navigation("ReviewLikes");
 

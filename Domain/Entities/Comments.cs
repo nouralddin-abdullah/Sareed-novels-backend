@@ -11,15 +11,26 @@ public class Comments
     public Guid? ParentCommentId { get; set; }
     public Comments? ParentComment { get; set; }
     public ICollection<Comments> Replies { get; set; } = new List<Comments>();
+    
+    // Comment location (ONE will be set)
     public Guid? ChapterId { get; set; }
     public Chapter? Chapter { get; set; }
+    
+    // NEW: Paragraph-level comments
+    public Guid? ParagraphId { get; set; }
+    public ChapterParagraph? Paragraph { get; set; }
 
     public int LikesCount { get; set; } = 0;
     public ICollection<CommentLikes> Likes { get; set; } = new List<CommentLikes>();
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
     public bool IsDeleted { get; set; } = false;
+    
+    // Helper properties
     public bool IsReply => ParentCommentId.HasValue;
+    public bool IsChapterComment => ChapterId.HasValue && !ParagraphId.HasValue;
+    public bool IsParagraphComment => ParagraphId.HasValue;
 
     public void IncrementLikeCount()
     {

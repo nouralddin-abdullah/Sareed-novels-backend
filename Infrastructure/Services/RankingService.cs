@@ -236,7 +236,7 @@ namespace Infrastructure.Services
             }
 
             // Clear existing entries
-            if (rankingList.Entries.Count > 0)
+            if (rankingList.Entries.Any())
             {
                 dbContext.RankingEntries.RemoveRange(rankingList.Entries);
             }
@@ -287,7 +287,7 @@ namespace Infrastructure.Services
                 await dbContext.SaveChangesAsync();
             }
 
-            if (rankingList.Entries.Count > 0)
+            if (rankingList.Entries.Any())
             {
                 dbContext.RankingEntries.RemoveRange(rankingList.Entries);
             }
