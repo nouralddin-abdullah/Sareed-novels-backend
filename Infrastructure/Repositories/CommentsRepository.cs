@@ -109,6 +109,31 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
 
         return (comments, totalCount);
     }
+
+    public async Task<(IEnumerable<Comments>, int)> GetPostComments(Guid postId, int pageNumber, int pageSize, string sorting = "recent")
+    {
+        IQueryable<Comments> query = dbContext.Comments
+            .AsNoTracking()
+            .Where(c => c.PostId == postId && c.ParentCommentId == null)
+            .Include(c => c.User);
+
+        query = sorting.ToLower() switch
+        {
+            "oldest" => query.OrderBy(c => c.CreatedAt),
+            "mostliked" or "most-liked" or "popular" => query.OrderByDescending(c => c.LikesCount)
+                                                               .ThenByDescending(c => c.CreatedAt),
+            _ => query.OrderByDescending(c => c.CreatedAt)
+        };
+
+        var totalCount = await query.CountAsync();
+        
+        var comments = await query
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (comments, totalCount);
+    }
     
     public async Task DeleteParagraphComments(Guid paragraphId)
     {

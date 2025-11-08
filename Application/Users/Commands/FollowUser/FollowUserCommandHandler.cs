@@ -1,4 +1,5 @@
-﻿using Domain.Entities;
+﻿using Application.Services;
+using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
@@ -7,7 +8,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Users.Commands.FollowUser;
 
-public class FollowUserCommandHandler(ILogger<FollowUserCommandHandler> logger, IUserContext userContext, UserManager<User> userManager, IUsersRepository usersRepository) : IRequestHandler<FollowUserCommand, OperationResult>
+public class FollowUserCommandHandler(
+    ILogger<FollowUserCommandHandler> logger, 
+    IUserContext userContext, 
+    UserManager<User> userManager, 
+    IUsersRepository usersRepository,
+    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<FollowUserCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(FollowUserCommand request, CancellationToken cancellationToken)
     {
@@ -35,6 +41,15 @@ public class FollowUserCommandHandler(ILogger<FollowUserCommandHandler> logger, 
         }
 
         var result = await usersRepository.FollowUser(currentUser.Id, userToFollow.Id);
+        
+        if (result)
+        {
+            // Update both users in search index (follower count changed)
+            await searchIndexQueue.QueueUserUpdateAsync(currentUser.Id);
+            await searchIndexQueue.QueueUserUpdateAsync(userToFollow.Id);
+            logger.LogDebug("Queued users for search index update after follow");
+        }
+
         var message = result ? $"Successfully followed {userToFollow.DisplayName}" : "Failed to follow user";
         return new OperationResult
         {

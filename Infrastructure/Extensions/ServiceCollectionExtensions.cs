@@ -12,6 +12,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Nest;
+using Elasticsearch.Net;
+
 namespace Infrastructure.Extensions;
 
 public static class ServiceCollectionExtensions
@@ -56,10 +60,52 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IReadingListsRepository, ReadingListsRepository>();
         services.AddScoped<IReadingListNovelsRepository, ReadingListNovelsRepository>();
         services.AddScoped<IReadingListFollowersRepository, ReadingListFollowersRepository>();
+        services.AddScoped<ILibraryRepository, LibraryRepository>();
+        services.AddScoped<IChapterSequenceService, ChapterSequenceService>();
+        services.AddScoped<ISearchIndexOutboxRepository, SearchIndexOutboxRepository>();
+        services.AddScoped<IPostsRepository, PostsRepository>();
+        services.AddScoped<IPostLikesRepository, PostLikesRepository>();
 
         //adding cloudflare settings
         services.Configure<CloudflareR2Settings>(
             configuration.GetSection(CloudflareR2Settings.SectionName));
+
+        // Elasticsearch configuration
+        services.Configure<ElasticsearchSettings>(
+            configuration.GetSection(ElasticsearchSettings.SectionName));
+
+        // Register Elasticsearch client
+        services.AddSingleton<IElasticClient>(provider =>
+        {
+            var settings = configuration.GetSection(ElasticsearchSettings.SectionName)
+                .Get<ElasticsearchSettings>();
+
+            if (settings == null || string.IsNullOrEmpty(settings.Url) || string.IsNullOrEmpty(settings.ApiKey))
+            {
+                throw new InvalidOperationException(
+                    "Elasticsearch settings are not configured properly in appsettings.json");
+            }
+
+            // Create connection settings using URL
+            var uri = new Uri($"https://{settings.Url}");
+            
+            var connectionSettings = new ConnectionSettings(uri)
+                .DefaultIndex(settings.NovelIndexName)
+                .ApiKeyAuthentication(new ApiKeyAuthenticationCredentials(settings.ApiKey))
+                .EnableDebugMode()
+                .PrettyJson()
+                .RequestTimeout(TimeSpan.FromMinutes(2));
+
+            return new ElasticClient(connectionSettings);
+        });
+
+        // Register search services
+        services.AddScoped<INovelSearchService, NovelSearchService>();
+        services.AddScoped<IUserSearchService, UserSearchService>();
+        services.AddScoped<ISearchIndexQueueService, SearchIndexQueueService>();
+
+        // Register background service for outbox processing
+        services.AddHostedService<SearchIndexSyncService>();
 
         //adding R2 S3 Client 
         services.AddSingleton<IAmazonS3>(provider =>
@@ -77,15 +123,32 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IFileUploadService, CloudflareR2Service>();
 
+        // Configure SMTP settings
+        services.Configure<SmtpSettings>(
+            configuration.GetSection(SmtpSettings.SectionName));
 
+        // Email sender using Hostinger SMTP
+        services.AddScoped<IEmailSender>(provider =>
+        {
+            var smtpSettings = configuration.GetSection(SmtpSettings.SectionName).Get<SmtpSettings>();
+            var logger = provider.GetRequiredService<ILogger<SmtpEmailSender>>();
+            
+            if (smtpSettings == null)
+            {
+                throw new InvalidOperationException(
+                    "SMTP settings are not configured properly in appsettings.json");
+            }
 
-        //email sender
-        services.AddSingleton<IEmailSender>(provider =>
-        new SendGridEmailSender(
-            apiKey: "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",
-            fromEmail: "sardconfirmation@protonmail.com",
-            fromName: "SardConfirmation"
-        ));
+            return new SmtpEmailSender(
+                smtpHost: smtpSettings.Host,
+                smtpPort: smtpSettings.Port,
+                fromEmail: smtpSettings.FromEmail,
+                fromName: smtpSettings.FromName,
+                username: smtpSettings.Username,
+                password: smtpSettings.Password,
+                logger: logger
+            );
+        });
 
         services.AddScoped<IJWTService, JwtService>();
     }

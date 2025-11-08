@@ -1,4 +1,5 @@
 ﻿using Application.Chapters.DTOS;
+using Application.Services;
 using Application.Users;
 using Application.Users.Commands.FollowUser;
 using AutoMapper;
@@ -12,7 +13,14 @@ using System.Text;
 
 namespace Application.Chapters.Commands.CreateChapter;
 
-public class CreateChapterCommandHandler(ILogger<CreateChapterCommandHandler> logger, IChaptersRepository chaptersRepository, IChapterParagraphsRepository paragraphsRepository, IUserContext userContext, INovelsRepository novelsRepository, IMapper mapper) : IRequestHandler<CreateChapterCommand, ChapterSingleAuthorDTO>
+public class CreateChapterCommandHandler(
+    ILogger<CreateChapterCommandHandler> logger, 
+    IChaptersRepository chaptersRepository, 
+    IUserContext userContext, 
+    INovelsRepository novelsRepository, 
+    IMapper mapper,
+    IChapterSequenceService sequenceService,
+    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<CreateChapterCommand, ChapterSingleAuthorDTO>
 {
     public async Task<ChapterSingleAuthorDTO> Handle(CreateChapterCommand request, CancellationToken cancellationToken)
     {
@@ -56,6 +64,20 @@ public class CreateChapterCommandHandler(ILogger<CreateChapterCommandHandler> lo
         novel.ChapterCount++;
         novel.LastUpdatedAt = DateTime.UtcNow;
         await novelsRepository.UpdateOne(novel);
+        
+        // If chapter is Published, recalculate sequences
+        if (chapter.Status == "Published")
+        {
+            logger.LogInformation(
+                "New Published chapter {ChapterId} created for novel {NovelId}, triggering sequence recalculation", 
+                chapter.Id, novel.Id);
+            
+            await sequenceService.RecalculateSequencesForNovelAsync(novel.Id);
+        }
+        
+        // Queue for Elasticsearch update (ChapterCount changed)
+        await searchIndexQueue.QueueUpdateAsync(novel.Id);
+        logger.LogDebug("Queued novel {NovelId} for search index update (chapter added)", novel.Id);
         
         var chapterDto = mapper.Map<ChapterSingleAuthorDTO>(chapter);
         

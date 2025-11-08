@@ -1,4 +1,5 @@
-﻿using Application.Users;
+﻿using Application.Services;
+using Application.Users;
 using Application.Users.Commands.FollowUser;
 using AutoMapper;
 using Domain.Exceptions;
@@ -8,7 +9,13 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Novels.Commands.UpdateNovel;
 
-public class UpdateNovelCommandHandler(ILogger<UpdateNovelCommandHandler> logger, IUserContext userContext, INovelGenresRepository novelGenresRepository,INovelsRepository novelsRepository, IMapper mapper) : IRequestHandler<UpdateNovelCommand, OperationResult>
+public class UpdateNovelCommandHandler(
+    ILogger<UpdateNovelCommandHandler> logger, 
+    IUserContext userContext, 
+    INovelGenresRepository novelGenresRepository,
+    INovelsRepository novelsRepository, 
+    IMapper mapper,
+    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<UpdateNovelCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UpdateNovelCommand request, CancellationToken cancellationToken)
     {
@@ -55,6 +62,11 @@ public class UpdateNovelCommandHandler(ILogger<UpdateNovelCommandHandler> logger
                 };
             }
         }
+
+        // Queue for Elasticsearch update (handles index/delete based on eligibility)
+        await searchIndexQueue.QueueUpdateAsync(request.NovelId);
+        logger.LogInformation("Queued novel {NovelId} for search index update", request.NovelId);
+
         return new OperationResult
         {
             Message = "Novel was updated successfully",

@@ -10,6 +10,7 @@ public class Chapter
     public string? Content { get; set; } // Made nullable for migration
     public string Status { get; set; } = "Draft";
     public int ChapterIndex { get; set; }
+    public int? PublishedChapterSequence { get; set; } // NEW: For efficient querying
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     
     // NEW: Paragraphs

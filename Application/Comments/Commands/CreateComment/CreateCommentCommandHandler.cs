@@ -5,20 +5,28 @@ using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Comments.Commands.CreateComment;
 
-public class CreateCommentCommandHandler(ILogger<CreateCommentCommandHandler> logger, ICommentsRepository commentsRepository, IChaptersRepository chaptersRepository, IChapterParagraphsRepository paragraphsRepository, IUserContext userContext, IFileUploadService fileUploadService, IServiceProvider serviceProvider) : IRequestHandler<CreateCommentCommand, OperationResult>
+public class CreateCommentCommandHandler(
+    ILogger<CreateCommentCommandHandler> logger, 
+    ICommentsRepository commentsRepository, 
+    IChaptersRepository chaptersRepository, 
+    IChapterParagraphsRepository paragraphsRepository, 
+    IUserContext userContext, 
+    IFileUploadService fileUploadService, 
+    IServiceProvider serviceProvider) : IRequestHandler<CreateCommentCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(CreateCommentCommand request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
         
-        Guid chapterId;
+        Guid? chapterId = null;
+        Guid? postId = null;
         
-        // Validate either chapter or paragraph is provided
         if (request.ParagraphId.HasValue)
         {
             logger.LogInformation("Creating comment for paragraph {ParagraphId}", request.ParagraphId);
@@ -31,12 +39,17 @@ public class CreateCommentCommandHandler(ILogger<CreateCommentCommandHandler> lo
             var chapter = await chaptersRepository.GetChapterById(request.ChapterId.Value) ?? throw new NotFoundException("Chapter not found");
             chapterId = chapter.Id;
         }
+        else if (request.PostId.HasValue)
+        {
+            logger.LogInformation("Creating comment for post {PostId}", request.PostId);
+            postId = request.PostId.Value;
+        }
         else
         {
             return new OperationResult
             {
                 Success = false,
-                Message = "Either ChapterId or ParagraphId must be provided"
+                Message = "Either ChapterId, ParagraphId, or PostId must be provided"
             };
         }
         
@@ -50,6 +63,7 @@ public class CreateCommentCommandHandler(ILogger<CreateCommentCommandHandler> lo
             Id = Guid.NewGuid(),
             ChapterId = request.ChapterId,
             ParagraphId = request.ParagraphId,
+            PostId = request.PostId,
             UserId = currentUser.Id,
             Content = request.Content,
             ParentCommentId = request.ParentCommentId,
@@ -70,16 +84,21 @@ public class CreateCommentCommandHandler(ILogger<CreateCommentCommandHandler> lo
         
         var createdComment = await commentsRepository.CreateComment(comment);
         
-        // Fire-and-forget counter updates (only for top-level comments)
+        _ = IncrementUserCommentsCountInBackground(currentUser.Id);
+
         if (!request.ParentCommentId.HasValue)
         {
             if (request.ParagraphId.HasValue)
             {
-                _ = UpdateParagraphCommentsCountInBackground(request.ParagraphId.Value, chapterId);
+                _ = UpdateParagraphCommentsCountInBackground(request.ParagraphId.Value, chapterId!.Value);
             }
             else if (request.ChapterId.HasValue)
             {
                 _ = UpdateChapterCommentsCountInBackground(request.ChapterId.Value);
+            }
+            else if (request.PostId.HasValue)
+            {
+                _ = UpdatePostCommentsCountInBackground(request.PostId.Value);
             }
         }
         
@@ -90,6 +109,27 @@ public class CreateCommentCommandHandler(ILogger<CreateCommentCommandHandler> lo
             Success = true,
             Message = "Comment created successfully"
         };
+    }
+    
+    private async Task IncrementUserCommentsCountInBackground(string userId)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var backgroundUserManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+            
+            var user = await backgroundUserManager.FindByIdAsync(userId);
+            if (user != null)
+            {
+                user.IncrementCommentsCount();
+                await backgroundUserManager.UpdateAsync(user);
+            }
+            logger.LogDebug("Successfully incremented comments count for user {UserId}", userId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to increment comments count for user {UserId}", userId);
+        }
     }
 
     private async Task UpdateChapterCommentsCountInBackground(Guid chapterId)
@@ -141,6 +181,28 @@ public class CreateCommentCommandHandler(ILogger<CreateCommentCommandHandler> lo
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to update comments count for paragraph {ParagraphId} in background", paragraphId);
+        }
+    }
+
+    private async Task UpdatePostCommentsCountInBackground(Guid postId)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var backgroundPostsRepository = scope.ServiceProvider.GetRequiredService<IPostsRepository>();
+
+            var post = await backgroundPostsRepository.GetPostById(postId);
+            if (post != null)
+            {
+                post.IncrementCommentsCount();
+                await backgroundPostsRepository.UpdatePost(post);
+            }
+
+            logger.LogDebug("Successfully updated comments count for post {PostId}", postId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to update comments count for post {PostId} in background", postId);
         }
     }
 }

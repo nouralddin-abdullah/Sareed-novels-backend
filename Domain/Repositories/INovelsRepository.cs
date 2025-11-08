@@ -10,4 +10,6 @@ public interface INovelsRepository
     Task<bool> UpdateOne(Novel novel);
     Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber);
     Task<(IEnumerable<Novel?>, int)> GetWorks(string userId, int PageNumber, int PageSize);
+    Task<int> GetPublishedChaptersCountAsync(Guid novelId);
+    Task<int> RecalculatePublishedSequencesAsync(Guid novelId);
 }

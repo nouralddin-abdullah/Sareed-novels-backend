@@ -11,4 +11,9 @@ public class UpdateMeCommand : IRequest<OperationResult>
     public string? UserBio { get; set; }
     public IFormFile? ProfilePhoto { get; set; }
     public IFormFile? ProfileBanner { get; set; }
+    
+    // Social media links
+    public string? FacebookUrl { get; set; }
+    public string? TwitterUrl { get; set; }
+    public string? DiscordUrl { get; set; }
 }

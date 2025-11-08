@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Chapters.Queries.GetChaptersReader;
 
-public class GetChaptersReaderQueryHandler(ILogger<GetChaptersAuthorQueryHandler> logger, IChaptersRepository chaptersRepository, INovelsRepository novelsRepository, IUserContext userContext, IMapper mapper) : IRequestHandler<GetChaptersReaderQuery, IEnumerable<ChaptersDTO>>
+public class GetChaptersReaderQueryHandler(ILogger<GetChaptersAuthorQueryHandler> logger, IChaptersRepository chaptersRepository, INovelsRepository novelsRepository, IMapper mapper) : IRequestHandler<GetChaptersReaderQuery, IEnumerable<ChaptersDTO>>
 {
     public async Task<IEnumerable<ChaptersDTO>> Handle(GetChaptersReaderQuery request, CancellationToken cancellationToken)
     {

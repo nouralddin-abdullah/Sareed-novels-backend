@@ -1,4 +1,5 @@
-﻿using Application.Users;
+﻿using Application.Services;
+using Application.Users;
 using Application.Users.Commands.FollowUser;
 using AutoMapper;
 using Domain.Entities;
@@ -11,7 +12,15 @@ using System.Text;
 
 namespace Application.Chapters.Commands.UpdateChapter;
 
-public class UpdateChapterCommandHandler(ILogger<UpdateChapterCommandHandler> logger, IChaptersRepository chaptersRepository, IChapterParagraphsRepository paragraphsRepository, ICommentsRepository commentsRepository, INovelsRepository novelsRepository, IUserContext userContext, IMapper mapper) : IRequestHandler<UpdateChapterCommand, OperationResult>
+public class UpdateChapterCommandHandler(
+    ILogger<UpdateChapterCommandHandler> logger, 
+    IChaptersRepository chaptersRepository, 
+    IChapterParagraphsRepository paragraphsRepository, 
+    ICommentsRepository commentsRepository, 
+    INovelsRepository novelsRepository, 
+    IUserContext userContext, 
+    IMapper mapper,
+    IChapterSequenceService sequenceService) : IRequestHandler<UpdateChapterCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UpdateChapterCommand request, CancellationToken cancellationToken)
     {
@@ -22,6 +31,12 @@ public class UpdateChapterCommandHandler(ILogger<UpdateChapterCommandHandler> lo
         var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("Chapter wasn't found");
         
         if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel");
+        
+        // Track if status is changing to/from Published
+        var oldStatus = chapter.Status;
+        var statusChanging = !string.IsNullOrEmpty(request.Status) && request.Status != oldStatus;
+        var needsSequenceRecalculation = statusChanging && 
+            (oldStatus == "Published" || request.Status == "Published");
         
         if (request.Title != null)
         {
@@ -88,6 +103,17 @@ public class UpdateChapterCommandHandler(ILogger<UpdateChapterCommandHandler> lo
         }
         
         var result = await chaptersRepository.UpdateChapter(chapter);
+        
+        // Recalculate sequences if status changed to/from Published
+        if (result && needsSequenceRecalculation)
+        {
+            logger.LogInformation(
+                "Chapter {ChapterId} status changed from {OldStatus} to {NewStatus}, triggering sequence recalculation", 
+                chapter.Id, oldStatus, request.Status);
+            
+            await sequenceService.RecalculateSequencesForNovelAsync(request.NovelId);
+            await sequenceService.UpdateReadingProgressForNovelAsync(request.NovelId);
+        }
         
         if (result)
         {

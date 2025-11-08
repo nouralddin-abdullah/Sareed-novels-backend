@@ -16,6 +16,11 @@ public interface IUsersRepository
     Task<bool> UnFollowUser(string userId, string userToUnFollow);
     Task<(IEnumerable<Follow>, int)> GetFollowersList(string userId, int PageSize, int PageNumber);
     Task<(IEnumerable<Follow>, int)> GetFollowingList(string userId, int PageSize, int PageNumber);
-
-
+    
+    // New methods for search
+    Task<User?> GetUserById(string userId);
+    Task<IEnumerable<User>> GetAllUsers();
+    Task<int> GetFollowersCount(string userId);
+    Task<int> GetFollowingCount(string userId);
+    Task<int> GetNovelsCount(string userId);
 }

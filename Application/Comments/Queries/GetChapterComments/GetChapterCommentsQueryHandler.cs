@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Comments.Queries.GetChapterComments;
 
-public class GetChapterCommentsQueryHandler(ILogger<GetChapterCommentsQueryHandler> logger, IChaptersRepository chaptersRepository, ICommentsRepository commentsRepository,IUserContext userContext, ICommentLikesRepository commentLikesRepository, IMapper mapper) : IRequestHandler<GetChapterCommentsQuery, PagedResult<CommentsDTO>>
+public class GetChapterCommentsQueryHandler(ILogger<GetChapterCommentsQueryHandler> logger,ICommentsRepository commentsRepository,IUserContext userContext, ICommentLikesRepository commentLikesRepository, IMapper mapper) : IRequestHandler<GetChapterCommentsQuery, PagedResult<CommentsDTO>>
 {
     public async Task<PagedResult<CommentsDTO>> Handle(GetChapterCommentsQuery request, CancellationToken cancellationToken)
     {

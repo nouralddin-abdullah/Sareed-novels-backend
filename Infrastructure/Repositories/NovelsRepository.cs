@@ -77,4 +77,43 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         var result = await dbContext.SaveChangesAsync();
         return result > 0;
     }
+
+    public async Task<int> GetPublishedChaptersCountAsync(Guid novelId)
+    {
+        return await dbContext.Chapters
+            .Where(c => c.NovelId == novelId && c.Status == "Published")
+            .CountAsync();
+    }
+
+    public async Task<int> RecalculatePublishedSequencesAsync(Guid novelId)
+    {
+        var allChapters = await dbContext.Chapters
+            .Where(c => c.NovelId == novelId)
+            .OrderBy(c => c.ChapterIndex)
+            .ToListAsync();
+
+        var publishedChapters = allChapters
+            .Where(c => c.Status == "Published")
+            .ToList();
+
+        var unpublishedChapters = allChapters
+            .Where(c => c.Status != "Published")
+            .ToList();
+
+        // Assign sequences to published chapters
+        int sequence = 1;
+        foreach (var chapter in publishedChapters)
+        {
+            chapter.PublishedChapterSequence = sequence++;
+        }
+
+        // Clear sequences from unpublished chapters
+        foreach (var chapter in unpublishedChapters)
+        {
+            chapter.PublishedChapterSequence = null;
+        }
+
+        await dbContext.SaveChangesAsync();
+        return publishedChapters.Count;
+    }
 }

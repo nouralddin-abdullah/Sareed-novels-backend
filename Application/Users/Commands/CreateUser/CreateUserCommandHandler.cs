@@ -9,8 +9,14 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Users.Commands.CreateUser
 {
-    public class CreateUserCommandHandler(ILogger<CreateUserCommandHandler> logger, IMapper mapper, IUsersRepository usersRepository, 
-        IFileUploadService fileUploadService, IJWTService jWTService, UserManager<User> userManager) : IRequestHandler<CreateUserCommand, CreateUserResponse>
+    public class CreateUserCommandHandler(
+        ILogger<CreateUserCommandHandler> logger, 
+        IMapper mapper, 
+        IUsersRepository usersRepository, 
+        IFileUploadService fileUploadService, 
+        IJWTService jWTService, 
+        UserManager<User> userManager,
+        ISearchIndexQueueService searchIndexQueue) : IRequestHandler<CreateUserCommand, CreateUserResponse>
     {
 
         public async Task<CreateUserResponse> Handle(CreateUserCommand request, CancellationToken cancellationToken)
@@ -49,7 +55,16 @@ namespace Application.Users.Commands.CreateUser
                     }
                 };
             };
+            
             var user = await userManager.FindByEmailAsync(request.Email);
+            
+            // Queue new user for Elasticsearch indexing
+            if (user != null)
+            {
+                await searchIndexQueue.QueueUserIndexAsync(user.Id);
+                logger.LogDebug("Queued new user {UserId} for search indexing", user.Id);
+            }
+            
             return new CreateUserResponse
             {
                 Result = new FollowUser.OperationResult

@@ -1,4 +1,5 @@
 ﻿using Application.Chapters.Commands.CreateChapter;
+using Application.Services;
 using Application.Users;
 using Application.Users.Commands.FollowUser;
 using AutoMapper;
@@ -9,7 +10,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Chapters.Commands.ReorderChapter;
 
-internal class ReorderChaptersHandler(ILogger<ReorderChaptersHandler> logger, IChaptersRepository chaptersRepository, IUserContext userContext, INovelsRepository novelsRepository) : IRequestHandler<ReorderChaptersCommand, bool>
+internal class ReorderChaptersHandler(
+    ILogger<ReorderChaptersHandler> logger,
+    IChaptersRepository chaptersRepository,
+    IUserContext userContext,
+    INovelsRepository novelsRepository,
+    IChapterSequenceService sequenceService) : IRequestHandler<ReorderChaptersCommand, bool>
 {
     public async Task<bool> Handle(ReorderChaptersCommand request, CancellationToken cancellationToken)
     {
@@ -18,6 +24,19 @@ internal class ReorderChaptersHandler(ILogger<ReorderChaptersHandler> logger, IC
         var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found");
         if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel");
 
-        return await chaptersRepository.ReorderChapters(request.NovelId, request.OrderedChapterIds);
+        var result = await chaptersRepository.ReorderChapters(request.NovelId, request.OrderedChapterIds);
+
+        if (result)
+        {
+            logger.LogInformation(
+                "Chapters reordered for novel {NovelId}, triggering sequence recalculation",
+                request.NovelId);
+
+            // Reordering changes ChapterIndex, which affects PublishedChapterSequence
+            await sequenceService.RecalculateSequencesForNovelAsync(request.NovelId);
+            await sequenceService.UpdateReadingProgressForNovelAsync(request.NovelId);
+        }
+
+        return result;
     }
 }

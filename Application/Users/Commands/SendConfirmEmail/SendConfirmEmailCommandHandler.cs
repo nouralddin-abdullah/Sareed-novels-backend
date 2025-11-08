@@ -15,10 +15,10 @@ public class SendConfirmEmailCommandHandler(UserManager<User> userManager, ILogg
         logger.LogInformation("Generating email confirmation token for {email}:", request.Email);
         var user = await userManager.FindByEmailAsync(request.Email) ?? throw new NotFoundException("The user not found");
         var token = await usersRepository.GenerateEmailToken(user);
-        var confirmationLink = $"http://frontend.com/confirm-email?UserId={user.Id}&token={Uri.EscapeDataString(token)}";
+        var confirmationLink = $"https://sardnovels.com/confirm-email?UserId={user.Id}&token={Uri.EscapeDataString(token)}";
 
         //sending email logic
-        var templateId = "d-54f4916e7aaa4e8082455db613d00e4b";
+        var templateId = "confirm-email";
         var templateData = new { confirmationLink };
         await emailSender.SendTemplateEmailAsync(
             user.Email!,

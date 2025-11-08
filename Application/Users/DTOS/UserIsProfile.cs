@@ -11,6 +11,16 @@ public class UserIsProfile
     public DateTime CreatedAt { get; set; }
     public string? ProfilePhoto { get; set; }
     public string? ProfileBanner { get; set; }
+    
+    // Counters
+    public int ReviewsCount { get; set; }
+    public int CommentsCount { get; set; }
+    public int LibraryNovelsCount { get; set; }
+    
+    // Social media links
+    public string? FacebookUrl { get; set; }
+    public string? TwitterUrl { get; set; }
+    public string? DiscordUrl { get; set; }
     public List<FollowerDto> RecentFollowing { get; set; } = new List<FollowerDto>();
     public int TotalFollowing { get; set; }
     public List<FollowerDto> RecentFollowers { get; set; } = new List<FollowerDto>();

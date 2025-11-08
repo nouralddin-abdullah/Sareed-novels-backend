@@ -11,7 +11,14 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Novels.Commands.CreateNovel;
 
-public class CreateNovelCommandHandler(ILogger<CreateNovelCommandHandler> logger, IMapper mapper, IUserContext userContext,INovelGenresRepository novelGenresRepository, INovelsRepository novelsRepository, IFileUploadService fileUploadService) : IRequestHandler<CreateNovelCommand, OperationResult>
+public class CreateNovelCommandHandler(
+    ILogger<CreateNovelCommandHandler> logger, 
+    IMapper mapper, 
+    IUserContext userContext,
+    INovelGenresRepository novelGenresRepository, 
+    INovelsRepository novelsRepository, 
+    IFileUploadService fileUploadService,
+    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<CreateNovelCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(CreateNovelCommand request, CancellationToken cancellationToken)
     {
@@ -54,12 +61,21 @@ public class CreateNovelCommandHandler(ILogger<CreateNovelCommandHandler> logger
                 Message = "Creating novel was done, but genres failed to be updated"
             };
         }
+
+        // Queue for Elasticsearch indexing if not draft
+        if (!novel.IsDraft)
+        {
+            await searchIndexQueue.QueueIndexAsync(novel.Id);
+            logger.LogInformation("Queued novel {NovelId} for search indexing", novel.Id);
+        }
+
         return new OperationResult
         {
             Message = "Novel was created successfully",
             Success = true
         };
     }
+    
     private static string CreateUrlSafeSlug(string title)
     {
         return title

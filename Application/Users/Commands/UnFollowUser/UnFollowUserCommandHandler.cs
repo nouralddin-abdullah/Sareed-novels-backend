@@ -1,4 +1,5 @@
-﻿using Application.Users.Commands.FollowUser;
+﻿using Application.Services;
+using Application.Users.Commands.FollowUser;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
@@ -8,7 +9,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Users.Commands.UnFollowUser;
 
-public class UnFollowUserCommandHandler(ILogger<UnFollowUserCommandHandler> logger, IUserContext userContext, UserManager<User> userManager, IUsersRepository usersRepository) : IRequestHandler<UnFollowUserCommand, OperationResult>
+public class UnFollowUserCommandHandler(
+    ILogger<UnFollowUserCommandHandler> logger, 
+    IUserContext userContext, 
+    UserManager<User> userManager, 
+    IUsersRepository usersRepository,
+    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<UnFollowUserCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UnFollowUserCommand request, CancellationToken cancellationToken)
     {
@@ -36,6 +42,15 @@ public class UnFollowUserCommandHandler(ILogger<UnFollowUserCommandHandler> logg
         }
 
         var result = await usersRepository.UnFollowUser(currentUser.Id, userToUnFollow.Id);
+        
+        if (result)
+        {
+            // Update both users in search index (follower count changed)
+            await searchIndexQueue.QueueUserUpdateAsync(currentUser.Id);
+            await searchIndexQueue.QueueUserUpdateAsync(userToUnFollow.Id);
+            logger.LogDebug("Queued users for search index update after unfollow");
+        }
+
         string message = result ? $"You are now not following {userToUnFollow.DisplayName}" : "Failed to unfollow the user";
         return new OperationResult
         {

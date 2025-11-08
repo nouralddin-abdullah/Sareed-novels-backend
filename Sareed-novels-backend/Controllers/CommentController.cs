@@ -5,6 +5,7 @@ using Application.Comments.Commands.UnlikeComment;
 using Application.Comments.Queries.GetChapterComments;
 using Application.Comments.Queries.GetCommentReplies;
 using Application.Comments.Queries.GetParagraphComments;
+using Application.Comments.Queries.GetPostComments;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,7 +21,7 @@ namespace Sareed_novels_backend.Controllers
         [Route("chapter/{chapterId}")]
         public async Task<IActionResult> CreateChapterComment([FromRoute] Guid chapterId, [FromForm] CreateCommentRequest request)
         {
-            var command = new CreateCommentCommand(chapterId, null, request.Content, request.AttachedImage, request.ParentCommentId);
+            var command = new CreateCommentCommand(chapterId, null, null, request.Content, request.AttachedImage, request.ParentCommentId);
             var result = await mediator.Send(command);
             if (!result.Success)
             {
@@ -33,7 +34,20 @@ namespace Sareed_novels_backend.Controllers
         [Route("paragraph/{paragraphId}")]
         public async Task<IActionResult> CreateParagraphComment([FromRoute] Guid paragraphId, [FromForm] CreateCommentRequest request)
         {
-            var command = new CreateCommentCommand(null, paragraphId, request.Content, request.AttachedImage, request.ParentCommentId);
+            var command = new CreateCommentCommand(null, paragraphId, null, request.Content, request.AttachedImage, request.ParentCommentId);
+            var result = await mediator.Send(command);
+            if (!result.Success)
+            {
+                return BadRequest(result.Message);
+            }
+            return Ok(result);
+        }
+
+        [HttpPost]
+        [Route("post/{postId}")]
+        public async Task<IActionResult> CreatePostComment([FromRoute] Guid postId, [FromForm] CreateCommentRequest request)
+        {
+            var command = new CreateCommentCommand(null, null, postId, request.Content, request.AttachedImage, request.ParentCommentId);
             var result = await mediator.Send(command);
             if (!result.Success)
             {
@@ -71,6 +85,16 @@ namespace Sareed_novels_backend.Controllers
         public async Task<IActionResult> GetParagraphComments([FromRoute] Guid paragraphId, [FromQuery] int? pageNumber, [FromQuery] int? pageSize, [FromQuery] string? sorting)
         {
             var query = new GetParagraphCommentsQuery(paragraphId, pageNumber ?? 1, pageSize ?? 10, sorting ?? "recent");
+            var result = await mediator.Send(query);
+            return Ok(result);
+        }
+        
+        [AllowAnonymous]
+        [HttpGet]
+        [Route("post/{postId}")]
+        public async Task<IActionResult> GetPostComments([FromRoute] Guid postId, [FromQuery] int? pageNumber, [FromQuery] int? pageSize, [FromQuery] string? sorting)
+        {
+            var query = new GetPostCommentsQuery(postId, pageNumber ?? 1, pageSize ?? 10, sorting ?? "recent");
             var result = await mediator.Send(query);
             return Ok(result);
         }

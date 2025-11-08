@@ -12,7 +12,6 @@ namespace Application.Novels.Queries.GetNovel;
 
 public class GetNovelQueryHandler(
     ILogger<GetNovelQueryHandler> logger,
-    IUserContext userContext,
     INovelsRepository novelsRepository,
     IMapper mapper,
     IServiceProvider serviceProvider) : IRequestHandler<GetNovelQuery, NovelsDTO>

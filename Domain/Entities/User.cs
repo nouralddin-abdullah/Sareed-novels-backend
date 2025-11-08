@@ -9,6 +9,16 @@ public class User : IdentityUser
     public string? ProfileBanner { get; set; }
     public string? UserBio { get; set; }
     public DateTime CreatedAt { get; set; }
+    
+    // Counters
+    public int ReviewsCount { get; set; } = 0;
+    public int CommentsCount { get; set; } = 0;
+    public int LibraryNovelsCount { get; set; } = 0;
+    
+    // Social media links
+    public string? FacebookUrl { get; set; }
+    public string? TwitterUrl { get; set; }
+    public string? DiscordUrl { get; set; }
 
     public ICollection<Follow> Following { get; set; } = new List<Follow>();
     public ICollection<Follow> Followers { get; set; } = new List<Follow>();
@@ -19,4 +29,12 @@ public class User : IdentityUser
     public ICollection<Comments> Comments { get; set; } = new List<Comments>();
     public ICollection<ReadingList> ReadingLists { get; set; } = new List<ReadingList>();
     public ICollection<ReadingListFollower> FollowedReadingLists { get; set; } = new List<ReadingListFollower>();
+    
+    // Helper methods for counters
+    public void IncrementReviewsCount() => ReviewsCount++;
+    public void DecrementReviewsCount() => ReviewsCount = Math.Max(0, ReviewsCount - 1);
+    public void IncrementCommentsCount() => CommentsCount++;
+    public void DecrementCommentsCount() => CommentsCount = Math.Max(0, CommentsCount - 1);
+    public void IncrementLibraryNovelsCount() => LibraryNovelsCount++;
+    public void DecrementLibraryNovelsCount() => LibraryNovelsCount = Math.Max(0, LibraryNovelsCount - 1);
 }

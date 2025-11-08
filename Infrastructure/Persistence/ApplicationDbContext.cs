@@ -23,6 +23,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<ReadingList> ReadingLists { get; set; }
     internal DbSet<ReadingListNovel> ReadingListNovels { get; set; }
     internal DbSet<ReadingListFollower> ReadingListFollowers { get; set; }
+    internal DbSet<UserNovelProgress> UserNovelProgress { get; set; }
+    internal DbSet<SearchIndexOutbox> SearchIndexOutbox { get; set; }
+    internal DbSet<Post> Posts { get; set; }
+    internal DbSet<PostLike> PostLikes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -434,11 +438,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(c => c.ChapterId)
                 .OnDelete(DeleteBehavior.Cascade);
             
-            // NEW: Paragraph relationship
             entity.HasOne(c => c.Paragraph)
                 .WithMany()
                 .HasForeignKey(c => c.ParagraphId)
-                .OnDelete(DeleteBehavior.Restrict); // Changed from Cascade to Restrict
+                .OnDelete(DeleteBehavior.Restrict);
+            
+            entity.HasOne(c => c.Post)
+                .WithMany(p => p.Comments)
+                .HasForeignKey(c => c.PostId)
+                .OnDelete(DeleteBehavior.NoAction);
             
             entity.Property(c => c.LikesCount)
                 .HasDefaultValue(0);
@@ -458,12 +466,17 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(c => new { c.ChapterId, c.ParentCommentId })
                 .HasDatabaseName("IX_Comments_Chapter_Parent");
             
-            // NEW: Paragraph indexes
             entity.HasIndex(c => c.ParagraphId)
                 .HasDatabaseName("IX_Comments_ParagraphId");
             
             entity.HasIndex(c => new { c.ParagraphId, c.ParentCommentId })
                 .HasDatabaseName("IX_Comments_Paragraph_Parent");
+            
+            entity.HasIndex(c => c.PostId)
+                .HasDatabaseName("IX_Comments_PostId");
+            
+            entity.HasIndex(c => new { c.PostId, c.ParentCommentId })
+                .HasDatabaseName("IX_Comments_Post_Parent");
             
             entity.HasQueryFilter(c => !c.IsDeleted);
         });
@@ -581,6 +594,133 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(rlf => rlf.ReadingListId)
                 .HasDatabaseName("IX_ReadingListFollowers_ReadingListId");
+        });
+
+        modelBuilder.Entity<UserNovelProgress>(entity =>
+        {
+            entity.HasKey(unp => new { unp.UserId, unp.NovelId });
+
+            entity.HasOne(unp => unp.User)
+                .WithMany()
+                .HasForeignKey(unp => unp.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(unp => unp.Novel)
+                .WithMany()
+                .HasForeignKey(unp => unp.NovelId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(unp => unp.LastReadChapter)
+                .WithMany()
+                .HasForeignKey(unp => unp.LastReadChapterId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(unp => unp.UserId)
+                .HasDatabaseName("IX_UserNovelProgress_UserId");
+
+            entity.HasIndex(unp => unp.LastReadAt)
+                .HasDatabaseName("IX_UserNovelProgress_LastReadAt");
+
+            entity.HasIndex(unp => new { unp.UserId, unp.LastReadAt })
+                .HasDatabaseName("IX_UserNovelProgress_User_LastRead");
+        });
+
+        modelBuilder.Entity<SearchIndexOutbox>(entity =>
+        {
+            entity.HasKey(sio => sio.Id);
+
+            entity.Property(sio => sio.EntityType)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(sio => sio.Action)
+                .IsRequired()
+                .HasMaxLength(20);
+
+            entity.Property(sio => sio.Processed)
+                .HasDefaultValue(false);
+
+            entity.Property(sio => sio.RetryCount)
+                .HasDefaultValue(0);
+
+            entity.Property(sio => sio.ErrorMessage)
+                .HasMaxLength(2000);
+
+            entity.HasIndex(sio => new { sio.Processed, sio.CreatedAt })
+                .HasDatabaseName("IX_SearchIndexOutbox_Processed_CreatedAt");
+
+            entity.HasIndex(sio => new { sio.Processed, sio.RetryCount })
+                .HasDatabaseName("IX_SearchIndexOutbox_Processed_RetryCount");
+
+            entity.HasIndex(sio => new { sio.EntityType, sio.EntityId })
+                .HasDatabaseName("IX_SearchIndexOutbox_Entity");
+        });
+
+        modelBuilder.Entity<Post>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+
+            entity.Property(p => p.Content)
+                .IsRequired()
+                .HasMaxLength(5000);
+
+            entity.Property(p => p.ImageUrl)
+                .HasMaxLength(500);
+
+            entity.Property(p => p.LikesCount)
+                .HasDefaultValue(0);
+
+            entity.Property(p => p.CommentsCount)
+                .HasDefaultValue(0);
+
+            entity.HasOne(p => p.User)
+                .WithMany()
+                .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.Novel)
+                .WithMany()
+                .HasForeignKey(p => p.NovelId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(p => p.UserId)
+                .HasDatabaseName("IX_Posts_UserId");
+
+            entity.HasIndex(p => p.NovelId)
+                .HasDatabaseName("IX_Posts_NovelId");
+
+            entity.HasIndex(p => p.CreatedAt)
+                .HasDatabaseName("IX_Posts_CreatedAt");
+
+            entity.HasIndex(p => new { p.UserId, p.CreatedAt })
+                .HasDatabaseName("IX_Posts_User_Created");
+
+            entity.HasQueryFilter(p => !p.IsDeleted);
+        });
+
+        modelBuilder.Entity<PostLike>(entity =>
+        {
+            entity.HasKey(pl => pl.Id);
+
+            entity.HasOne(pl => pl.User)
+                .WithMany()
+                .HasForeignKey(pl => pl.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(pl => pl.Post)
+                .WithMany(p => p.Likes)
+                .HasForeignKey(pl => pl.PostId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(pl => new { pl.UserId, pl.PostId })
+                .IsUnique()
+                .HasDatabaseName("IX_PostLikes_UserId_PostId_Unique");
+
+            entity.HasIndex(pl => pl.UserId)
+                .HasDatabaseName("IX_PostLikes_UserId");
+
+            entity.HasIndex(pl => pl.PostId)
+                .HasDatabaseName("IX_PostLikes_PostId");
         });
     }
 }

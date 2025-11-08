@@ -9,7 +9,13 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Users.Commands.UpdateMe;
 
-public class UpdateMeCommandHandler(ILogger<UpdateMeCommandHandler> logger, IFileUploadService fileUploadService, IUserContext userContext, UserManager<User> userManager, IMapper mapper) : IRequestHandler<UpdateMeCommand, OperationResult>
+public class UpdateMeCommandHandler(
+    ILogger<UpdateMeCommandHandler> logger, 
+    IFileUploadService fileUploadService, 
+    IUserContext userContext, 
+    UserManager<User> userManager, 
+    IMapper mapper,
+    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<UpdateMeCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UpdateMeCommand request, CancellationToken cancellationToken)
     {
@@ -102,10 +108,16 @@ public class UpdateMeCommandHandler(ILogger<UpdateMeCommandHandler> logger, IFil
                 Message = $"Failed to update user: {errors}"
             };
         }
+
+        // Queue for Elasticsearch update
+        await searchIndexQueue.QueueUserUpdateAsync(user.Id);
+        logger.LogDebug("Queued user {UserId} for search index update", user.Id);
+
         return new OperationResult
         {
             Success = true,
             Message = "Profile updated successfully"
         };
     }
+
 }

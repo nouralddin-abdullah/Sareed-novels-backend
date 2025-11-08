@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <Folder Include="Configuration\" />
+    <Folder Include="Posts\Queries\GetFeedPosts\" />
   </ItemGroup>
 
 </Project>

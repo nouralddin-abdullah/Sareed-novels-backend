@@ -1,15 +1,21 @@
 ﻿using Application.Comments.Commands.CreateComment;
 using Application.Services;
 using Application.Users;
+using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Comments.Commands.DeleteComment;
 
-internal class DeleteCommentCommandHandler(ILogger<CreateCommentCommandHandler> logger, ICommentsRepository commentsRepository, IUserContext userContext, IServiceProvider serviceProvider) : IRequestHandler<DeleteCommentCommand, bool>
+internal class DeleteCommentCommandHandler(
+    ILogger<CreateCommentCommandHandler> logger, 
+    ICommentsRepository commentsRepository, 
+    IUserContext userContext, 
+    IServiceProvider serviceProvider) : IRequestHandler<DeleteCommentCommand, bool>
 {
     public async Task<bool> Handle(DeleteCommentCommand request, CancellationToken cancellationToken)
     {
@@ -17,11 +23,36 @@ internal class DeleteCommentCommandHandler(ILogger<CreateCommentCommandHandler> 
         var comment = await commentsRepository.GetCommentById(request.CommentId) ?? throw new NotFoundException("This comment wasn't found!");
         if (currentUser.Id != comment.UserId)
             throw new ForbidException("Not comment owner!");
+        
+        // Fire-and-forget: Decrement user's comments count
+        _ = DecrementUserCommentsCountInBackground(currentUser.Id);
+        
         if (!comment.ParentCommentId.HasValue && comment.ChapterId.HasValue)
         {
             _ = UpdateChapterCommentsCountInBackground(comment.ChapterId.Value);
         }
         return await commentsRepository.DeleteComment(comment.Id);
+    }
+    
+    private async Task DecrementUserCommentsCountInBackground(string userId)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var backgroundUserManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+            
+            var user = await backgroundUserManager.FindByIdAsync(userId);
+            if (user != null)
+            {
+                user.DecrementCommentsCount();
+                await backgroundUserManager.UpdateAsync(user);
+            }
+            logger.LogDebug("Successfully decremented comments count for user {UserId}", userId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to decrement comments count for user {UserId}", userId);
+        }
     }
 
     private async Task UpdateChapterCommentsCountInBackground(Guid chapterId)

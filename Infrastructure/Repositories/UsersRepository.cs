@@ -105,5 +105,35 @@ namespace Infrastructure.Repositories
             var followingList = await following.ToListAsync();
             return (followingList, totalCount);
         }
+
+        // New methods for search
+        public async Task<User?> GetUserById(string userId)
+        {
+            return await userManager.FindByIdAsync(userId);
+        }
+
+        public async Task<IEnumerable<User>> GetAllUsers()
+        {
+            return await dbContext.Users.ToListAsync();
+        }
+
+        public async Task<int> GetFollowersCount(string userId)
+        {
+            return await dbContext.Follows
+                .CountAsync(f => f.FollowedId == userId);
+        }
+
+        public async Task<int> GetFollowingCount(string userId)
+        {
+            return await dbContext.Follows
+                .CountAsync(f => f.FollowerId == userId);
+        }
+
+        public async Task<int> GetNovelsCount(string userId)
+        {
+            return await dbContext.Novels
+                .Where(n => n.AuthorId == userId && !n.IsDraft && !n.IsDeleted)
+                .CountAsync();
+        }
     }
 }

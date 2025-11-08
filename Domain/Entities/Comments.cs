@@ -20,6 +20,9 @@ public class Comments
     public Guid? ParagraphId { get; set; }
     public ChapterParagraph? Paragraph { get; set; }
 
+    public Guid? PostId { get; set; }
+    public Post? Post { get; set; }
+
     public int LikesCount { get; set; } = 0;
     public ICollection<CommentLikes> Likes { get; set; } = new List<CommentLikes>();
 
@@ -31,6 +34,7 @@ public class Comments
     public bool IsReply => ParentCommentId.HasValue;
     public bool IsChapterComment => ChapterId.HasValue && !ParagraphId.HasValue;
     public bool IsParagraphComment => ParagraphId.HasValue;
+    public bool IsPostComment => PostId.HasValue;
 
     public void IncrementLikeCount()
     {

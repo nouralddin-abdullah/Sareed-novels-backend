@@ -12,9 +12,11 @@ using Microsoft.Extensions.Configuration;
 namespace Application.Users.Commands.GoogleLogin
 {
     public class GoogleLoginCommandHandler(
-    ILogger<GoogleLoginCommandHandler> logger,
-    UserManager<User> userManager,
-    IJWTService jwtService, IConfiguration configuration) : IRequestHandler<GoogleLoginCommand, UserLoginResult>
+        ILogger<GoogleLoginCommandHandler> logger,
+        UserManager<User> userManager,
+        IJWTService jwtService, 
+        IConfiguration configuration,
+        ISearchIndexQueueService searchIndexQueue) : IRequestHandler<GoogleLoginCommand, UserLoginResult>
     {
 
         public async Task<UserLoginResult> Handle(GoogleLoginCommand request, CancellationToken cancellationToken)
@@ -33,6 +35,7 @@ namespace Application.Users.Commands.GoogleLogin
 
                 // Find or create user
                 var user = await userManager.FindByEmailAsync(payload.Email);
+                bool isNewUser = false;
 
                 if (user == null)
                 {
@@ -63,6 +66,7 @@ namespace Application.Users.Commands.GoogleLogin
                         logger.LogWarning("Failed to add Google login for user {userId}", user.Id);
                     }
 
+                    isNewUser = true;
                     logger.LogInformation("Created new user from Google account: {userId}", user.Id);
                 }
                 else
@@ -80,6 +84,13 @@ namespace Application.Users.Commands.GoogleLogin
                     }
 
                     logger.LogInformation("Google login successful for existing user: {userId}", user.Id);
+                }
+
+                // Queue new user for Elasticsearch indexing
+                if (isNewUser)
+                {
+                    await searchIndexQueue.QueueUserIndexAsync(user.Id);
+                    logger.LogDebug("Queued new Google user {UserId} for search indexing", user.Id);
                 }
 
                 // Generate JWT token
