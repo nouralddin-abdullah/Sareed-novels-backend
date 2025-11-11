@@ -9,4 +9,5 @@ public interface IFileUploadService
     Task<string> UploadCommentImageAsync(Stream fileStream, string contentType, string commentId);
     Task<string> UploadReadingListCoverImageAsync(Stream fileStream, string contentType, string readingListId);
     Task<string> UploadPostImageAsync(Stream fileStream, string contentType, string postId);
+    Task<string> UploadEntityGalleryImageAsync(Stream fileStream, string contentType, string entityId);
 }

@@ -125,4 +125,20 @@ public class CloudflareR2Service(IAmazonS3 s3Client, IOptions<CloudflareR2Settin
         await s3Client.PutObjectAsync(request);
         return $"{settings.Value.PublicUrl}/{key}";
     }
+
+    public async Task<string> UploadEntityGalleryImageAsync(Stream fileStream, string contentType, string entityId)
+    {
+        var key = $"entity-gallery/{entityId}/{Guid.NewGuid()}";
+        var request = new PutObjectRequest
+        {
+            BucketName = "sard",
+            Key = key,
+            InputStream = fileStream,
+            ContentType = contentType,
+            DisablePayloadSigning = true,
+            DisableDefaultChecksumValidation = true
+        };
+        await s3Client.PutObjectAsync(request);
+        return $"{settings.Value.PublicUrl}/{key}";
+    }
 }

@@ -16,7 +16,6 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<RankingList> RankingLists { get; set; }
     internal DbSet<RankingEntry> RankingEntries { get; set; }
     internal DbSet<Chapter> Chapters { get; set; }
-    internal DbSet<Character> Characters { get; set; }
     internal DbSet<Comments> Comments { get; set; }
     internal DbSet<CommentLikes> CommentLikes { get; set; }
     internal DbSet<ChapterParagraph> ChapterParagraphs { get; set; }
@@ -27,6 +26,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<SearchIndexOutbox> SearchIndexOutbox { get; set; }
     internal DbSet<Post> Posts { get; set; }
     internal DbSet<PostLike> PostLikes { get; set; }
+    internal DbSet<NovelEntity> NovelEntities { get; set; }
+    internal DbSet<EntityArticle> EntityArticles { get; set; }
+    internal DbSet<EntityRelationship> EntityRelationships { get; set; }
+    internal DbSet<EntityGalleryImage> EntityGalleryImages { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -373,45 +376,6 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                   .HasDatabaseName("IX_ChapterParagraphs_ContentHash");
         });
 
-        modelBuilder.Entity<Character>(entity =>
-        {
-            entity.HasKey(c => c.Id);
-
-            // String properties with constraints
-            entity.Property(c => c.CharacterName)
-                  .IsRequired()
-                  .HasMaxLength(100);
-
-            entity.Property(c => c.CharacterDescription)
-                  .IsRequired()
-                  .HasMaxLength(3000);
-
-            entity.Property(c => c.CharacterImageUrl)
-                  .IsRequired()
-                  .HasMaxLength(500);
-
-            entity.Property(c => c.CharacterAge)
-                  .IsRequired();
-
-            // Foreign key relationship
-            entity.HasOne(c => c.Novel)
-                  .WithMany(n => n.Characters)
-                  .HasForeignKey(c => c.NovelId)
-                  .OnDelete(DeleteBehavior.Cascade);
-
-            // Performance indexes
-            entity.HasIndex(c => c.NovelId)
-                  .HasDatabaseName("IX_Characters_NovelId");
-
-            entity.HasIndex(c => new { c.NovelId, c.CharacterName })
-                  .HasDatabaseName("IX_Characters_Novel_Name");
-
-            // Ensure character names are unique within a novel
-            entity.HasIndex(c => new { c.NovelId, c.CharacterName })
-                  .IsUnique()
-                  .HasDatabaseName("IX_Characters_Novel_Name_Unique");
-        });
-
         modelBuilder.Entity<Comments>(entity =>
         {
             entity.HasKey(c => c.Id);
@@ -721,6 +685,151 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(pl => pl.PostId)
                 .HasDatabaseName("IX_PostLikes_PostId");
+        });
+
+        // NovelEntity configuration
+        modelBuilder.Entity<NovelEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Section)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(e => e.Icon)
+                .HasMaxLength(20);
+
+            entity.Property(e => e.Name)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(e => e.ShortDescription)
+                .HasMaxLength(500);
+
+            entity.Property(e => e.Description)
+                .HasMaxLength(5000);
+
+            entity.Property(e => e.Role)
+                .HasMaxLength(100);
+
+            entity.Property(e => e.ImageUrl)
+                .HasMaxLength(500);
+
+            entity.Property(e => e.AttributesJson)
+                .IsRequired()
+                .HasDefaultValue("{}");
+
+            entity.HasOne(e => e.Novel)
+                .WithMany()
+                .HasForeignKey(e => e.NovelId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.NovelId)
+                .HasDatabaseName("IX_NovelEntities_NovelId");
+
+            entity.HasIndex(e => e.Section)
+                .HasDatabaseName("IX_NovelEntities_Section");
+
+            entity.HasIndex(e => new { e.NovelId, e.Section })
+                .HasDatabaseName("IX_NovelEntities_Novel_Section");
+
+            entity.HasIndex(e => e.CreatedAt)
+                .HasDatabaseName("IX_NovelEntities_CreatedAt");
+
+            entity.HasQueryFilter(e => !e.IsDeleted);
+        });
+
+        // EntityGalleryImage configuration
+        modelBuilder.Entity<EntityGalleryImage>(entity =>
+        {
+            entity.HasKey(egi => egi.Id);
+
+            entity.Property(egi => egi.ImageUrl)
+                .IsRequired()
+                .HasMaxLength(500);
+
+            entity.Property(egi => egi.Caption)
+                .HasMaxLength(500);
+
+            entity.Property(egi => egi.OrderIndex)
+                .HasDefaultValue(0);
+
+            entity.HasOne(egi => egi.Entity)
+                .WithMany(e => e.GalleryImages)
+                .HasForeignKey(egi => egi.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(egi => egi.EntityId)
+                .HasDatabaseName("IX_EntityGalleryImages_EntityId");
+
+            entity.HasIndex(egi => new { egi.EntityId, egi.OrderIndex })
+                .HasDatabaseName("IX_EntityGalleryImages_Entity_Order");
+        });
+
+        // EntityArticle configuration
+        modelBuilder.Entity<EntityArticle>(entity =>
+        {
+            entity.HasKey(ea => ea.Id);
+
+            entity.Property(ea => ea.Title)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(ea => ea.Content)
+                .IsRequired();
+
+            entity.Property(ea => ea.OrderIndex)
+                .HasDefaultValue(0);
+
+            entity.HasOne(ea => ea.Entity)
+                .WithMany(e => e.Articles)
+                .HasForeignKey(ea => ea.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(ea => ea.EntityId)
+                .HasDatabaseName("IX_EntityArticles_EntityId");
+
+            entity.HasIndex(ea => new { ea.EntityId, ea.OrderIndex })
+                .HasDatabaseName("IX_EntityArticles_Entity_Order");
+
+            entity.HasQueryFilter(ea => !ea.IsDeleted);
+        });
+
+        // EntityRelationship configuration
+        modelBuilder.Entity<EntityRelationship>(entity =>
+        {
+            entity.HasKey(er => er.Id);
+
+            entity.Property(er => er.RelationType)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(er => er.Label)
+                .HasMaxLength(100);
+
+            entity.Property(er => er.Description)
+                .HasMaxLength(1000);
+
+            entity.HasOne(er => er.SourceEntity)
+                .WithMany(e => e.SourceRelationships)
+                .HasForeignKey(er => er.SourceEntityId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(er => er.TargetEntity)
+                .WithMany(e => e.TargetRelationships)
+                .HasForeignKey(er => er.TargetEntityId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(er => er.SourceEntityId)
+                .HasDatabaseName("IX_EntityRelationships_SourceId");
+
+            entity.HasIndex(er => er.TargetEntityId)
+                .HasDatabaseName("IX_EntityRelationships_TargetId");
+
+            entity.HasIndex(er => new { er.SourceEntityId, er.TargetEntityId })
+                .HasDatabaseName("IX_EntityRelationships_Source_Target");
+
+            entity.HasQueryFilter(er => !er.IsDeleted);
         });
     }
 }

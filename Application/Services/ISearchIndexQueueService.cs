@@ -11,4 +11,9 @@ public interface ISearchIndexQueueService
     Task QueueUserIndexAsync(string userId);
     Task QueueUserUpdateAsync(string userId);
     Task QueueUserDeleteAsync(string userId);
+    
+    // Entity methods
+    Task QueueEntityIndexAsync(Guid entityId);
+    Task QueueEntityUpdateAsync(Guid entityId);
+    Task QueueEntityDeleteAsync(Guid entityId);
 }

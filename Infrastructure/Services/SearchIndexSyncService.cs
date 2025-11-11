@@ -85,6 +85,18 @@ public class SearchIndexSyncService(
                         _ => false
                     };
                 }
+                else if (entry.EntityType == "NovelEntity")
+                {
+                    var entitySearchService = scope.ServiceProvider.GetRequiredService<IEntitySearchService>();
+                    
+                    success = entry.Action switch
+                    {
+                        "Index" => await entitySearchService.IndexEntityAsync(entry.EntityId),
+                        "Update" => await entitySearchService.UpdateEntityInIndexAsync(entry.EntityId),
+                        "Delete" => await entitySearchService.DeleteEntityFromIndexAsync(entry.EntityId),
+                        _ => false
+                    };
+                }
 
                 if (success)
                 {

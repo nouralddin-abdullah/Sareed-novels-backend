@@ -1,4 +1,4 @@
-﻿    namespace Domain.Entities;
+﻿namespace Domain.Entities;
 
 public class Novel
 {
@@ -30,7 +30,6 @@ public class Novel
     public ICollection<Review> Reviews { get; set; } = new List<Review>();
     public ICollection<NovelGenre> NovelGenres { get; set; } = new List<NovelGenre>();
     public ICollection<Chapter> Chapters { get; set; } = new List<Chapter>();
-    public ICollection<Character> Characters { get; set; } = new List<Character>();
     public ICollection<ReadingListNovel> ReadingListNovels { get; set; } = new List<ReadingListNovel>();
 
     public bool IsPubliclyVisible => !IsDraft && !IsDeleted;

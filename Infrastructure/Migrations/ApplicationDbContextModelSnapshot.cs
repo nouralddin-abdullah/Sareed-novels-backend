@@ -144,45 +144,6 @@ namespace Infrastructure.Migrations
                     b.ToTable("ChapterParagraphs");
                 });
 
-            modelBuilder.Entity("Domain.Entities.Character", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("CharacterAge")
-                        .HasColumnType("int");
-
-                    b.Property<string>("CharacterDescription")
-                        .IsRequired()
-                        .HasMaxLength(3000)
-                        .HasColumnType("nvarchar(3000)");
-
-                    b.Property<string>("CharacterImageUrl")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("CharacterName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<Guid>("NovelId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("NovelId")
-                        .HasDatabaseName("IX_Characters_NovelId");
-
-                    b.HasIndex("NovelId", "CharacterName")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Characters_Novel_Name_Unique");
-
-                    b.ToTable("Characters");
-                });
-
             modelBuilder.Entity("Domain.Entities.CommentLikes", b =>
                 {
                     b.Property<int>("Id")
@@ -291,6 +252,134 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("IX_Comments_Post_Parent");
 
                     b.ToTable("Comments");
+                });
+
+            modelBuilder.Entity("Domain.Entities.EntityArticle", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("OrderIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntityId")
+                        .HasDatabaseName("IX_EntityArticles_EntityId");
+
+                    b.HasIndex("EntityId", "OrderIndex")
+                        .HasDatabaseName("IX_EntityArticles_Entity_Order");
+
+                    b.ToTable("EntityArticles");
+                });
+
+            modelBuilder.Entity("Domain.Entities.EntityGalleryImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Caption")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ImageUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("OrderIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntityId")
+                        .HasDatabaseName("IX_EntityGalleryImages_EntityId");
+
+                    b.HasIndex("EntityId", "OrderIndex")
+                        .HasDatabaseName("IX_EntityGalleryImages_Entity_Order");
+
+                    b.ToTable("EntityGalleryImages");
+                });
+
+            modelBuilder.Entity("Domain.Entities.EntityRelationship", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("RelationType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ReverseLabel")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("SourceEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TargetEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceEntityId")
+                        .HasDatabaseName("IX_EntityRelationships_SourceId");
+
+                    b.HasIndex("TargetEntityId")
+                        .HasDatabaseName("IX_EntityRelationships_TargetId");
+
+                    b.HasIndex("SourceEntityId", "TargetEntityId")
+                        .HasDatabaseName("IX_EntityRelationships_Source_Target");
+
+                    b.ToTable("EntityRelationships");
                 });
 
             modelBuilder.Entity("Domain.Entities.Follow", b =>
@@ -448,6 +537,77 @@ namespace Infrastructure.Migrations
                     b.HasIndex("TotalAverageScore");
 
                     b.ToTable("Novels");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NovelEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AttributesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("nvarchar(max)")
+                        .HasDefaultValue("{}");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(5000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Icon")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("NovelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Section")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ShortDescription")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_NovelEntities_CreatedAt");
+
+                    b.HasIndex("NovelId")
+                        .HasDatabaseName("IX_NovelEntities_NovelId");
+
+                    b.HasIndex("Section")
+                        .HasDatabaseName("IX_NovelEntities_Section");
+
+                    b.HasIndex("NovelId", "Section")
+                        .HasDatabaseName("IX_NovelEntities_Novel_Section");
+
+                    b.ToTable("NovelEntities");
                 });
 
             modelBuilder.Entity("Domain.Entities.NovelGenre", b =>
@@ -1253,17 +1413,6 @@ namespace Infrastructure.Migrations
                     b.Navigation("Chapter");
                 });
 
-            modelBuilder.Entity("Domain.Entities.Character", b =>
-                {
-                    b.HasOne("Domain.Entities.Novel", "Novel")
-                        .WithMany("Characters")
-                        .HasForeignKey("NovelId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Novel");
-                });
-
             modelBuilder.Entity("Domain.Entities.CommentLikes", b =>
                 {
                     b.HasOne("Domain.Entities.Comments", "Comment")
@@ -1322,6 +1471,47 @@ namespace Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Domain.Entities.EntityArticle", b =>
+                {
+                    b.HasOne("Domain.Entities.NovelEntity", "Entity")
+                        .WithMany("Articles")
+                        .HasForeignKey("EntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Entity");
+                });
+
+            modelBuilder.Entity("Domain.Entities.EntityGalleryImage", b =>
+                {
+                    b.HasOne("Domain.Entities.NovelEntity", "Entity")
+                        .WithMany("GalleryImages")
+                        .HasForeignKey("EntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Entity");
+                });
+
+            modelBuilder.Entity("Domain.Entities.EntityRelationship", b =>
+                {
+                    b.HasOne("Domain.Entities.NovelEntity", "SourceEntity")
+                        .WithMany("SourceRelationships")
+                        .HasForeignKey("SourceEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.NovelEntity", "TargetEntity")
+                        .WithMany("TargetRelationships")
+                        .HasForeignKey("TargetEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SourceEntity");
+
+                    b.Navigation("TargetEntity");
+                });
+
             modelBuilder.Entity("Domain.Entities.Follow", b =>
                 {
                     b.HasOne("Domain.Entities.User", "Followed")
@@ -1350,6 +1540,17 @@ namespace Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NovelEntity", b =>
+                {
+                    b.HasOne("Domain.Entities.Novel", "Novel")
+                        .WithMany()
+                        .HasForeignKey("NovelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Novel");
                 });
 
             modelBuilder.Entity("Domain.Entities.NovelGenre", b =>
@@ -1634,13 +1835,22 @@ namespace Infrastructure.Migrations
                 {
                     b.Navigation("Chapters");
 
-                    b.Navigation("Characters");
-
                     b.Navigation("NovelGenres");
 
                     b.Navigation("ReadingListNovels");
 
                     b.Navigation("Reviews");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NovelEntity", b =>
+                {
+                    b.Navigation("Articles");
+
+                    b.Navigation("GalleryImages");
+
+                    b.Navigation("SourceRelationships");
+
+                    b.Navigation("TargetRelationships");
                 });
 
             modelBuilder.Entity("Domain.Entities.Post", b =>

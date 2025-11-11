@@ -7,6 +7,7 @@ namespace Application.Novels.DTOS
         public Guid Id { get; set; }
         public string Title { get; set; } = default!;
         public string Slug { get; set; } = default!;
+        public string Summary { get; set; } = default!;
         public string CoverImageUrl { get; set; } = default!;
         public string Status { get; set; } = default!;
         public DateTime LastUpdatedAt { get; set; }
@@ -19,7 +20,6 @@ namespace Application.Novels.DTOS
 
     public class WorkDTO : MyWorksDTO
     {
-        public string Summary { get; set; } = default!;
         public DateTime CreatedAt { get; set; }
     }
 }

@@ -71,6 +71,26 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         return (userWorkList, totalCount);
     }
 
+    public async Task<(IEnumerable<Novel>, int)> GetUserPublishedWorks(string userId, int pageNumber, int pageSize)
+    {
+        var query = dbContext.Novels
+            .AsNoTracking()
+            .Where(n => n.AuthorId == userId && !n.IsDraft && !n.IsDeleted)
+            .Include(n => n.NovelGenres)
+                .ThenInclude(ng => ng.Genre)
+            .Include(n => n.Owner);
+
+        var totalCount = await query.CountAsync();
+
+        var novels = await query
+            .OrderByDescending(n => n.CreatedAt)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (novels, totalCount);
+    }
+
     public async Task<bool> UpdateOne(Novel novel)
     {
         dbContext.Novels.Update(novel);

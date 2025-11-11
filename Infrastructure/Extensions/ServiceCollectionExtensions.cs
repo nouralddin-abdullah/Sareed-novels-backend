@@ -53,7 +53,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRankingService, RankingService>();
         services.AddScoped<IRankingRepository, RankingRepository>();
         services.AddScoped<IChaptersRepository, ChaptersRepository>();
-        services.AddScoped<ICharacterRepository, CharacterRepository>();
         services.AddScoped<ICommentsRepository, CommentsRepository>();
         services.AddScoped<ICommentLikesRepository, CommentLikesRepository>();
         services.AddScoped<IChapterParagraphsRepository, ChapterParagraphsRepository>();
@@ -65,6 +64,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISearchIndexOutboxRepository, SearchIndexOutboxRepository>();
         services.AddScoped<IPostsRepository, PostsRepository>();
         services.AddScoped<IPostLikesRepository, PostLikesRepository>();
+        services.AddScoped<INovelEntityRepository, NovelEntityRepository>();
 
         //adding cloudflare settings
         services.Configure<CloudflareR2Settings>(
@@ -102,6 +102,7 @@ public static class ServiceCollectionExtensions
         // Register search services
         services.AddScoped<INovelSearchService, NovelSearchService>();
         services.AddScoped<IUserSearchService, UserSearchService>();
+        services.AddScoped<IEntitySearchService, EntitySearchService>();
         services.AddScoped<ISearchIndexQueueService, SearchIndexQueueService>();
 
         // Register background service for outbox processing

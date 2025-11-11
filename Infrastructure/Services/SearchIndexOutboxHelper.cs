@@ -40,6 +40,22 @@ public class SearchIndexQueueService(
         await QueueActionAsync("User", userId, "Delete");
     }
 
+    // Entity methods
+    public async Task QueueEntityIndexAsync(Guid entityId)
+    {
+        await QueueActionAsync("NovelEntity", entityId.ToString(), "Index");
+    }
+
+    public async Task QueueEntityUpdateAsync(Guid entityId)
+    {
+        await QueueActionAsync("NovelEntity", entityId.ToString(), "Update");
+    }
+
+    public async Task QueueEntityDeleteAsync(Guid entityId)
+    {
+        await QueueActionAsync("NovelEntity", entityId.ToString(), "Delete");
+    }
+
     private async Task QueueActionAsync(string entityType, string entityId, string action)
     {
         try

@@ -8,6 +8,7 @@ using Application.Novels.Commands.DraftWork;
 using Application.Novels.Commands.PublishWork;
 using Application.Novels.Commands.UpdateNovel;
 using Application.Novels.Queries.GetMyWorks;
+using Application.Novels.Queries.GetUserWorks;
 using Application.Novels.Queries.GetWork;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -126,6 +127,15 @@ namespace Sareed_novels_backend.Controllers
         public async Task<IActionResult> ReorderWorkChapters([FromRoute] Guid workId, [FromRoute] Guid chapterId)
         {
             var query = new GetChapterAuthorQuery(workId, chapterId);
+            var result = await mediator.Send(query);
+            return Ok(result);
+        }
+
+        [AllowAnonymous]
+        [HttpGet("user/{userId}")]
+        public async Task<IActionResult> GetUserWorks([FromRoute] string userId, [FromQuery] int? pageSize, [FromQuery] int? pageNumber)
+        {
+            var query = new GetUserWorksQuery(userId, pageNumber ?? 1, pageSize ?? 10);
             var result = await mediator.Send(query);
             return Ok(result);
         }
