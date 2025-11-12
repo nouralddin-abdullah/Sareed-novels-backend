@@ -11,6 +11,7 @@ public interface INovelsRepository
     Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber);
     Task<(IEnumerable<Novel?>, int)> GetWorks(string userId, int PageNumber, int PageSize);
     Task<(IEnumerable<Novel>, int)> GetUserPublishedWorks(string userId, int pageNumber, int pageSize);
+    Task<(IEnumerable<Novel>, int)> GetAllNovelsBasicAsync(int pageNumber, int pageSize);
     Task<int> GetPublishedChaptersCountAsync(Guid novelId);
     Task<int> RecalculatePublishedSequencesAsync(Guid novelId);
 }

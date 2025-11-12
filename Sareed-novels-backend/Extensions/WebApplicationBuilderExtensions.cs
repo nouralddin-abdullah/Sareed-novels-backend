@@ -13,18 +13,32 @@ public static class WebApplicationBuilderExtensions
     {
         builder.Services.AddCors(options =>
         {
+            // Main policy for authenticated requests (frontend with credentials)
             options.AddPolicy("AllowFrontend", policy =>
             {
                 policy.WithOrigins(
+                        // Development
                         "http://localhost:5173",
                         "https://localhost:5173",
-                        "https://hassany.com",
+                        "http://localhost:4173",
                         "https://localhost:4173",
-                        "http://localhost:4173"
+                        // Production
+                        "https://www.sardnovels.com",
+                        "https://sardnovels.com",
+                        // Cloudflare Pages preview/staging
+                        "https://sard-frontend.pages.dev"
                     )
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials();
+            });
+
+            // Separate policy for SEO bots and pre-rendering (read-only, no credentials)
+            options.AddPolicy("AllowSEO", policy =>
+            {
+                policy.AllowAnyOrigin()  // Allow all origins for GET requests
+                    .WithMethods("GET", "HEAD", "OPTIONS")  // Read-only methods
+                    .AllowAnyHeader();
             });
         });
 

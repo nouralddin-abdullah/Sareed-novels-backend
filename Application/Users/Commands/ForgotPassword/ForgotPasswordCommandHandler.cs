@@ -15,7 +15,7 @@ public class ForgotPasswordCommandHandler(ILogger<ForgotPasswordCommandHandler> 
         logger.LogInformation("Generating reset token for email {email}", request.Email);
         var user = await userManager.FindByEmailAsync(request.Email) ?? throw new NotFoundException("No user with this email was found");
         var token = await userManager.GeneratePasswordResetTokenAsync(user);
-        var resetPasswordLink = $"https://sardnovels.com/change-password?UserId={user.Id}&token={Uri.EscapeDataString(token)}";
+        var resetPasswordLink = $"https://www.sardnovels.com/change-password?UserId={user.Id}&token={Uri.EscapeDataString(token)}";
 
         //sending email logic
         var templateId = "reset-password";

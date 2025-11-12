@@ -63,7 +63,7 @@ namespace Sareed_novels_backend.Controllers
         [HttpGet("google-callback")]
         public async Task<IActionResult> GoogleCallback(string code, string? state, string? error)
         {
-            var frontendUrl = configuration["Frontend:Url"] ?? "http://localhost:5173";
+            var frontendUrl = configuration["Frontend:Url"] ?? "https://www.sardnovels.com";
 
             if (!string.IsNullOrEmpty(error))
             {

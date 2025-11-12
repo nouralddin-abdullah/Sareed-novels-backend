@@ -91,6 +91,23 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         return (novels, totalCount);
     }
 
+    public async Task<(IEnumerable<Novel>, int)> GetAllNovelsBasicAsync(int pageNumber, int pageSize)
+    {
+        var query = dbContext.Novels
+            .AsNoTracking()
+            .Where(n => !n.IsDraft && !n.IsDeleted)
+            .OrderByDescending(n => n.CreatedAt);
+
+        var totalCount = await query.CountAsync();
+
+        var novels = await query
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (novels, totalCount);
+    }
+
     public async Task<bool> UpdateOne(Novel novel)
     {
         dbContext.Novels.Update(novel);
