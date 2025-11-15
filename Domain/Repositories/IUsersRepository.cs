@@ -12,6 +12,7 @@ public interface IUsersRepository
     Task<int> GetFollowersCount(User user);
     Task<int> GetFollowingCount(User user);
     Task<bool> IsFollowingAsync(string userId, string otherUserId);
+    Task<Dictionary<string, bool>> IsFollowingBulkAsync(string currentUserId, IEnumerable<string> userIds);
     Task<bool> FollowUser(string userId, string userToFollow);
     Task<bool> UnFollowUser(string userId, string userToUnFollow);
     Task<(IEnumerable<Follow>, int)> GetFollowersList(string userId, int PageSize, int PageNumber);

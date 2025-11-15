@@ -20,11 +20,8 @@ public class UserProfile
     public string? TwitterUrl { get; set; }
     public string? DiscordUrl { get; set; }
     
-    public List<FollowerDto> RecentFollowing { get; set; } = new List<FollowerDto>();
+    // Following/Followers totals only
     public int TotalFollowing { get; set; }
-    public List<FollowerDto> RecentFollowers { get; set; } = new List<FollowerDto>();
     public int TotalFollowers { get; set; }
-    public int RemainingFollowers => Math.Max(0, TotalFollowers - RecentFollowers.Count);
-    public int RemainingFollowing => Math.Max(0, TotalFollowing - RecentFollowing.Count);
     public bool IsFollowing { get; set; }
 }

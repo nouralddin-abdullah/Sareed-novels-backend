@@ -65,6 +65,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPostsRepository, PostsRepository>();
         services.AddScoped<IPostLikesRepository, PostLikesRepository>();
         services.AddScoped<INovelEntityRepository, NovelEntityRepository>();
+        services.AddScoped<INotificationsRepository, NotificationsRepository>();
+        services.AddScoped<INotificationService, NotificationService>();
 
         //adding cloudflare settings
         services.Configure<CloudflareR2Settings>(

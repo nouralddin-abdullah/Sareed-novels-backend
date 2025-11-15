@@ -61,6 +61,28 @@ namespace Infrastructure.Repositories
             return await dbContext.Follows.AnyAsync(f => f.FollowerId == userId && f.FollowedId == otherUserId);
         }
 
+        public async Task<Dictionary<string, bool>> IsFollowingBulkAsync(string currentUserId, IEnumerable<string> userIds)
+        {
+            var userIdsList = userIds.ToList();
+            
+            // Single query to get all follows
+            var followedUserIds = await dbContext.Follows
+                .Where(f => f.FollowerId == currentUserId && userIdsList.Contains(f.FollowedId))
+                .Select(f => f.FollowedId)
+                .ToListAsync();
+            
+            // Create dictionary with all users, default false
+            var result = userIdsList.ToDictionary(id => id, id => false);
+            
+            // Mark followed users as true
+            foreach (var followedId in followedUserIds)
+            {
+                result[followedId] = true;
+            }
+            
+            return result;
+        }
+
         public async Task<bool> FollowUser(string userId, string userToFollow)
         {
             var follow = new Follow

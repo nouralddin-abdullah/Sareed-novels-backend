@@ -7,6 +7,7 @@ using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
@@ -20,7 +21,8 @@ public class CreateChapterCommandHandler(
     INovelsRepository novelsRepository, 
     IMapper mapper,
     IChapterSequenceService sequenceService,
-    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<CreateChapterCommand, ChapterSingleAuthorDTO>
+    ISearchIndexQueueService searchIndexQueue,
+    IServiceProvider serviceProvider) : IRequestHandler<CreateChapterCommand, ChapterSingleAuthorDTO>
 {
     public async Task<ChapterSingleAuthorDTO> Handle(CreateChapterCommand request, CancellationToken cancellationToken)
     {
@@ -44,7 +46,7 @@ public class CreateChapterCommandHandler(
             Id = Guid.NewGuid(),
             ChapterId = chapter.Id,
             Content = text,
-            ContentHash = ComputeContentHash(text), // NEW: Compute hash
+            ContentHash = ComputeContentHash(text),
             OrderIndex = index,
             ContentType = "text",
             CreatedAt = DateTime.UtcNow,
@@ -53,7 +55,7 @@ public class CreateChapterCommandHandler(
         
         chapter.Paragraphs = paragraphs;
         chapter.ParagraphsCount = paragraphs.Count;
-        chapter.Content = null; // Content is now in paragraphs
+        chapter.Content = null;
         
         var result = await chaptersRepository.CreateChapter(chapter);
         if (!result)
@@ -73,6 +75,9 @@ public class CreateChapterCommandHandler(
                 chapter.Id, novel.Id);
             
             await sequenceService.RecalculateSequencesForNovelAsync(novel.Id);
+            
+            // Fire-and-forget: Send notifications to users who have this novel in their library
+            _ = SendNewChapterNotificationsInBackground(novel.Id, chapter.Id, chapter.Slug, chapter.Title);
         }
         
         // Queue for Elasticsearch update (ChapterCount changed)
@@ -102,7 +107,6 @@ public class CreateChapterCommandHandler(
     
     private static string ComputeContentHash(string content)
     {
-        // Normalize content before hashing
         var normalized = content.Trim()
             .Replace("\r\n", "\n")
             .Replace("\r", "\n")
@@ -112,5 +116,43 @@ public class CreateChapterCommandHandler(
         var bytes = Encoding.UTF8.GetBytes(normalized);
         var hashBytes = sha256.ComputeHash(bytes);
         return Convert.ToBase64String(hashBytes);
+    }
+    
+    private async Task SendNewChapterNotificationsInBackground(Guid novelId, Guid chapterId, string chapterSlug, string chapterTitle)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var backgroundLibraryRepository = scope.ServiceProvider.GetRequiredService<ILibraryRepository>();
+            var backgroundNotificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            var backgroundNovelsRepository = scope.ServiceProvider.GetRequiredService<INovelsRepository>();
+            
+            var novel = await backgroundNovelsRepository.GetOne(novelId);
+            if (novel == null) return;
+            
+            var chapter = new Chapter 
+            { 
+                Id = chapterId, 
+                Slug = chapterSlug, 
+                Title = chapterTitle,
+                NovelId = novelId 
+            };
+            
+            var userIds = await backgroundLibraryRepository.GetUsersWithNovelInLibrary(novelId);
+            
+            if (userIds.Any())
+            {
+                await backgroundNotificationService.SendNewChapterInLibraryNotification(userIds, novel, chapter);
+                logger.LogDebug("Sent NewChapterInLibrary notifications to {Count} users", userIds.Count);
+            }
+            else
+            {
+                logger.LogDebug("No users have novel {NovelId} in their library", novelId);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send NewChapterInLibrary notifications for chapter {ChapterId}", chapterId);
+        }
     }
 }

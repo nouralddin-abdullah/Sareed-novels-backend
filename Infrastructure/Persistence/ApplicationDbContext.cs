@@ -30,6 +30,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<EntityArticle> EntityArticles { get; set; }
     internal DbSet<EntityRelationship> EntityRelationships { get; set; }
     internal DbSet<EntityGalleryImage> EntityGalleryImages { get; set; }
+    internal DbSet<Notification> Notifications { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -830,6 +831,57 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasDatabaseName("IX_EntityRelationships_Source_Target");
 
             entity.HasQueryFilter(er => !er.IsDeleted);
+        });
+
+        // Notification configuration
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(n => n.Id);
+
+            entity.Property(n => n.Type)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(n => n.ActorDisplayName)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(n => n.ActorProfilePhoto)
+                .HasMaxLength(500);
+
+            entity.Property(n => n.Message)
+                .IsRequired()
+                .HasMaxLength(500);
+
+            entity.Property(n => n.ActionUrl)
+                .IsRequired()
+                .HasMaxLength(500);
+
+            entity.Property(n => n.IsRead)
+                .HasDefaultValue(false);
+
+            entity.Property(n => n.RelatedEntityType)
+                .HasMaxLength(50);
+
+            entity.HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(n => n.UserId)
+                .HasDatabaseName("IX_Notifications_UserId");
+
+            entity.HasIndex(n => new { n.UserId, n.IsRead })
+                .HasDatabaseName("IX_Notifications_UserId_IsRead");
+
+            entity.HasIndex(n => new { n.UserId, n.CreatedAt })
+                .HasDatabaseName("IX_Notifications_UserId_CreatedAt");
+
+            entity.HasIndex(n => n.Type)
+                .HasDatabaseName("IX_Notifications_Type");
+
+            entity.HasIndex(n => n.ActorId)
+                .HasDatabaseName("IX_Notifications_ActorId");
         });
     }
 }

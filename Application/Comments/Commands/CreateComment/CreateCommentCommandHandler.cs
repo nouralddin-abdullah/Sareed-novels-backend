@@ -84,6 +84,9 @@ public class CreateCommentCommandHandler(
         
         var createdComment = await commentsRepository.CreateComment(comment);
         
+        // Fire-and-forget: Send notifications
+        _ = SendCommentNotificationsInBackground(createdComment.Id, currentUser.Id, chapterId, postId, request.ParentCommentId);
+        
         _ = IncrementUserCommentsCountInBackground(currentUser.Id);
 
         if (!request.ParentCommentId.HasValue)
@@ -111,6 +114,79 @@ public class CreateCommentCommandHandler(
         };
     }
     
+    private async Task SendCommentNotificationsInBackground(Guid commentId, string commenterUserId, Guid? chapterId, Guid? postId, Guid? parentCommentId)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var backgroundUserManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+            var backgroundNotificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            var backgroundChaptersRepository = scope.ServiceProvider.GetRequiredService<IChaptersRepository>();
+            var backgroundNovelsRepository = scope.ServiceProvider.GetRequiredService<INovelsRepository>();
+            var backgroundPostsRepository = scope.ServiceProvider.GetRequiredService<IPostsRepository>();
+            var backgroundCommentsRepository = scope.ServiceProvider.GetRequiredService<ICommentsRepository>();
+
+            var commenter = await backgroundUserManager.FindByIdAsync(commenterUserId);
+            if (commenter == null) return;
+
+            if (parentCommentId.HasValue)
+            {
+                // Reply to comment notification
+                var parentComment = await backgroundCommentsRepository.GetCommentById(parentCommentId.Value);
+                if (parentComment != null)
+                {
+                    await backgroundNotificationService.SendReplyToCommentNotification(
+                        parentComment.UserId,
+                        commenter,
+                        commentId,
+                        parentComment);
+                }
+            }
+            else if (chapterId.HasValue)
+            {
+                // Comment on chapter notification
+                var chapter = await backgroundChaptersRepository.GetChapterById(chapterId.Value);
+                if (chapter != null)
+                {
+                    var novel = await backgroundNovelsRepository.GetOne(chapter.NovelId);
+                    if (novel != null)
+                    {
+                        await backgroundNotificationService.SendCommentOnChapterNotification(
+                            novel.AuthorId,
+                            commenter,
+                            commentId,
+                            novel,
+                            chapter);
+                    }
+                }
+            }
+            else if (postId.HasValue)
+            {
+                // Comment on post notification - need to include User for username
+                var post = await backgroundPostsRepository.GetPostById(postId.Value);
+                if (post != null)
+                {
+                    // Fetch the post author's username
+                    var postAuthor = await backgroundUserManager.FindByIdAsync(post.UserId);
+                    if (postAuthor != null)
+                    {
+                        await backgroundNotificationService.SendCommentOnPostNotification(
+                            post.UserId,
+                            commenter,
+                            commentId,
+                            postAuthor.UserName!);
+                    }
+                }
+            }
+
+            logger.LogDebug("Successfully sent comment notifications");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send comment notifications");
+        }
+    }
+
     private async Task IncrementUserCommentsCountInBackground(string userId)
     {
         try

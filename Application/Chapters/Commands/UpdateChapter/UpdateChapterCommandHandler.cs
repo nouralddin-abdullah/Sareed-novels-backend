@@ -6,6 +6,7 @@ using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
@@ -20,7 +21,8 @@ public class UpdateChapterCommandHandler(
     INovelsRepository novelsRepository, 
     IUserContext userContext, 
     IMapper mapper,
-    IChapterSequenceService sequenceService) : IRequestHandler<UpdateChapterCommand, OperationResult>
+    IChapterSequenceService sequenceService,
+    IServiceProvider serviceProvider) : IRequestHandler<UpdateChapterCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UpdateChapterCommand request, CancellationToken cancellationToken)
     {
@@ -113,6 +115,12 @@ public class UpdateChapterCommandHandler(
             
             await sequenceService.RecalculateSequencesForNovelAsync(request.NovelId);
             await sequenceService.UpdateReadingProgressForNovelAsync(request.NovelId);
+            
+            // Fire-and-forget: If status changed to Published, send notifications
+            if (request.Status == "Published" && oldStatus != "Published")
+            {
+                _ = SendNewChapterNotificationsInBackground(novel.Id, chapter.Id, chapter.Slug, chapter.Title);
+            }
         }
         
         if (result)
@@ -129,6 +137,44 @@ public class UpdateChapterCommandHandler(
             Success = false,
             Message = "Update chapter is not successful"
         };
+    }
+    
+    private async Task SendNewChapterNotificationsInBackground(Guid novelId, Guid chapterId, string chapterSlug, string chapterTitle)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var backgroundLibraryRepository = scope.ServiceProvider.GetRequiredService<ILibraryRepository>();
+            var backgroundNotificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            var backgroundNovelsRepository = scope.ServiceProvider.GetRequiredService<INovelsRepository>();
+            
+            var novel = await backgroundNovelsRepository.GetOne(novelId);
+            if (novel == null) return;
+            
+            var chapter = new Chapter 
+            { 
+                Id = chapterId, 
+                Slug = chapterSlug, 
+                Title = chapterTitle,
+                NovelId = novelId 
+            };
+            
+            var userIds = await backgroundLibraryRepository.GetUsersWithNovelInLibrary(novelId);
+            
+            if (userIds.Any())
+            {
+                await backgroundNotificationService.SendNewChapterInLibraryNotification(userIds, novel, chapter);
+                logger.LogDebug("Sent NewChapterInLibrary notifications to {Count} users", userIds.Count);
+            }
+            else
+            {
+                logger.LogDebug("No users have novel {NovelId} in their library", novelId);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send NewChapterInLibrary notifications for chapter {ChapterId}", chapterId);
+        }
     }
     
     private static List<string> SplitIntoParagraphs(string content)

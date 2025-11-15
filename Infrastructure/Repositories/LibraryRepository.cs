@@ -1,4 +1,4 @@
-using Domain.Entities;
+﻿using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -45,5 +45,14 @@ public class LibraryRepository(ApplicationDbContext dbContext) : ILibraryReposit
     {
         dbContext.UserNovelProgress.Update(progress);
         return await dbContext.SaveChangesAsync() > 0;
+    }
+
+    public async Task<List<string>> GetUsersWithNovelInLibrary(Guid novelId)
+    {
+        return await dbContext.UserNovelProgress
+            .Where(unp => unp.NovelId == novelId)
+            .Select(unp => unp.UserId)
+            .Distinct()
+            .ToListAsync();
     }
 }

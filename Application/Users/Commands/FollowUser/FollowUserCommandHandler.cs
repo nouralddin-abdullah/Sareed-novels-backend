@@ -4,6 +4,7 @@ using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Users.Commands.FollowUser;
@@ -13,7 +14,8 @@ public class FollowUserCommandHandler(
     IUserContext userContext, 
     UserManager<User> userManager, 
     IUsersRepository usersRepository,
-    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<FollowUserCommand, OperationResult>
+    ISearchIndexQueueService searchIndexQueue,
+    IServiceProvider serviceProvider) : IRequestHandler<FollowUserCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(FollowUserCommand request, CancellationToken cancellationToken)
     {
@@ -44,6 +46,9 @@ public class FollowUserCommandHandler(
         
         if (result)
         {
+            // Fire-and-forget: Send notification
+            _ = SendNewFollowerNotificationInBackground(userToFollow.Id, currentUser.Id);
+            
             // Update both users in search index (follower count changed)
             await searchIndexQueue.QueueUserUpdateAsync(currentUser.Id);
             await searchIndexQueue.QueueUserUpdateAsync(userToFollow.Id);
@@ -56,5 +61,26 @@ public class FollowUserCommandHandler(
             Success = result,
             Message = message
         };
+    }
+    
+    private async Task SendNewFollowerNotificationInBackground(string targetUserId, string actorUserId)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var backgroundUserManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+            var backgroundNotificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            
+            var followerUser = await backgroundUserManager.FindByIdAsync(actorUserId);
+            if (followerUser != null)
+            {
+                await backgroundNotificationService.SendNewFollowerNotification(targetUserId, followerUser);
+                logger.LogDebug("Sent NewFollower notification to user {UserId}", targetUserId);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send NewFollower notification in background for user {UserId}", targetUserId);
+        }
     }
 }

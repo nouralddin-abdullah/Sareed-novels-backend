@@ -59,6 +59,9 @@ public class CreateReviewCommandHandler(
         novel.AddReviewToAverages(review);
         await novelsRepository.UpdateOne(novel);
         
+        // Fire-and-forget: Send notification to novel author
+        _ = SendReviewNotificationInBackground(novel.AuthorId, currentUser.Id, review.Id, novel.Id);
+        
         // Fire-and-forget: Increment user's reviews count
         _ = IncrementUserReviewsCountInBackground(currentUser.Id);
 
@@ -72,6 +75,30 @@ public class CreateReviewCommandHandler(
             Message = "Review was created"
         };
 
+    }
+    
+    private async Task SendReviewNotificationInBackground(string novelAuthorId, string reviewerUserId, Guid reviewId, Guid novelId)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var backgroundUserManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+            var backgroundNotificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            var backgroundNovelsRepository = scope.ServiceProvider.GetRequiredService<INovelsRepository>();
+            
+            var reviewerUser = await backgroundUserManager.FindByIdAsync(reviewerUserId);
+            var novel = await backgroundNovelsRepository.GetOne(novelId);
+            
+            if (reviewerUser != null && novel != null)
+            {
+                await backgroundNotificationService.SendReviewOnNovelNotification(novelAuthorId, reviewerUser, reviewId, novel);
+                logger.LogDebug("Sent ReviewOnNovel notification to user {UserId}", novelAuthorId);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send ReviewOnNovel notification in background");
+        }
     }
     
     private async Task IncrementUserReviewsCountInBackground(string userId)

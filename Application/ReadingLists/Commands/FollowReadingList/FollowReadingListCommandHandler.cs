@@ -66,6 +66,9 @@ public class FollowReadingListCommandHandler(
         {
             // Fire-and-forget count update
             _ = UpdateFollowersCountInBackground(request.ReadingListId);
+            
+            // Fire-and-forget: Send notification
+            _ = SendReadingListFollowedNotificationInBackground(readingList.UserId, currentUser.Id, request.ReadingListId, readingList.Name);
 
             logger.LogInformation("User {UserId} successfully followed reading list {ListId}", currentUser.Id, request.ReadingListId);
 
@@ -81,6 +84,27 @@ public class FollowReadingListCommandHandler(
             Success = false,
             Message = "Failed to follow reading list"
         };
+    }
+    
+    private async Task SendReadingListFollowedNotificationInBackground(string listOwnerId, string followerUserId, Guid readingListId, string readingListName)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var backgroundUserManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<User>>();
+            var backgroundNotificationService = scope.ServiceProvider.GetRequiredService<Application.Services.INotificationService>();
+            
+            var follower = await backgroundUserManager.FindByIdAsync(followerUserId);
+            if (follower != null)
+            {
+                await backgroundNotificationService.SendReadingListFollowedNotification(listOwnerId, follower, readingListId, readingListName);
+                logger.LogDebug("Sent ReadingListFollowed notification to user {UserId}", listOwnerId);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send ReadingListFollowed notification");
+        }
     }
 
     private async Task UpdateFollowersCountInBackground(Guid readingListId)

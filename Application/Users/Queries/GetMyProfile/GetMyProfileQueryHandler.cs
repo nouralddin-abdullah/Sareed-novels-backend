@@ -18,36 +18,16 @@ public class GetMyProfileQueryHandler(ILogger<GetMyProfileQueryHandler> logger, 
         logger.LogInformation("Getting self profile for {@user}", currentUser);
         var user = await userManager.FindByIdAsync(currentUser.Id) ?? throw new NotFoundException("User is not found");
 
-        //Start Following System
-        var recentFollowers = await usersRepository.GetRecentFollowers(user, 7);
-        var recentFollowing = await usersRepository.GetRecentFollowing(user, 7);
+
+        // Only get total counts (no recent followers/following)
         var totalFollowers = await usersRepository.GetFollowersCount(user);
         var totalFollowing = await usersRepository.GetFollowingCount(user);
 
-        //Map to DTOs
+        // Map to DTO
         var profile = mapper.Map<UserIsProfile>(user);
-        profile.RecentFollowers = recentFollowers.Select(f => new FollowerDto
-        {
-            UserId = f.Follower.Id,
-            DisplayName = f.Follower.DisplayName,
-            UserName = f.Follower.UserName!,
-            ProfilePhoto = f.Follower.ProfilePhoto
-        }).ToList();
-
-
-        profile.RecentFollowing = recentFollowing.Select(f => new FollowerDto
-        {
-            UserId = f.Followed.Id,
-            DisplayName = f.Followed.DisplayName,
-            UserName = f.Followed.UserName!,
-            ProfilePhoto = f.Followed.ProfilePhoto
-        }).ToList();
-        //End following System
         profile.TotalFollowers = totalFollowers;
         profile.TotalFollowing = totalFollowing;
 
-
         return profile;
-
     }
 }

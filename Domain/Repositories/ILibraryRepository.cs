@@ -1,4 +1,4 @@
-using Domain.Entities;
+﻿using Domain.Entities;
 
 namespace Domain.Repositories;
 
@@ -8,4 +8,5 @@ public interface ILibraryRepository
     Task<UserNovelProgress?> GetProgressAsync(string userId, Guid novelId);
     Task<bool> TrackProgressAsync(UserNovelProgress progress);
     Task<bool> UpdateProgressAsync(UserNovelProgress progress);
+    Task<List<string>> GetUsersWithNovelInLibrary(Guid novelId);
 }

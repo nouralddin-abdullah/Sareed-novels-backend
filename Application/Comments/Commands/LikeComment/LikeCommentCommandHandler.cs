@@ -78,6 +78,9 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
         }
 
         _ = UpdateCommentLikesCountInBackground(request.CommentId, increment: true);
+        
+        // Fire-and-forget: Send notification
+        _ = SendLikeOnCommentNotificationInBackground(comment.UserId, currentUser.Id, request.CommentId);
 
         _logger.LogInformation("Comment {CommentId} liked successfully by user {UserId}",
             request.CommentId, currentUser.Id);
@@ -87,6 +90,30 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
             Success = true,
             Message = "Comment liked successfully"
         };
+    }
+    
+    private async Task SendLikeOnCommentNotificationInBackground(string commentAuthorId, string likerUserId, Guid commentId)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var backgroundUserManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<User>>();
+            var backgroundNotificationService = scope.ServiceProvider.GetRequiredService<Application.Services.INotificationService>();
+            var backgroundCommentsRepository = scope.ServiceProvider.GetRequiredService<ICommentsRepository>();
+            
+            var liker = await backgroundUserManager.FindByIdAsync(likerUserId);
+            var comment = await backgroundCommentsRepository.GetCommentById(commentId);
+            
+            if (liker != null && comment != null)
+            {
+                await backgroundNotificationService.SendLikeOnCommentNotification(commentAuthorId, liker, commentId, comment);
+                _logger.LogDebug("Sent LikeOnComment notification to user {UserId}", commentAuthorId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send LikeOnComment notification");
+        }
     }
 
     private async Task UpdateCommentLikesCountInBackground(Guid commentId, bool increment)
