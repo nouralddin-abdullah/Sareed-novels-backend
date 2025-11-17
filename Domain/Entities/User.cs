@@ -15,6 +15,10 @@ public class User : IdentityUser
     public int CommentsCount { get; set; } = 0;
     public int LibraryNovelsCount { get; set; } = 0;
     
+    // Wallet (cached for fast profile display)
+    public decimal PointBalance { get; set; } = 0;
+    public DateTime PointBalanceLastUpdated { get; set; } = DateTime.UtcNow;
+    
     // Social media links
     public string? FacebookUrl { get; set; }
     public string? TwitterUrl { get; set; }

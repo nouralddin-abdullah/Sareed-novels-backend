@@ -67,6 +67,14 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INovelEntityRepository, NovelEntityRepository>();
         services.AddScoped<INotificationsRepository, NotificationsRepository>();
         services.AddScoped<INotificationService, NotificationService>();
+        
+        // Wallet System
+        services.AddScoped<IUserWalletRepository, UserWalletRepository>();
+        services.AddScoped<IRechargeRequestRepository, RechargeRequestRepository>();
+        services.AddScoped<IWithdrawalRequestRepository, WithdrawalRequestRepository>();
+        services.AddScoped<IPointTransactionRepository, PointTransactionRepository>();
+        services.AddScoped<IPointCalculationService, PointCalculationService>();
+        services.AddScoped<IWalletService, WalletService>();
 
         //adding cloudflare settings
         services.Configure<CloudflareR2Settings>(

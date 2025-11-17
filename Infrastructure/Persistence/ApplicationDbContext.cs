@@ -31,6 +31,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<EntityRelationship> EntityRelationships { get; set; }
     internal DbSet<EntityGalleryImage> EntityGalleryImages { get; set; }
     internal DbSet<Notification> Notifications { get; set; }
+    
+    // Wallet System
+    internal DbSet<UserWallet> UserWallets { get; set; }
+    internal DbSet<RechargeRequest> RechargeRequests { get; set; }
+    internal DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
+    internal DbSet<PointTransaction> PointTransactions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -882,6 +888,168 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(n => n.ActorId)
                 .HasDatabaseName("IX_Notifications_ActorId");
+        });
+
+        // UserWallet configuration
+        modelBuilder.Entity<UserWallet>(entity =>
+        {
+            entity.HasKey(uw => uw.Id);
+
+            entity.HasOne(uw => uw.User)
+                .WithMany()
+                .HasForeignKey(uw => uw.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(uw => uw.UserId)
+                .IsUnique()
+                .HasDatabaseName("IX_UserWallets_UserId_Unique");
+
+            entity.Property(uw => uw.CurrentBalance)
+                .HasPrecision(18, 2)
+                .HasDefaultValue(0);
+
+            entity.Property(uw => uw.TotalRecharged)
+                .HasPrecision(18, 2)
+                .HasDefaultValue(0);
+
+            entity.Property(uw => uw.TotalWithdrawn)
+                .HasPrecision(18, 2)
+                .HasDefaultValue(0);
+
+            entity.Property(uw => uw.TotalSpent)
+                .HasPrecision(18, 2)
+                .HasDefaultValue(0);
+
+            entity.Property(uw => uw.TotalEarned)
+                .HasPrecision(18, 2)
+                .HasDefaultValue(0);
+        });
+
+        // RechargeRequest configuration
+        modelBuilder.Entity<RechargeRequest>(entity =>
+        {
+            entity.HasKey(rr => rr.Id);
+
+            entity.HasOne(rr => rr.User)
+                .WithMany()
+                .HasForeignKey(rr => rr.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(rr => rr.ProcessedByUser)
+                .WithMany()
+                .HasForeignKey(rr => rr.ProcessedBy)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.Property(rr => rr.PaymentMethod)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(rr => rr.PaymentProofUrl)
+                .HasMaxLength(500);
+
+            entity.Property(rr => rr.Status)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue("Pending");
+
+            entity.Property(rr => rr.RejectionReason)
+                .HasMaxLength(500);
+
+            entity.Property(rr => rr.BaseAmountEGP)
+                .HasPrecision(18, 2);
+
+            entity.Property(rr => rr.TransactionFee)
+                .HasPrecision(18, 2);
+
+            entity.Property(rr => rr.TotalAmountEGP)
+                .HasPrecision(18, 2);
+
+            entity.HasIndex(rr => new { rr.UserId, rr.Status })
+                .HasDatabaseName("IX_RechargeRequests_User_Status");
+
+            entity.HasIndex(rr => new { rr.Status, rr.RequestedAt })
+                .HasDatabaseName("IX_RechargeRequests_Status_Requested");
+        });
+
+        // WithdrawalRequest configuration
+        modelBuilder.Entity<WithdrawalRequest>(entity =>
+        {
+            entity.HasKey(wr => wr.Id);
+
+            entity.HasOne(wr => wr.User)
+                .WithMany()
+                .HasForeignKey(wr => wr.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(wr => wr.ProcessedByUser)
+                .WithMany()
+                .HasForeignKey(wr => wr.ProcessedBy)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.Property(wr => wr.WithdrawalMethod)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(wr => wr.PaymentDetails)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(wr => wr.Status)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue("Pending");
+
+            entity.Property(wr => wr.RejectionReason)
+                .HasMaxLength(500);
+
+            entity.Property(wr => wr.BaseAmountEGP)
+                .HasPrecision(18, 2);
+
+            entity.Property(wr => wr.TaxDeducted)
+                .HasPrecision(18, 2);
+
+            entity.Property(wr => wr.NetAmountEGP)
+                .HasPrecision(18, 2);
+
+            entity.HasIndex(wr => new { wr.UserId, wr.Status })
+                .HasDatabaseName("IX_WithdrawalRequests_User_Status");
+
+            entity.HasIndex(wr => new { wr.Status, wr.RequestedAt })
+                .HasDatabaseName("IX_WithdrawalRequests_Status_Requested");
+        });
+
+        // PointTransaction configuration
+        modelBuilder.Entity<PointTransaction>(entity =>
+        {
+            entity.HasKey(pt => pt.Id);
+
+            entity.HasOne(pt => pt.User)
+                .WithMany()
+                .HasForeignKey(pt => pt.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(pt => pt.Type)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(pt => pt.Description)
+                .IsRequired()
+                .HasMaxLength(500);
+
+            entity.Property(pt => pt.Amount)
+                .HasPrecision(18, 2);
+
+            entity.Property(pt => pt.BalanceBefore)
+                .HasPrecision(18, 2);
+
+            entity.Property(pt => pt.BalanceAfter)
+                .HasPrecision(18, 2);
+
+            entity.HasIndex(pt => new { pt.UserId, pt.CreatedAt })
+                .HasDatabaseName("IX_PointTransactions_User_Created");
+
+            entity.HasIndex(pt => new { pt.Type, pt.CreatedAt })
+                .HasDatabaseName("IX_PointTransactions_Type_Created");
         });
     }
 }

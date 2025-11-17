@@ -7,7 +7,11 @@ using Application.Users.Commands.GoogleCallback;
 using Application.Users.Commands.GoogleLogin;
 using Application.Users.Commands.SendConfirmEmail;
 using Application.Users.Commands.UserLogin;
+using Domain.Constants;
+using Domain.Entities;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 namespace Sareed_novels_backend.Controllers
 {
@@ -107,6 +111,40 @@ namespace Sareed_novels_backend.Controllers
                 return BadRequest(result);
             }
             return Ok(result);
+        }
+
+        // ⚠️ DEVELOPMENT ONLY - Remove before production!
+        [HttpPost("make-admin")]
+        [Authorize]
+        public async Task<IActionResult> MakeCurrentUserAdmin(
+            [FromServices] UserManager<User> userManager,
+            [FromServices] IHttpContextAccessor contextAccessor)
+        {
+            var userId = contextAccessor.HttpContext?.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized("User not authenticated");
+            }
+
+            var user = await userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return NotFound("User not found");
+            }
+
+            // Check if already admin
+            if (await userManager.IsInRoleAsync(user, UserRoles.Admin))
+            {
+                return Ok(new { message = $"User {user.DisplayName} is already an Admin", isAdmin = true });
+            }
+
+            var result = await userManager.AddToRoleAsync(user, UserRoles.Admin);
+            if (result.Succeeded)
+            {
+                return Ok(new { message = $"User {user.DisplayName} is now an Admin!", isAdmin = true });
+            }
+
+            return BadRequest(new { message = "Failed to assign admin role", errors = result.Errors });
         }
     }
 

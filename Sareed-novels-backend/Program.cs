@@ -1,6 +1,7 @@
-using Application.Extensions;
+﻿using Application.Extensions;
 using Domain.Entities;
 using Infrastructure.Extensions;
+using Infrastructure.Seed;
 using Sareed_novels_backend.Extensions;
 using Sareed_novels_backend.Middlewares;
 using Serilog;
@@ -12,7 +13,22 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.AddPresentation();
 builder.Services.AddApplication();
 var app = builder.Build();
-var scope = app.Services.CreateScope();
+
+// Seed roles on startup
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        await RoleSeeder.SeedRolesAsync(services);
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while seeding roles");
+    }
+}
+
 app.UseMiddleware<ErrorHandlingMiddleware>();
 app.UseMiddleware<ExecutedTimeMiddleware>();
 app.UseSerilogRequestLogging();
