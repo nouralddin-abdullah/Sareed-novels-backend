@@ -60,7 +60,9 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.UseCors("AllowFrontend");  // Apply strict policy for authenticated requests
+// Apply CORS policies for both web frontend and mobile
+app.UseCors("AllowFrontend");  // Web frontend
+app.UseCors("AllowMobile");     // Expo Go mobile testing (TODO: Remove after testing)
 
 app.UseAuthentication();
 

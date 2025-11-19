@@ -33,6 +33,32 @@ public static class WebApplicationBuilderExtensions
                     .AllowCredentials();
             });
 
+            // Policy for Expo Go and mobile testing (TODO: Remove after mobile testing)
+            options.AddPolicy("AllowMobile", policy =>
+            {
+                policy.SetIsOriginAllowed(origin =>
+                {
+                    // Allow localhost with any port (for Expo Metro bundler)
+                    if (origin.StartsWith("http://localhost:") || origin.StartsWith("https://localhost:"))
+                        return true;
+
+                    // Allow Expo Go (exp:// protocol)
+                    if (origin.StartsWith("exp://"))
+                        return true;
+
+                    // Allow local network IPs (for Expo Go on physical devices)
+                    if (origin.StartsWith("http://192.168.") || 
+                        origin.StartsWith("http://10.") || 
+                        origin.StartsWith("http://172."))
+                        return true;
+
+                    return false;
+                })
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+            });
+
             // Separate policy for SEO bots and pre-rendering (read-only, no credentials)
             options.AddPolicy("AllowSEO", policy =>
             {
