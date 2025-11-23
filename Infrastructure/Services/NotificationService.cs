@@ -345,4 +345,33 @@ public class NotificationService(
             logger.LogError(ex, "Failed to create ReadingListFollowed notification for user {UserId}", listOwnerId);
         }
     }
+
+    public async Task SendGiftReceivedNotification(string novelAuthorId, User sender, Novel novel, Gift gift, int count)
+    {
+        try
+        {
+            var notification = new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = novelAuthorId,
+                Type = NotificationType.GiftReceived,
+                ActorId = sender.Id,
+                ActorDisplayName = sender.DisplayName,
+                ActorProfilePhoto = sender.ProfilePhoto,
+                Message = $"{sender.DisplayName} أرسل لك {count}x {gift.Name} على رواية '{novel.Title}'",
+                ActionUrl = $"/novel/{novel.Slug}",
+                IsRead = false,
+                RelatedEntityId = novel.Id,
+                RelatedEntityType = "Gift",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await notificationsRepository.CreateNotification(notification);
+            logger.LogDebug("Created GiftReceived notification for user {UserId}", novelAuthorId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to create GiftReceived notification for user {UserId}", novelAuthorId);
+        }
+    }
 }

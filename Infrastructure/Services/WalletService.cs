@@ -57,8 +57,9 @@ public class WalletService(
             CreatedAt = DateTime.UtcNow
         });
         
-        // Sync cached balance in User entity (fire-and-forget)
-        _ = SyncUserBalanceAsync(userId);
+        // NOTE: Sync user balance is disabled to avoid DbContext concurrent access issues
+        // The User.PointBalance is a cached value and will be synced on next wallet query
+        // _ = SyncUserBalanceAsync(userId);
         
         logger.LogInformation("Added {Amount} points to user {UserId}, new balance: {Balance}", 
             amount, userId, wallet.CurrentBalance);
@@ -92,8 +93,9 @@ public class WalletService(
             CreatedAt = DateTime.UtcNow
         });
         
-        // Sync cached balance in User entity (fire-and-forget)
-        _ = SyncUserBalanceAsync(userId);
+        // NOTE: Sync user balance is disabled to avoid DbContext concurrent access issues
+        // The User.PointBalance is a cached value and will be synced on next wallet query
+        // _ = SyncUserBalanceAsync(userId);
         
         logger.LogInformation("Deducted {Amount} points from user {UserId}, new balance: {Balance}", 
             amount, userId, wallet.CurrentBalance);

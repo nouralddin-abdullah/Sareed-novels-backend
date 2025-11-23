@@ -37,6 +37,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<RechargeRequest> RechargeRequests { get; set; }
     internal DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
     internal DbSet<PointTransaction> PointTransactions { get; set; }
+    
+    // Gift System
+    internal DbSet<Gift> Gifts { get; set; }
+    internal DbSet<GiftTransaction> GiftTransactions { get; set; }
+    internal DbSet<GlobalSupporterLeaderboard> GlobalSupporterLeaderboards { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1050,6 +1055,101 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(pt => new { pt.Type, pt.CreatedAt })
                 .HasDatabaseName("IX_PointTransactions_Type_Created");
+        });
+
+        // Gift configuration
+        modelBuilder.Entity<Gift>(entity =>
+        {
+            entity.HasKey(g => g.Id);
+
+            entity.Property(g => g.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(g => g.ImageUrl)
+                .IsRequired()
+                .HasMaxLength(500);
+
+            entity.Property(g => g.Cost)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(g => g.IsActive)
+                .HasDefaultValue(true);
+
+            entity.HasIndex(g => g.IsActive)
+                .HasDatabaseName("IX_Gifts_IsActive");
+
+            entity.HasIndex(g => g.Cost)
+                .HasDatabaseName("IX_Gifts_Cost");
+        });
+
+        // GiftTransaction configuration
+        modelBuilder.Entity<GiftTransaction>(entity =>
+        {
+            entity.HasKey(gt => gt.Id);
+
+            entity.HasOne(gt => gt.Gift)
+                .WithMany(g => g.Transactions)
+                .HasForeignKey(gt => gt.GiftId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(gt => gt.Novel)
+                .WithMany()
+                .HasForeignKey(gt => gt.NovelId)
+                .OnDelete(DeleteBehavior.NoAction);  // Changed from Cascade to NoAction to avoid cascade path conflict
+
+            entity.HasOne(gt => gt.Sender)
+                .WithMany()
+                .HasForeignKey(gt => gt.SenderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(gt => gt.TotalCost)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(gt => gt.Count)
+                .HasDefaultValue(1);
+
+            entity.HasIndex(gt => new { gt.NovelId, gt.CreatedAt })
+                .HasDatabaseName("IX_GiftTransactions_Novel_Created");
+
+            entity.HasIndex(gt => new { gt.SenderId, gt.CreatedAt })
+                .HasDatabaseName("IX_GiftTransactions_Sender_Created");
+
+            entity.HasIndex(gt => gt.CreatedAt)
+                .HasDatabaseName("IX_GiftTransactions_CreatedAt");
+        });
+
+        // GlobalSupporterLeaderboard configuration
+        modelBuilder.Entity<GlobalSupporterLeaderboard>(entity =>
+        {
+            entity.HasKey(gsl => gsl.Id);
+
+            entity.HasOne(gsl => gsl.User)
+                .WithMany()
+                .HasForeignKey(gsl => gsl.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(gsl => gsl.TotalPointsGifted)
+                .HasPrecision(18, 2)
+                .HasDefaultValue(0);
+
+            entity.Property(gsl => gsl.TotalGiftsCount)
+                .HasDefaultValue(0);
+
+            entity.Property(gsl => gsl.Rank)
+                .IsRequired();
+
+            entity.Property(gsl => gsl.Period)
+                .IsRequired()
+                .HasMaxLength(20);
+
+            entity.HasIndex(gsl => new { gsl.Period, gsl.Rank })
+                .HasDatabaseName("IX_GlobalSupporterLeaderboard_Period_Rank");
+
+            entity.HasIndex(gsl => new { gsl.UserId, gsl.Period })
+                .HasDatabaseName("IX_GlobalSupporterLeaderboard_User_Period");
         });
     }
 }

@@ -75,6 +75,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPointTransactionRepository, PointTransactionRepository>();
         services.AddScoped<IPointCalculationService, PointCalculationService>();
         services.AddScoped<IWalletService, WalletService>();
+        
+        // Gift System
+        services.AddScoped<IGiftRepository, GiftRepository>();
+        services.AddScoped<IGiftTransactionRepository, GiftTransactionRepository>();
+        services.AddScoped<IGlobalSupporterLeaderboardRepository, GlobalSupporterLeaderboardRepository>();
 
         //adding cloudflare settings
         services.Configure<CloudflareR2Settings>(

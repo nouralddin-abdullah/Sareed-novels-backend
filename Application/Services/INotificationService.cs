@@ -10,6 +10,7 @@ public interface INotificationService
     Task SendReplyToCommentNotification(string originalCommentAuthorId, User replier, Guid replyId, Domain.Entities.Comments originalComment);
     Task SendNewChapterInLibraryNotification(List<string> userIds, Novel novel, Chapter chapter);
     Task SendReviewOnNovelNotification(string novelAuthorId, User reviewer, Guid reviewId, Novel novel);
+    Task SendGiftReceivedNotification(string novelAuthorId, User sender, Novel novel, Gift gift, int count);
     
     // Phase 2: Like notifications
     Task SendLikeOnPostNotification(string postAuthorId, User liker, string postAuthorUsername);

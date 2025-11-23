@@ -183,9 +183,8 @@ public class UpdateChapterCommandHandler(
             .Split(new[] { "\n\n", "\r\n\r\n", "</p><p>", "</p>" }, StringSplitOptions.RemoveEmptyEntries)
             .Select(p => p.Trim()
                 .Replace("<p>", "")
-                .Replace("</p>", "")
-                .Replace("<br>", "")
-                .Replace("<br/>", ""))
+                .Replace("</p>", ""))
+            // Keep <br> tags to preserve line breaks within paragraphs
             .Where(p => !string.IsNullOrWhiteSpace(p))
             .ToList();
     }

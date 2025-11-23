@@ -27,10 +27,21 @@ internal class DeleteCommentCommandHandler(
         // Fire-and-forget: Decrement user's comments count
         _ = DecrementUserCommentsCountInBackground(currentUser.Id);
         
-        if (!comment.ParentCommentId.HasValue && comment.ChapterId.HasValue)
+        // Only decrement counts for top-level comments (not replies)
+        if (!comment.ParentCommentId.HasValue)
         {
-            _ = UpdateChapterCommentsCountInBackground(comment.ChapterId.Value);
+            if (comment.ParagraphId.HasValue)
+            {
+                // Paragraph comment - need to get chapterId from paragraph
+                _ = UpdateParagraphCommentsCountInBackground(comment.ParagraphId.Value);
+            }
+            else if (comment.ChapterId.HasValue)
+            {
+                // Chapter-level comment - decrement chapter count only
+                _ = UpdateChapterCommentsCountInBackground(comment.ChapterId.Value);
+            }
         }
+        
         return await commentsRepository.DeleteComment(comment.Id);
     }
     
@@ -75,6 +86,39 @@ internal class DeleteCommentCommandHandler(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to update comments count for chapter {ChapterId} in background", chapterId);
+        }
+    }
+    
+    private async Task UpdateParagraphCommentsCountInBackground(Guid paragraphId)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var backgroundParagraphsRepository = scope.ServiceProvider.GetRequiredService<IChapterParagraphsRepository>();
+            var backgroundChaptersRepository = scope.ServiceProvider.GetRequiredService<IChaptersRepository>();
+
+            // Get the paragraph to find its chapterId
+            var paragraph = await backgroundParagraphsRepository.GetParagraphById(paragraphId);
+            if (paragraph != null)
+            {
+                // Decrement paragraph count
+                paragraph.DecrementCommentsCount();
+                await backgroundParagraphsRepository.UpdateParagraph(paragraph);
+                
+                // Decrement chapter total count
+                var chapter = await backgroundChaptersRepository.GetChapterById(paragraph.ChapterId);
+                if (chapter != null)
+                {
+                    chapter.DecrementTotalCommentsCount();
+                    await backgroundChaptersRepository.UpdateChapter(chapter);
+                }
+                
+                logger.LogDebug("Successfully updated comments count for paragraph {ParagraphId} and chapter {ChapterId}", paragraphId, paragraph.ChapterId);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to update comments count for paragraph {ParagraphId} in background", paragraphId);
         }
     }
 }

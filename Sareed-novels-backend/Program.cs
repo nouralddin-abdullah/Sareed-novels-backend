@@ -1,7 +1,9 @@
 ﻿using Application.Extensions;
 using Domain.Entities;
 using Infrastructure.Extensions;
+using Infrastructure.Persistence;
 using Infrastructure.Seed;
+using Microsoft.EntityFrameworkCore;
 using Sareed_novels_backend.Extensions;
 using Sareed_novels_backend.Middlewares;
 using Serilog;
@@ -14,18 +16,40 @@ builder.AddPresentation();
 builder.Services.AddApplication();
 var app = builder.Build();
 
-// Seed roles on startup
+// Apply pending migrations on startup (Production)
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
+        var dbContext = services.GetRequiredService<ApplicationDbContext>();
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        
+        logger.LogInformation("Checking for pending migrations...");
+        var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
+        
+        if (pendingMigrations.Any())
+        {
+            logger.LogInformation("Applying {Count} pending migrations: {Migrations}", 
+                pendingMigrations.Count(), 
+                string.Join(", ", pendingMigrations));
+            
+            await dbContext.Database.MigrateAsync();
+            logger.LogInformation("Migrations applied successfully");
+        }
+        else
+        {
+            logger.LogInformation("No pending migrations");
+        }
+        
+        // Seed roles after migrations
         await RoleSeeder.SeedRolesAsync(services);
     }
     catch (Exception ex)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while seeding roles");
+        logger.LogError(ex, "An error occurred while applying migrations or seeding roles");
+        throw; // Stop startup if migrations fail
     }
 }
 
@@ -60,9 +84,7 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// Apply CORS policies for both web frontend and mobile
 app.UseCors("AllowFrontend");  // Web frontend
-app.UseCors("AllowMobile");     // Expo Go mobile testing (TODO: Remove after testing)
 
 app.UseAuthentication();
 
