@@ -11,6 +11,7 @@ public interface INotificationService
     Task SendNewChapterInLibraryNotification(List<string> userIds, Novel novel, Chapter chapter);
     Task SendReviewOnNovelNotification(string novelAuthorId, User reviewer, Guid reviewId, Novel novel);
     Task SendGiftReceivedNotification(string novelAuthorId, User sender, Novel novel, Gift gift, int count);
+    Task SendPrivilegeSubscribedNotification(string novelAuthorId, User subscriber, Novel novel, decimal cost); // ✅ NEW
     
     // Phase 2: Like notifications
     Task SendLikeOnPostNotification(string postAuthorId, User liker, string postAuthorUsername);

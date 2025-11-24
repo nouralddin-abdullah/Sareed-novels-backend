@@ -9,6 +9,7 @@ public static class NotificationType
     public const string NewChapterInLibrary = "NewChapterInLibrary";
     public const string ReviewOnNovel = "ReviewOnNovel";
     public const string GiftReceived = "GiftReceived";
+    public const string PrivilegeSubscribed = "PrivilegeSubscribed"; // ✅ NEW: Author notified when someone subscribes
     
     // Phase 2 (Optional)
     public const string LikeOnReview = "LikeOnReview";

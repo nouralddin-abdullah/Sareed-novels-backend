@@ -61,7 +61,7 @@ public class ApproveWithdrawalCommandHandler(
             await walletService.DeductPointsAsync(
                 withdrawalRequest.UserId,
                 withdrawalRequest.PointsRequested,
-                TransactionType.Withdrawal,
+                TransactionType.WithdrawalApproved,
                 $"Withdrawal approved: {withdrawalRequest.PointsRequested} points ({withdrawalRequest.NetAmountEGP} EGP via {withdrawalRequest.WithdrawalMethod})",
                 withdrawalRequest.Id
             );

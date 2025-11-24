@@ -30,7 +30,7 @@ public class GetTopSupportersQueryHandler(
                     UserId = user.Id,
                     UserName = user.UserName!,
                     DisplayName = user.DisplayName,
-                    ProfilePhoto = user.ProfilePhoto,
+                    ProfilePhoto = user.ProfilePhoto!,
                     TotalPointsGifted = totalPoints,
                     TotalGiftsCount = totalGifts,
                     Rank = rank++

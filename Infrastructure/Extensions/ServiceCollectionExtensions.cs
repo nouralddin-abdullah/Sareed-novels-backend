@@ -13,8 +13,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Nest;
-using Elasticsearch.Net;
+using OpenSearch.Client; // ✅ Changed from Nest
+using OpenSearch.Net; // ✅ Changed from Elasticsearch.Net
 
 namespace Infrastructure.Extensions;
 
@@ -67,6 +67,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INovelEntityRepository, NovelEntityRepository>();
         services.AddScoped<INotificationsRepository, NotificationsRepository>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<ITransactionManager, TransactionManager>();
         
         // Wallet System
         services.AddScoped<IUserWalletRepository, UserWalletRepository>();
@@ -80,38 +81,44 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGiftRepository, GiftRepository>();
         services.AddScoped<IGiftTransactionRepository, GiftTransactionRepository>();
         services.AddScoped<IGlobalSupporterLeaderboardRepository, GlobalSupporterLeaderboardRepository>();
+        
+        // Privilege System
+        services.AddScoped<INovelPrivilegeRepository, NovelPrivilegeRepository>();
+        services.AddScoped<IPrivilegeSubscriptionRepository, PrivilegeSubscriptionRepository>();
+        services.AddScoped<IPrivilegeService, PrivilegeService>();
 
         //adding cloudflare settings
         services.Configure<CloudflareR2Settings>(
             configuration.GetSection(CloudflareR2Settings.SectionName));
 
-        // Elasticsearch configuration
-        services.Configure<ElasticsearchSettings>(
-            configuration.GetSection(ElasticsearchSettings.SectionName));
+        // OpenSearch configuration
+        services.Configure<OpenSearchSettings>(
+            configuration.GetSection(OpenSearchSettings.SectionName));
 
-        // Register Elasticsearch client
-        services.AddSingleton<IElasticClient>(provider =>
+        // Register OpenSearch client (using official OpenSearch.Client)
+        services.AddSingleton<IOpenSearchClient>(provider =>
         {
-            var settings = configuration.GetSection(ElasticsearchSettings.SectionName)
-                .Get<ElasticsearchSettings>();
+            var settings = configuration.GetSection(OpenSearchSettings.SectionName)
+                .Get<OpenSearchSettings>();
 
-            if (settings == null || string.IsNullOrEmpty(settings.Url) || string.IsNullOrEmpty(settings.ApiKey))
+            if (settings == null || string.IsNullOrEmpty(settings.Url))
             {
                 throw new InvalidOperationException(
-                    "Elasticsearch settings are not configured properly in appsettings.json");
+                    "OpenSearch settings are not configured properly in appsettings.json");
             }
 
-            // Create connection settings using URL
+            // Create connection settings for AWS OpenSearch
             var uri = new Uri($"https://{settings.Url}");
             
             var connectionSettings = new ConnectionSettings(uri)
                 .DefaultIndex(settings.NovelIndexName)
-                .ApiKeyAuthentication(new ApiKeyAuthenticationCredentials(settings.ApiKey))
+                .BasicAuthentication(settings.Username, settings.Password)
                 .EnableDebugMode()
                 .PrettyJson()
+                .ServerCertificateValidationCallback((o, cert, chain, errors) => true)
                 .RequestTimeout(TimeSpan.FromMinutes(2));
 
-            return new ElasticClient(connectionSettings);
+            return new OpenSearchClient(connectionSettings);
         });
 
         // Register search services

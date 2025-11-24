@@ -2,12 +2,16 @@
 
 public static class TransactionType
 {
-    public const string Recharge = "Recharge";
-    public const string Withdrawal = "Withdrawal";
-    public const string UnlockChapter = "UnlockChapter";
-    public const string Gift = "Gift";
-    public const string GiftSent = "GiftSent";
+    // Earning types
+    public const string RechargeApproved = "RechargeApproved";
     public const string GiftReceived = "GiftReceived";
-    public const string PremiumPass = "PremiumPass";
-    public const string Refund = "Refund";
+    public const string PrivilegeRevenue = "PrivilegeRevenue"; // ✅ NEW: Author receives privilege subscription
+
+    // Spending types
+    public const string WithdrawalApproved = "WithdrawalApproved";
+    public const string GiftSent = "GiftSent";
+    public const string PrivilegeSubscription = "PrivilegeSubscription"; // Reader subscribes to novel privilege
+    
+    // Refunds
+    public const string Refund = "Refund"; // General refund
 }

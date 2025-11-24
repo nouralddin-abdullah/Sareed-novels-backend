@@ -1,21 +1,24 @@
-using Application.Common;
+﻿using Application.Common;
 using Application.Entities.DTOs;
 using Application.Search.DTOs;
 using Application.Services;
+using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nest;
+using OpenSearch.Client; // ✅ Changed from Nest
 using System.Text.Json;
 
 namespace Infrastructure.Services;
 
+// ✅ Entity (Character/Location/Organization) search service
 public class EntitySearchService(
-    IElasticClient elasticClient,
-    INovelEntityRepository entityRepository,
     ILogger<EntitySearchService> logger,
-    IOptions<ElasticsearchSettings> settings) : IEntitySearchService
+    IOpenSearchClient openSearchClient, // ✅ Changed from IElasticClient
+    INovelEntityRepository entityRepository,
+    INovelsRepository novelsRepository, // Used for potential future features
+    IOptions<OpenSearchSettings> settings) : IEntitySearchService // Used for advanced configuration
 {
     private readonly string _indexName = "sareed-entities";
 
@@ -36,7 +39,7 @@ public class EntitySearchService(
                 .Query(q => BuildSearchQuery(q, novelId, query, section))
                 .TrackTotalHits(true);
 
-            var response = await elasticClient.SearchAsync<NovelEntitySearchDocument>(searchDescriptor, cancellationToken);
+            var response = await openSearchClient.SearchAsync<NovelEntitySearchDocument>(searchDescriptor, cancellationToken);
 
             if (!response.IsValid)
             {
@@ -108,7 +111,7 @@ public class EntitySearchService(
             }
 
             var document = MapEntityToDocument(entity);
-            var response = await elasticClient.IndexAsync(document, idx => idx.Index(_indexName));
+            var response = await openSearchClient.IndexAsync(document, idx => idx.Index(_indexName));
 
             if (!response.IsValid)
             {
@@ -143,7 +146,7 @@ public class EntitySearchService(
             }
 
             var document = MapEntityToDocument(entity);
-            var response = await elasticClient.UpdateAsync<NovelEntitySearchDocument>(
+            var response = await openSearchClient.UpdateAsync<NovelEntitySearchDocument>(
                 entityId.ToString(),
                 u => u
                     .Index(_indexName)
@@ -171,7 +174,7 @@ public class EntitySearchService(
     {
         try
         {
-            var response = await elasticClient.DeleteAsync<NovelEntitySearchDocument>(
+            var response = await openSearchClient.DeleteAsync<NovelEntitySearchDocument>(
                 entityId.ToString(),
                 d => d.Index(_indexName)
             );
@@ -216,7 +219,7 @@ public class EntitySearchService(
                 return true;
             }
 
-            var bulkResponse = await elasticClient.BulkAsync(b => b
+            var bulkResponse = await openSearchClient.BulkAsync(b => b
                 .Index(_indexName)
                 .IndexMany(documents)
             );
@@ -259,7 +262,7 @@ public class EntitySearchService(
                 return 0;
             }
 
-            var bulkResponse = await elasticClient.BulkAsync(b => b
+            var bulkResponse = await openSearchClient.BulkAsync(b => b
                 .Index(_indexName)
                 .IndexMany(documents)
             );
@@ -284,7 +287,7 @@ public class EntitySearchService(
     {
         try
         {
-            var existsResponse = await elasticClient.Indices.ExistsAsync(_indexName);
+            var existsResponse = await openSearchClient.Indices.ExistsAsync(_indexName);
             if (existsResponse.Exists)
             {
                 logger.LogInformation("Index {IndexName} already exists", _indexName);
@@ -293,7 +296,7 @@ public class EntitySearchService(
 
             logger.LogInformation("Creating index {IndexName}", _indexName);
 
-            var createResponse = await elasticClient.Indices.CreateAsync(_indexName, c => c
+            var createResponse = await openSearchClient.Indices.CreateAsync(_indexName, c => c
                 .Settings(s => s
                     .Analysis(a => a
                         .Analyzers(an => an
@@ -342,7 +345,7 @@ public class EntitySearchService(
     {
         try
         {
-            var response = await elasticClient.SearchAsync<NovelEntitySearchDocument>(s => s
+            var response = await openSearchClient.SearchAsync<NovelEntitySearchDocument>(s => s
                 .Index(_indexName)
                 .Size(0)
                 .Query(q => q.Term(t => t.Field(f => f.NovelId).Value(novelId.ToString())))
@@ -358,7 +361,7 @@ public class EntitySearchService(
             }
 
             var buckets = response.Aggregations.Terms("sections").Buckets;
-            return buckets.ToDictionary(b => b.Key, b => (int)b.DocCount);
+            return buckets.ToDictionary(b => b.Key, b => (int)b.DocCount.GetValueOrDefault());
         }
         catch (Exception ex)
         {
@@ -371,7 +374,7 @@ public class EntitySearchService(
     {
         try
         {
-            var response = await elasticClient.SearchAsync<NovelEntitySearchDocument>(s => s
+            var response = await openSearchClient.SearchAsync<NovelEntitySearchDocument>(s => s
                 .Index(_indexName)
                 .Size(100)
                 .Query(q => q.Bool(b => b

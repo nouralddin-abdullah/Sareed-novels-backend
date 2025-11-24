@@ -11,6 +11,9 @@ public class ChaptersDTO
     public int ParagraphsCount { get; set; }
     public int TotalCommentsCount { get; set; }
     public DateTime CreatedAt { get; set; } = default!;
+    
+    // Privilege System
+    public bool IsLocked { get; set; } = false; // Is this chapter locked by privilege?
 }
 
 public class ChapterSingleAuthorDTO
@@ -35,6 +38,10 @@ public class ChapterSingleReaderDTO
     public int TotalCommentsCount { get; set; }
     public string? NextChapterSlug { get; set; }
     public List<ChapterParagraphDTO> Paragraphs { get; set; } = new();
+    
+    // Privilege System
+    public bool IsLocked { get; set; } = false; // Is this chapter locked?
+    public string? LockMessage { get; set; } // Message to display when locked
 }
 
 public class ChapterParagraphDTO

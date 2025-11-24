@@ -42,6 +42,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<Gift> Gifts { get; set; }
     internal DbSet<GiftTransaction> GiftTransactions { get; set; }
     internal DbSet<GlobalSupporterLeaderboard> GlobalSupporterLeaderboards { get; set; }
+    
+    // Privilege System
+    internal DbSet<NovelPrivilege> NovelPrivileges { get; set; }
+    internal DbSet<NovelPrivilegeSubscription> NovelPrivilegeSubscriptions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1150,6 +1154,82 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(gsl => new { gsl.UserId, gsl.Period })
                 .HasDatabaseName("IX_GlobalSupporterLeaderboard_User_Period");
+        });
+        
+        // NovelPrivilege configuration
+        modelBuilder.Entity<NovelPrivilege>(entity =>
+        {
+            entity.HasKey(np => np.Id);
+
+            entity.HasOne(np => np.Novel)
+                .WithMany()
+                .HasForeignKey(np => np.NovelId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(np => np.SubscriptionCost)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(np => np.IsEnabled)
+                .HasDefaultValue(false);
+
+            entity.Property(np => np.MaxLockedChapters)
+                .HasDefaultValue(20);
+
+            entity.Property(np => np.CurrentLockedCount)
+                .HasDefaultValue(0);
+
+            entity.Property(np => np.MinPublishedRequired)
+                .HasDefaultValue(11);
+
+            entity.Property(np => np.TotalDailyUnlocksPerformed)
+                .HasDefaultValue(0);
+
+            // Unique constraint: one privilege config per novel
+            entity.HasIndex(np => np.NovelId)
+                .IsUnique()
+                .HasDatabaseName("IX_NovelPrivileges_NovelId_Unique");
+
+            entity.HasIndex(np => np.IsEnabled)
+                .HasDatabaseName("IX_NovelPrivileges_IsEnabled");
+
+            entity.HasIndex(np => new { np.IsEnabled, np.CurrentLockedCount })
+                .HasDatabaseName("IX_NovelPrivileges_Enabled_LockedCount");
+        });
+
+        // NovelPrivilegeSubscription configuration
+        modelBuilder.Entity<NovelPrivilegeSubscription>(entity =>
+        {
+            entity.HasKey(nps => nps.Id);
+
+            entity.HasOne(nps => nps.Novel)
+                .WithMany()
+                .HasForeignKey(nps => nps.NovelId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(nps => nps.User)
+                .WithMany()
+                .HasForeignKey(nps => nps.UserId)
+                .OnDelete(DeleteBehavior.NoAction); // Avoid cascade path conflict
+
+            entity.Property(nps => nps.AmountPaid)
+                .HasPrecision(18, 2)
+                .IsRequired();
+
+            entity.Property(nps => nps.IsActive)
+                .HasDefaultValue(true);
+
+            entity.HasIndex(nps => new { nps.NovelId, nps.UserId })
+                .HasDatabaseName("IX_NovelPrivilegeSubscriptions_Novel_User");
+
+            entity.HasIndex(nps => new { nps.UserId, nps.IsActive })
+                .HasDatabaseName("IX_NovelPrivilegeSubscriptions_User_Active");
+
+            entity.HasIndex(nps => nps.IsActive)
+                .HasDatabaseName("IX_NovelPrivilegeSubscriptions_Active");
+
+            entity.HasIndex(nps => nps.SubscribedAt)
+                .HasDatabaseName("IX_NovelPrivilegeSubscriptions_SubscribedAt");
         });
     }
 }

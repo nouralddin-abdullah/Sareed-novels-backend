@@ -871,6 +871,127 @@ namespace Infrastructure.Migrations
                     b.ToTable("NovelGenres");
                 });
 
+            modelBuilder.Entity("Domain.Entities.NovelPrivilege", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CurrentLockedCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("LastDailyUnlockDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("MaxLockedChapters")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(20);
+
+                    b.Property<int>("MinPublishedRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(11);
+
+                    b.Property<Guid>("NovelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("PrivilegeStartSequence")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("SubscriptionCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("TotalDailyUnlocksPerformed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsEnabled")
+                        .HasDatabaseName("IX_NovelPrivileges_IsEnabled");
+
+                    b.HasIndex("NovelId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_NovelPrivileges_NovelId_Unique");
+
+                    b.HasIndex("IsEnabled", "CurrentLockedCount")
+                        .HasDatabaseName("IX_NovelPrivileges_Enabled_LockedCount");
+
+                    b.ToTable("NovelPrivileges");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NovelPrivilegeSubscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("AmountPaid")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("CancellationReason")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<Guid>("NovelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("NovelPrivilegeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("PaymentTransactionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("SubscribedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("IX_NovelPrivilegeSubscriptions_Active");
+
+                    b.HasIndex("NovelPrivilegeId");
+
+                    b.HasIndex("SubscribedAt")
+                        .HasDatabaseName("IX_NovelPrivilegeSubscriptions_SubscribedAt");
+
+                    b.HasIndex("NovelId", "UserId")
+                        .HasDatabaseName("IX_NovelPrivilegeSubscriptions_Novel_User");
+
+                    b.HasIndex("UserId", "IsActive")
+                        .HasDatabaseName("IX_NovelPrivilegeSubscriptions_User_Active");
+
+                    b.ToTable("NovelPrivilegeSubscriptions");
+                });
+
             modelBuilder.Entity("Domain.Entities.NovelViews", b =>
                 {
                     b.Property<int>("Id")
@@ -2068,6 +2189,40 @@ namespace Infrastructure.Migrations
                     b.Navigation("Novel");
                 });
 
+            modelBuilder.Entity("Domain.Entities.NovelPrivilege", b =>
+                {
+                    b.HasOne("Domain.Entities.Novel", "Novel")
+                        .WithMany()
+                        .HasForeignKey("NovelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Novel");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NovelPrivilegeSubscription", b =>
+                {
+                    b.HasOne("Domain.Entities.Novel", "Novel")
+                        .WithMany()
+                        .HasForeignKey("NovelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.NovelPrivilege", null)
+                        .WithMany("Subscriptions")
+                        .HasForeignKey("NovelPrivilegeId");
+
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Novel");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Domain.Entities.NovelViews", b =>
                 {
                     b.HasOne("Domain.Entities.Novel", "Novel")
@@ -2410,6 +2565,11 @@ namespace Infrastructure.Migrations
                     b.Navigation("SourceRelationships");
 
                     b.Navigation("TargetRelationships");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NovelPrivilege", b =>
+                {
+                    b.Navigation("Subscriptions");
                 });
 
             modelBuilder.Entity("Domain.Entities.Post", b =>

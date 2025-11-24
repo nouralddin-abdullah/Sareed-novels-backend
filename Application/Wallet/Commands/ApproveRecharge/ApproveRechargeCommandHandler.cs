@@ -52,7 +52,7 @@ public class ApproveRechargeCommandHandler(
         await walletService.AddPointsAsync(
             rechargeRequest.UserId,
             rechargeRequest.PointsRequested,
-            TransactionType.Recharge,
+            TransactionType.RechargeApproved,
             $"Recharge approved: {rechargeRequest.PointsRequested} points ({rechargeRequest.TotalAmountEGP} EGP via {rechargeRequest.PaymentMethod})",
             rechargeRequest.Id
         );

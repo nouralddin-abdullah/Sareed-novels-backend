@@ -1,20 +1,21 @@
-using Application.Common;
+﻿using Application.Common;
 using Application.Search.DTOs;
 using Application.Services;
+using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Configuration;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nest;
+using OpenSearch.Client; // ✅ Changed from Nest
 
 namespace Infrastructure.Services;
 
+// ✅ OPTIMIZED SERVICE: Uses OpenSearch for fast novel search
 public class NovelSearchService(
-    IElasticClient elasticClient,
-    INovelsRepository novelsRepository,
     ILogger<NovelSearchService> logger,
-    IOptions<ElasticsearchSettings> settings) : INovelSearchService
+    IOpenSearchClient openSearchClient, // ✅ Changed from IElasticClient
+    INovelsRepository novelsRepository,
+    IOptions<OpenSearchSettings> settings) : INovelSearchService
 {
     private readonly string _indexName = settings.Value.NovelIndexName;
 
@@ -32,7 +33,7 @@ public class NovelSearchService(
                 .Sort(s => BuildSortQuery(s, request.SortBy))
                 .TrackTotalHits(true);
 
-            var response = await elasticClient.SearchAsync<NovelSearchDocument>(searchDescriptor, cancellationToken);
+            var response = await openSearchClient.SearchAsync<NovelSearchDocument>(searchDescriptor, cancellationToken);
 
             if (!response.IsValid)
             {
@@ -112,7 +113,7 @@ public class NovelSearchService(
             }
 
             var document = MapNovelToDocument(novel);
-            var response = await elasticClient.IndexAsync(document, idx => idx.Index(_indexName));
+            var response = await openSearchClient.IndexAsync(document, idx => idx.Index(_indexName));
 
             if (!response.IsValid)
             {
@@ -157,7 +158,7 @@ public class NovelSearchService(
             }
 
             var document = MapNovelToDocument(novel);
-            var response = await elasticClient.UpdateAsync<NovelSearchDocument>(
+            var response = await openSearchClient.UpdateAsync<NovelSearchDocument>(
                 novelId.ToString(),
                 u => u
                     .Index(_indexName)
@@ -189,7 +190,7 @@ public class NovelSearchService(
     {
         try
         {
-            var response = await elasticClient.DeleteAsync<NovelSearchDocument>(
+            var response = await openSearchClient.DeleteAsync<NovelSearchDocument>(
                 novelId.ToString(),
                 d => d.Index(_indexName)
             );
@@ -238,7 +239,7 @@ public class NovelSearchService(
                 return true;
             }
 
-            var bulkResponse = await elasticClient.BulkAsync(b => b
+            var bulkResponse = await openSearchClient.BulkAsync(b => b
                 .Index(_indexName)
                 .IndexMany(documents)
             );
@@ -288,7 +289,7 @@ public class NovelSearchService(
                 var batch = eligibleNovels.Skip(i).Take(batchSize).ToList();
                 var documents = batch.Select(MapNovelToDocument).ToList();
 
-                var bulkResponse = await elasticClient.BulkAsync(b => b
+                var bulkResponse = await openSearchClient.BulkAsync(b => b
                     .Index(_indexName)
                     .IndexMany(documents)
                 );
@@ -328,7 +329,7 @@ public class NovelSearchService(
     {
         try
         {
-            var existsResponse = await elasticClient.Indices.ExistsAsync(_indexName);
+            var existsResponse = await openSearchClient.Indices.ExistsAsync(_indexName);
             if (existsResponse.Exists)
             {
                 logger.LogInformation("Index {IndexName} already exists", _indexName);
@@ -337,7 +338,7 @@ public class NovelSearchService(
 
             logger.LogInformation("Creating index {IndexName}", _indexName);
 
-            var createResponse = await elasticClient.Indices.CreateAsync(_indexName, c => c
+            var createResponse = await openSearchClient.Indices.CreateAsync(_indexName, c => c
                 .Settings(s => s
                     .Analysis(a => a
                         .Analyzers(an => an

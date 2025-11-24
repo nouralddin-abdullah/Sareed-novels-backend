@@ -129,4 +129,73 @@ public class WalletService(
             logger.LogWarning(ex, "Failed to sync cached balance for user {UserId}", userId);
         }
     }
+
+    /// <summary>
+    /// Atomically transfers points from one user to another within a transaction.
+    /// Both deduction and addition happen together - if either fails, both are rolled back.
+    /// </summary>
+    public async Task TransferPointsAsync(
+        string fromUserId,
+        string toUserId,
+        decimal amount,
+        string fromTransactionType,
+        string toTransactionType,
+        string fromDescription,
+        string toDescription,
+        Guid? relatedRequestId = null)
+    {
+        // Get both wallets
+        var fromWallet = await GetOrCreateWalletAsync(fromUserId);
+        var toWallet = await GetOrCreateWalletAsync(toUserId);
+        
+        // Validate sufficient balance
+        if (!fromWallet.HasSufficientBalance(amount))
+        {
+            throw new InvalidOperationException(
+                $"Insufficient balance. Required: {amount}, Available: {fromWallet.CurrentBalance}");
+        }
+        
+        // Capture balances before transfer
+        var fromBalanceBefore = fromWallet.CurrentBalance;
+        var toBalanceBefore = toWallet.CurrentBalance;
+        
+        // Perform transfer (domain logic)
+        fromWallet.DeductPoints(amount);
+        toWallet.AddPoints(amount);
+        
+        // Update both wallets (will be part of the same transaction context)
+        await walletRepository.UpdateAsync(fromWallet);
+        await walletRepository.UpdateAsync(toWallet);
+        
+        // Create transaction records for both users
+        await transactionRepository.CreateAsync(new PointTransaction
+        {
+            Id = Guid.NewGuid(),
+            UserId = fromUserId,
+            Type = fromTransactionType,
+            Amount = -amount, // Negative for deduction
+            BalanceBefore = fromBalanceBefore,
+            BalanceAfter = fromWallet.CurrentBalance,
+            Description = fromDescription,
+            RelatedRequestId = relatedRequestId,
+            CreatedAt = DateTime.UtcNow
+        });
+        
+        await transactionRepository.CreateAsync(new PointTransaction
+        {
+            Id = Guid.NewGuid(),
+            UserId = toUserId,
+            Type = toTransactionType,
+            Amount = amount, // Positive for addition
+            BalanceBefore = toBalanceBefore,
+            BalanceAfter = toWallet.CurrentBalance,
+            Description = toDescription,
+            RelatedRequestId = relatedRequestId,
+            CreatedAt = DateTime.UtcNow
+        });
+        
+        logger.LogInformation(
+            "Transferred {Amount} points from user {FromUserId} to {ToUserId}",
+            amount, fromUserId, toUserId);
+    }
 }

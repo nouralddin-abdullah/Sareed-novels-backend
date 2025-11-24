@@ -374,4 +374,34 @@ public class NotificationService(
             logger.LogError(ex, "Failed to create GiftReceived notification for user {UserId}", novelAuthorId);
         }
     }
+
+    // ✅ NEW: Privilege subscription notification
+    public async Task SendPrivilegeSubscribedNotification(string novelAuthorId, User subscriber, Novel novel, decimal cost)
+    {
+        try
+        {
+            var notification = new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = novelAuthorId,
+                Type = NotificationType.PrivilegeSubscribed,
+                ActorId = subscriber.Id,
+                ActorDisplayName = subscriber.DisplayName,
+                ActorProfilePhoto = subscriber.ProfilePhoto,
+                Message = $"{subscriber.DisplayName} اشترك في نظام الامتياز لرواية '{novel.Title}' ({cost} نقطة)",
+                ActionUrl = $"/novel/{novel.Slug}",
+                IsRead = false,
+                RelatedEntityId = novel.Id,
+                RelatedEntityType = "Privilege",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await notificationsRepository.CreateNotification(notification);
+            logger.LogDebug("Created PrivilegeSubscribed notification for user {UserId}", novelAuthorId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to create PrivilegeSubscribed notification for user {UserId}", novelAuthorId);
+        }
+    }
 }

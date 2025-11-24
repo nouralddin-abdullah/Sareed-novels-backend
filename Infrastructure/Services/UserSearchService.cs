@@ -1,19 +1,21 @@
-using Application.Common;
+﻿using Application.Common;
 using Application.Search.DTOs;
 using Application.Services;
+using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nest;
+using OpenSearch.Client; // ✅ Changed from Nest
 
 namespace Infrastructure.Services;
 
+// ✅ User search service using OpenSearch
 public class UserSearchService(
-    IElasticClient elasticClient,
-    IUsersRepository usersRepository,
     ILogger<UserSearchService> logger,
-    IOptions<ElasticsearchSettings> settings) : IUserSearchService
+    IOpenSearchClient openSearchClient, // ✅ Changed from IElasticClient
+    IUsersRepository usersRepository,
+    IOptions<OpenSearchSettings> settings) : IUserSearchService // Used for advanced configuration
 {
     private readonly string _indexName = "sareed-users";
 
@@ -31,7 +33,7 @@ public class UserSearchService(
                 .Sort(s => s.Descending(SortSpecialField.Score)) // Sort by relevance/match score
                 .TrackTotalHits(true);
 
-            var response = await elasticClient.SearchAsync<UserSearchDocument>(searchDescriptor, cancellationToken);
+            var response = await openSearchClient.SearchAsync<UserSearchDocument>(searchDescriptor, cancellationToken);
 
             if (!response.IsValid)
             {
@@ -95,7 +97,7 @@ public class UserSearchService(
             }
 
             var document = await MapUserToDocument(user);
-            var response = await elasticClient.IndexAsync(document, idx => idx.Index(_indexName));
+            var response = await openSearchClient.IndexAsync(document, idx => idx.Index(_indexName));
 
             if (!response.IsValid)
             {
@@ -125,7 +127,7 @@ public class UserSearchService(
             }
 
             var document = await MapUserToDocument(user);
-            var response = await elasticClient.UpdateAsync<UserSearchDocument>(
+            var response = await openSearchClient.UpdateAsync<UserSearchDocument>(
                 userId,
                 u => u
                     .Index(_indexName)
@@ -153,7 +155,7 @@ public class UserSearchService(
     {
         try
         {
-            var response = await elasticClient.DeleteAsync<UserSearchDocument>(
+            var response = await openSearchClient.DeleteAsync<UserSearchDocument>(
                 userId,
                 d => d.Index(_indexName)
             );
@@ -178,7 +180,7 @@ public class UserSearchService(
     {
         try
         {
-            var existsResponse = await elasticClient.Indices.ExistsAsync(_indexName);
+            var existsResponse = await openSearchClient.Indices.ExistsAsync(_indexName);
             if (existsResponse.Exists)
             {
                 logger.LogInformation("Index {IndexName} already exists", _indexName);
@@ -187,7 +189,7 @@ public class UserSearchService(
 
             logger.LogInformation("Creating index {IndexName}", _indexName);
 
-            var createResponse = await elasticClient.Indices.CreateAsync(_indexName, c => c
+            var createResponse = await openSearchClient.Indices.CreateAsync(_indexName, c => c
                 .Settings(s => s
                     .Analysis(a => a
                         .Analyzers(an => an
@@ -281,7 +283,7 @@ public class UserSearchService(
                 return 0;
             }
 
-            var bulkResponse = await elasticClient.BulkAsync(b => b
+            var bulkResponse = await openSearchClient.BulkAsync(b => b
                 .Index(_indexName)
                 .IndexMany(documents)
             );

@@ -76,6 +76,10 @@ public class CreateChapterCommandHandler(
             
             await sequenceService.RecalculateSequencesForNovelAsync(novel.Id);
             
+            // Trigger privilege update (extend lock window)
+            var privilegeService = serviceProvider.GetRequiredService<IPrivilegeService>();
+            await privilegeService.OnChapterPublishedAsync(novel.Id);
+            
             // Fire-and-forget: Send notifications to users who have this novel in their library
             _ = SendNewChapterNotificationsInBackground(novel.Id, chapter.Id, chapter.Slug, chapter.Title);
         }

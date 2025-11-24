@@ -1,8 +1,12 @@
-﻿using Application.Services;
+﻿using Application.Chapters.DTOS;
+using Application.Chapters.Queries.GetChaptersAuthor;
+using Application.Services;
 using Application.Users;
+using AutoMapper;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Chapters.Commands.DeleteChapter;
@@ -13,7 +17,8 @@ public class DeleteChapterCommandHandler(
     IChaptersRepository chaptersRepository, 
     IUserContext userContext,
     IChapterSequenceService sequenceService,
-    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<DeleteChapterCommand, bool>
+    ISearchIndexQueueService searchIndexQueue,
+    IServiceProvider serviceProvider) : IRequestHandler<DeleteChapterCommand, bool>
 {
     public async Task<bool> Handle(DeleteChapterCommand request, CancellationToken cancellationToken)
     {
@@ -25,6 +30,7 @@ public class DeleteChapterCommandHandler(
         if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel");
         
         var wasPublished = chapter.Status == "Published";
+        var publishedSequence = chapter.PublishedChapterSequence;
         
         var deleteResult = await chaptersRepository.DeleteChapter(chapter);
         if (deleteResult)
@@ -41,6 +47,13 @@ public class DeleteChapterCommandHandler(
                 
                 await sequenceService.RecalculateSequencesForNovelAsync(request.NovelId);
                 await sequenceService.UpdateReadingProgressForNovelAsync(request.NovelId);
+                
+                // Trigger privilege update (decrease locked count)
+                if (publishedSequence.HasValue)
+                {
+                    var privilegeService = serviceProvider.GetRequiredService<IPrivilegeService>();
+                    await privilegeService.OnChapterDeletedAsync(request.NovelId, publishedSequence.Value);
+                }
             }
             
             // Queue for Elasticsearch update (ChapterCount changed)

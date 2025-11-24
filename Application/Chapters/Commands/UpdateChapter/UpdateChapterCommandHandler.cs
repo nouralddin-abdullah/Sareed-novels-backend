@@ -62,7 +62,7 @@ public class UpdateChapterCommandHandler(
             var newParagraphTexts = SplitIntoParagraphs(request.Content);
             
             // O(n) hash-based matching
-            var matchResult = MatchParagraphsByHash(existingParagraphs, newParagraphTexts);
+            var matchResult = MatchParagraphsByHash(existingParagraphs, newParagraphTexts, chapter.Id);
             
             sw.Stop();
             logger.LogDebug("Paragraph matching took {ElapsedMs}ms for {ParagraphCount} paragraphs", 
@@ -116,9 +116,13 @@ public class UpdateChapterCommandHandler(
             await sequenceService.RecalculateSequencesForNovelAsync(request.NovelId);
             await sequenceService.UpdateReadingProgressForNovelAsync(request.NovelId);
             
-            // Fire-and-forget: If status changed to Published, send notifications
+            // Trigger privilege update if status changed to Published
             if (request.Status == "Published" && oldStatus != "Published")
             {
+                var privilegeService = serviceProvider.GetRequiredService<IPrivilegeService>();
+                await privilegeService.OnChapterPublishedAsync(request.NovelId);
+                
+                // Fire-and-forget: Send notifications
                 _ = SendNewChapterNotificationsInBackground(novel.Id, chapter.Id, chapter.Slug, chapter.Title);
             }
         }
@@ -191,7 +195,8 @@ public class UpdateChapterCommandHandler(
     
     private static ParagraphMatchResult MatchParagraphsByHash(
         List<ChapterParagraph> existingParagraphs, 
-        List<string> newParagraphTexts)
+        List<string> newParagraphTexts,
+        Guid chapterId) // Add chapterId parameter
     {
         // Build hash dictionary from existing paragraphs - O(n)
         var existingByHash = new Dictionary<string, ChapterParagraph>();
@@ -227,7 +232,7 @@ public class UpdateChapterCommandHandler(
                 paragraphsToCreate.Add(new ChapterParagraph
                 {
                     Id = Guid.NewGuid(),
-                    ChapterId = existingParagraphs.FirstOrDefault()?.ChapterId ?? Guid.Empty,
+                    ChapterId = chapterId, // ✅ FIX: Use chapterId parameter instead of Guid.Empty fallback
                     Content = newText,
                     ContentHash = newHash,
                     OrderIndex = newIndex,
