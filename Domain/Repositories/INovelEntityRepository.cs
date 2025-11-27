@@ -1,4 +1,4 @@
-using Domain.Entities;
+﻿using Domain.Entities;
 
 namespace Domain.Repositories;
 
@@ -19,7 +19,7 @@ public interface INovelEntityRepository
     
     Task<List<string>> GetSectionsForNovelAsync(Guid novelId);
     Task<List<string>> GetAllSectionsIncludingEmptyAsync(Guid novelId); // NEW: Gets all sections even if they only have placeholders
-    Task<List<(string Section, string? Icon)>> GetSectionsWithIconsAsync(Guid novelId); // NEW: Gets sections with their icons in one query
+    Task<List<(Guid? Id, string Section, string? Icon)>> GetSectionsWithIconsAsync(Guid novelId); // NEW: Gets sections with their IDs and icons
     Task<Dictionary<string, string?>> GetSectionIconsAsync(Guid novelId); // NEW: Gets icons for each section (including from placeholders)
     
     // Article operations

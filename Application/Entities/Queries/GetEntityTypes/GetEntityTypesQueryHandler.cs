@@ -1,4 +1,4 @@
-using Application.Entities.DTOs;
+﻿using Application.Entities.DTOs;
 using Application.Users;
 using Domain.Repositories;
 using MediatR;
@@ -21,13 +21,14 @@ public class GetSectionsQueryHandler(
         var currentUser = userContext.GetCurrentUser();
         var isOwner = currentUser != null && novel != null && novel.AuthorId == currentUser.Id;
 
-        // Get sections with icons in one query (includes placeholders)
-        var sectionsWithIcons = await entityRepository.GetSectionsWithIconsAsync(request.NovelId);
+        // Get sections with IDs and icons in one query (includes placeholders)
+        var sectionsWithIconsAndIds = await entityRepository.GetSectionsWithIconsAsync(request.NovelId);
 
         // Build section summaries
-        var sections = sectionsWithIcons
+        var sections = sectionsWithIconsAndIds
             .Select(s => new SectionSummaryDTO
             {
+                Id = s.Id,
                 Name = s.Section,
                 Icon = s.Icon
             })

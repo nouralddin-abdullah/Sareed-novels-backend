@@ -1,4 +1,4 @@
-using Domain.Entities;
+﻿using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -94,19 +94,20 @@ public class NovelEntityRepository(ApplicationDbContext dbContext) : INovelEntit
             .ToListAsync();
     }
 
-    public async Task<List<(string Section, string? Icon)>> GetSectionsWithIconsAsync(Guid novelId)
+    public async Task<List<(Guid? Id, string Section, string? Icon)>> GetSectionsWithIconsAsync(Guid novelId)
     {
         return await dbContext.NovelEntities
             .Where(e => e.NovelId == novelId && !e.IsDeleted)
             .GroupBy(e => e.Section)
             .Select(g => new 
             { 
+                Id = g.OrderBy(e => e.CreatedAt).First().Id,
                 Section = g.Key, 
                 Icon = g.OrderBy(e => e.CreatedAt).First().Icon,
                 FirstCreated = g.Min(e => e.CreatedAt)
             })
             .OrderBy(x => x.FirstCreated)
-            .Select(x => ValueTuple.Create(x.Section, x.Icon))
+            .Select(x => ValueTuple.Create((Guid?)x.Id, x.Section, x.Icon))
             .ToListAsync();
     }
 
