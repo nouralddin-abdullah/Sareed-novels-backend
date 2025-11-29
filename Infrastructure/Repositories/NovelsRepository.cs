@@ -65,7 +65,7 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         var totalCount = await userWork.CountAsync();
         if (PageNumber > 0 && PageSize > 0)
         {
-            userWork = userWork.OrderBy(f => f.CreatedAt).Skip(PageSize * (PageNumber - 1)).Take(PageSize);
+            userWork = userWork.OrderByDescending(f => f.LastUpdatedAt).Skip(PageSize * (PageNumber - 1)).Take(PageSize);
         }
         var userWorkList = await userWork.ToListAsync();
         return (userWorkList, totalCount);
@@ -83,7 +83,7 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         var totalCount = await query.CountAsync();
 
         var novels = await query
-            .OrderByDescending(n => n.CreatedAt)
+            .OrderByDescending(n => n.LastUpdatedAt)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();

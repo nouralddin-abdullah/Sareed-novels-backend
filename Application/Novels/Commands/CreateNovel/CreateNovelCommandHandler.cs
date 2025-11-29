@@ -18,9 +18,9 @@ public class CreateNovelCommandHandler(
     INovelGenresRepository novelGenresRepository, 
     INovelsRepository novelsRepository, 
     IFileUploadService fileUploadService,
-    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<CreateNovelCommand, OperationResult>
+    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<CreateNovelCommand, CreateNovelResult>
 {
-    public async Task<OperationResult> Handle(CreateNovelCommand request, CancellationToken cancellationToken)
+    public async Task<CreateNovelResult> Handle(CreateNovelCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Creating new novel {@novel}", request);
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
@@ -45,7 +45,7 @@ public class CreateNovelCommandHandler(
         var novelResult = await novelsRepository.CreateNovel(novel);
         if (!novelResult)
         {
-            return new OperationResult
+            return new CreateNovelResult
             {
                 Message = "Error while creating novel",
                 Success = false
@@ -55,7 +55,7 @@ public class CreateNovelCommandHandler(
         var genresResult = await novelGenresRepository.UpdateNovelGenres(novel.Id, request.GenreIds);
         if (!genresResult)
         {
-            return new OperationResult
+            return new CreateNovelResult
             {
                 Success = false,
                 Message = "Creating novel was done, but genres failed to be updated"
@@ -69,10 +69,11 @@ public class CreateNovelCommandHandler(
             logger.LogInformation("Queued novel {NovelId} for search indexing", novel.Id);
         }
 
-        return new OperationResult
+        return new CreateNovelResult
         {
             Message = "Novel was created successfully",
-            Success = true
+            Success = true,
+            NovelId = novel.Id
         };
     }
     
