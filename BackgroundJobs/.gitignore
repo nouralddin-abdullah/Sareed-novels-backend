@@ -1,0 +1,23 @@
+﻿# Local development settings (DO NOT COMMIT TO GIT!)
+local.settings.json
+
+# Build output
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio cache/options
+.vs/
+
+# Azure Functions
+__blobstorage__
+__queuestorage__
+__azurite_db*__.json
+
+# Logs
+*.log

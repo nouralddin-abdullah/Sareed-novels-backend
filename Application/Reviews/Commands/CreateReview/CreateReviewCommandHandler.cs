@@ -47,6 +47,7 @@ public class CreateReviewCommandHandler(
         review.CreatedAt = DateTime.UtcNow;
         review.NovelId = novel.Id;
         review.ReviewerId = currentUser.Id;
+        review.CalculateAverageScore();
         var result = await reviewsRepository.CreateOne(review);
         if (!result)
         {

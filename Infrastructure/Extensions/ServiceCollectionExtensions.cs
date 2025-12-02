@@ -126,9 +126,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserSearchService, UserSearchService>();
         services.AddScoped<IEntitySearchService, EntitySearchService>();
         services.AddScoped<ISearchIndexQueueService, SearchIndexQueueService>();
+        services.AddScoped<INovelRecommendationService, NovelRecommendationService>();
 
         // Register background service for outbox processing
         services.AddHostedService<SearchIndexSyncService>();
+
+        // Configure memory cache for recommendations
+        services.AddMemoryCache(options =>
+        {
+            options.SizeLimit = 10000;           // Max 10,000 cache entries
+            options.CompactionPercentage = 0.20; // Remove 20% oldest when full
+            options.ExpirationScanFrequency = TimeSpan.FromHours(1); // Cleanup hourly
+        });
+
 
         //adding R2 S3 Client 
         services.AddSingleton<IAmazonS3>(provider =>

@@ -794,7 +794,6 @@ public class PrivilegeService(
         
         foreach (var privilege in privileges)
         {
-            // Check if already unlocked today
             if (privilege.LastDailyUnlockDate?.Date == DateTime.UtcNow.Date)
             {
                 logger.LogDebug(
@@ -803,9 +802,9 @@ public class PrivilegeService(
                 continue;
             }
             
-            // Only unlock if we have locked chapters
-            if (privilege.CurrentLockedCount > 0)
+            if (privilege.CurrentLockedCount > 0 && privilege.PrivilegeStartSequence.HasValue)
             {
+                privilege.PrivilegeStartSequence++;
                 privilege.CurrentLockedCount--;
                 privilege.TotalDailyUnlocksPerformed++;
                 privilege.LastDailyUnlockDate = DateTime.UtcNow;
@@ -814,8 +813,14 @@ public class PrivilegeService(
                 unlockedCount++;
                 
                 logger.LogInformation(
-                    "Daily unlock for novel {NovelId}: {RemainingLocked} chapters still locked",
-                    privilege.NovelId, privilege.CurrentLockedCount);
+                    "Daily unlock for novel {NovelId}: Start sequence moved to {NewStart}, {RemainingLocked} chapters still locked",
+                    privilege.NovelId, privilege.PrivilegeStartSequence.Value, privilege.CurrentLockedCount);
+            }
+            else if (privilege.CurrentLockedCount == 0)
+            {
+                logger.LogDebug(
+                    "Novel {NovelId} has no locked chapters, skipping daily unlock (waiting for new chapter)",
+                    privilege.NovelId);
             }
         }
         

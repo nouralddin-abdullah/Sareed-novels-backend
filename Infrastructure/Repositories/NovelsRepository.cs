@@ -153,4 +153,47 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         await dbContext.SaveChangesAsync();
         return publishedChapters.Count;
     }
+
+    public async Task<List<Novel>> GetNovelsByIdsAsync(List<Guid> novelIds)
+    {
+        if (novelIds == null || novelIds.Count == 0)
+            return new List<Novel>();
+
+        return await dbContext.Novels
+            .AsNoTracking()
+            .Where(n => novelIds.Contains(n.Id))
+            .Include(n => n.NovelGenres)
+                .ThenInclude(ng => ng.Genre)
+            .ToListAsync();
+    }
+
+    public async Task<List<Novel>> GetNovelsBySharedGenresAsync(
+        List<int> genreIds,
+        Guid excludeNovelId,
+        int limit)
+    {
+        if (genreIds == null || genreIds.Count == 0)
+            return new List<Novel>();
+
+        return await dbContext.NovelGenres
+            .Where(ng => genreIds.Contains(ng.GenreId) &&
+                         ng.NovelId != excludeNovelId &&
+                         ng.Novel.IsEligibleForRanking &&
+                         !ng.Novel.IsDraft)
+            .GroupBy(ng => ng.NovelId)
+            .Select(g => new
+            {
+                NovelId = g.Key,
+                SharedCount = g.Count(),
+                Novel = g.First().Novel
+            })
+            .OrderByDescending(x => x.SharedCount)
+            .ThenByDescending(x => x.Novel.TotalAverageScore)
+            .Take(limit)
+            .Select(x => x.Novel)
+            .Include(n => n.NovelGenres)
+                .ThenInclude(ng => ng.Genre)
+            .ToListAsync();
+    }
 }
+

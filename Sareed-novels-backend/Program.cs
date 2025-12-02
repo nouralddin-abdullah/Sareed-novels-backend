@@ -44,11 +44,16 @@ using (var scope = app.Services.CreateScope())
         
         // Seed roles after migrations
         await RoleSeeder.SeedRolesAsync(services);
+        
+        // Seed genres after migrations
+        var genreLogger = services.GetRequiredService<ILogger<GenreSeeder>>();
+        var genreSeeder = new GenreSeeder(dbContext, genreLogger);
+        await genreSeeder.SeedAsync();
     }
     catch (Exception ex)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while applying migrations or seeding roles");
+        logger.LogError(ex, "An error occurred while applying migrations, seeding roles, or seeding genres");
         throw; // Stop startup if migrations fail
     }
 }

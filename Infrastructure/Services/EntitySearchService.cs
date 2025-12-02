@@ -7,18 +7,17 @@ using Domain.Repositories;
 using Infrastructure.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using OpenSearch.Client; // ✅ Changed from Nest
+using OpenSearch.Client;
 using System.Text.Json;
 
 namespace Infrastructure.Services;
 
-// ✅ Entity (Character/Location/Organization) search service
 public class EntitySearchService(
     ILogger<EntitySearchService> logger,
-    IOpenSearchClient openSearchClient, // ✅ Changed from IElasticClient
+    IOpenSearchClient openSearchClient,
     INovelEntityRepository entityRepository,
-    INovelsRepository novelsRepository, // Used for potential future features
-    IOptions<OpenSearchSettings> settings) : IEntitySearchService // Used for advanced configuration
+    INovelsRepository novelsRepository,
+    IOptions<OpenSearchSettings> settings) : IEntitySearchService
 {
     private readonly string _indexName = "sareed-entities";
 
@@ -119,7 +118,6 @@ public class EntitySearchService(
                 return false;
             }
 
-            logger.LogInformation("Successfully indexed entity {EntityId}", entityId);
             return true;
         }
         catch (Exception ex)
@@ -160,7 +158,6 @@ public class EntitySearchService(
                 return false;
             }
 
-            logger.LogInformation("Successfully updated entity {EntityId} in index", entityId);
             return true;
         }
         catch (Exception ex)
@@ -185,7 +182,6 @@ public class EntitySearchService(
                 return false;
             }
 
-            logger.LogInformation("Successfully deleted entity {EntityId} from index", entityId);
             return true;
         }
         catch (Exception ex)
@@ -230,7 +226,6 @@ public class EntitySearchService(
                 return false;
             }
 
-            logger.LogInformation("Successfully bulk indexed {Count} entities", documents.Count);
             return true;
         }
         catch (Exception ex)
@@ -298,14 +293,7 @@ public class EntitySearchService(
 
             var createResponse = await openSearchClient.Indices.CreateAsync(_indexName, c => c
                 .Settings(s => s
-                    .Analysis(a => a
-                        .Analyzers(an => an
-                            .Custom("arabic_custom", ca => ca
-                                .Tokenizer("standard")
-                                .Filters("lowercase", "arabic_normalization", "arabic_stem")
-                            )
-                        )
-                    )
+                    .Analysis(a => a)
                 )
                 .Map<NovelEntitySearchDocument>(m => m
                     .Properties(p => p
@@ -315,11 +303,20 @@ public class EntitySearchService(
                         .Keyword(k => k.Name(n => n.Icon))
                         .Text(t => t
                             .Name(n => n.Name)
-                            .Analyzer("arabic_custom")
+                            .Analyzer("arabic")
                         )
-                        .Text(t => t.Name(n => n.ShortDescription))
-                        .Text(t => t.Name(n => n.Description))
-                        .Text(t => t.Name(n => n.Role))
+                        .Text(t => t
+                            .Name(n => n.ShortDescription)
+                            .Analyzer("arabic")
+                        )
+                        .Text(t => t
+                            .Name(n => n.Description)
+                            .Analyzer("arabic")
+                        )
+                        .Text(t => t
+                            .Name(n => n.Role)
+                            .Analyzer("arabic")
+                        )
                         .Keyword(k => k.Name(n => n.ImageUrl))
                     )
                 )
@@ -417,14 +414,30 @@ public class EntitySearchService(
 
         if (!string.IsNullOrEmpty(query))
         {
-            mustClauses.Add(q.MultiMatch(m => m
-                .Query(query)
-                .Fields(f => f
-                    .Field(e => e.Name, boost: 2)
-                    .Field(e => e.Description)
-                    .Field(e => e.ShortDescription)
+            mustClauses.Add(q.Bool(b => b
+                .Should(
+                    s => s.Match(m => m
+                        .Field(f => f.Name)
+                        .Query(query)
+                        .Boost(3)
+                    ),
+                    s => s.MatchPhrase(m => m
+                        .Field(f => f.Name)
+                        .Query(query)
+                        .Boost(2)
+                    ),
+                    s => s.Match(m => m
+                        .Field(f => f.ShortDescription)
+                        .Query(query)
+                        .Boost(1)
+                    ),
+                    s => s.Match(m => m
+                        .Field(f => f.Description)
+                        .Query(query)
+                        .Boost(0.5)
+                    )
                 )
-                .Fuzziness(Fuzziness.Auto)
+                .MinimumShouldMatch(1)
             ));
         }
 

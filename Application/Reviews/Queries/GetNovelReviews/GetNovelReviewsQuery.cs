@@ -4,7 +4,7 @@ using MediatR;
 
 namespace Application.Reviews.Queries.GetNovelReviews;
 
-public class GetNovelReviewsQuery(Guid novelId, int pageSize, int pageNumber, string sorting) : IRequest<PagedResult<ReviewsDTO>>
+public class GetNovelReviewsQuery(Guid novelId, int pageSize, int pageNumber, string sorting) : IRequest<NovelReviewsResponse>
 {
     public Guid NovelId { get; set; } = novelId;
     public string Sorting { get; set; } = sorting;

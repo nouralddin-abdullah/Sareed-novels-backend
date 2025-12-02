@@ -15,5 +15,7 @@ public class ReviewProfiles : Profile
 
         CreateMap<Review, ReviewsDTO>()
             .ForMember(dest => dest.Reviewer, opt => opt.MapFrom(src => src.ReviewOwner));
+
+        CreateMap<Review, CurrentUserReviewDTO>();
     }
 }

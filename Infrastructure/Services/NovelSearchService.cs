@@ -6,14 +6,13 @@ using Domain.Repositories;
 using Infrastructure.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using OpenSearch.Client; // ✅ Changed from Nest
+using OpenSearch.Client;
 
 namespace Infrastructure.Services;
 
-// ✅ OPTIMIZED SERVICE: Uses OpenSearch for fast novel search
 public class NovelSearchService(
     ILogger<NovelSearchService> logger,
-    IOpenSearchClient openSearchClient, // ✅ Changed from IElasticClient
+    IOpenSearchClient openSearchClient,
     INovelsRepository novelsRepository,
     IOptions<OpenSearchSettings> settings) : INovelSearchService
 {
@@ -102,14 +101,9 @@ public class NovelSearchService(
                 return false;
             }
 
-            // Only skip drafts - IsEligibleForRanking is for ranking only, not search
             if (novel.IsDraft)
             {
-                logger.LogInformation(
-                    "Skipping indexing for draft novel {NovelId}",
-                    novelId
-                );
-                return true; // Not an error, just not eligible
+                return true;
             }
 
             var document = MapNovelToDocument(novel);
@@ -117,15 +111,10 @@ public class NovelSearchService(
 
             if (!response.IsValid)
             {
-                logger.LogError(
-                    "Failed to index novel {NovelId}: {Error}",
-                    novelId,
-                    response.DebugInformation
-                );
+                logger.LogError("Failed to index novel {NovelId}: {Error}", novelId, response.DebugInformation);
                 return false;
             }
 
-            logger.LogInformation("Successfully indexed novel {NovelId}", novelId);
             return true;
         }
         catch (Exception ex)
@@ -143,17 +132,11 @@ public class NovelSearchService(
             if (novel == null)
             {
                 logger.LogWarning("Novel {NovelId} not found for updating", novelId);
-                // Novel was deleted, remove from index
                 return await DeleteNovelFromIndexAsync(novelId);
             }
 
-            // If novel becomes draft, remove from index
             if (novel.IsDraft)
             {
-                logger.LogInformation(
-                    "Novel {NovelId} is now draft, removing from index",
-                    novelId
-                );
                 return await DeleteNovelFromIndexAsync(novelId);
             }
 
@@ -163,20 +146,15 @@ public class NovelSearchService(
                 u => u
                     .Index(_indexName)
                     .Doc(document)
-                    .DocAsUpsert(true) // Create if doesn't exist
+                    .DocAsUpsert(true)
             );
 
             if (!response.IsValid)
             {
-                logger.LogError(
-                    "Failed to update novel {NovelId}: {Error}",
-                    novelId,
-                    response.DebugInformation
-                );
+                logger.LogError("Failed to update novel {NovelId}: {Error}", novelId, response.DebugInformation);
                 return false;
             }
 
-            logger.LogInformation("Successfully updated novel {NovelId} in index", novelId);
             return true;
         }
         catch (Exception ex)
@@ -197,15 +175,10 @@ public class NovelSearchService(
 
             if (!response.IsValid && response.Result != Result.NotFound)
             {
-                logger.LogError(
-                    "Failed to delete novel {NovelId}: {Error}",
-                    novelId,
-                    response.DebugInformation
-                );
+                logger.LogError("Failed to delete novel {NovelId}: {Error}", novelId, response.DebugInformation);
                 return false;
             }
 
-            logger.LogInformation("Successfully deleted novel {NovelId} from index", novelId);
             return true;
         }
         catch (Exception ex)
@@ -250,10 +223,6 @@ public class NovelSearchService(
                 return false;
             }
 
-            logger.LogInformation(
-                "Successfully bulk indexed {Count} novels",
-                documents.Count
-            );
             return true;
         }
         catch (Exception ex)
@@ -297,18 +266,12 @@ public class NovelSearchService(
                 if (bulkResponse.IsValid)
                 {
                     indexedCount += documents.Count;
-                    logger.LogInformation(
-                        "Indexed batch {Current}/{Total}",
-                        i + batch.Count,
-                        eligibleNovels.Count
-                    );
                 }
                 else
                 {
                     logger.LogError("Batch indexing failed: {Error}", bulkResponse.DebugInformation);
                 }
 
-                // Small delay to avoid overwhelming Elasticsearch
                 await Task.Delay(100);
             }
 
@@ -340,25 +303,21 @@ public class NovelSearchService(
 
             var createResponse = await openSearchClient.Indices.CreateAsync(_indexName, c => c
                 .Settings(s => s
-                    .Analysis(a => a
-                        .Analyzers(an => an
-                            .Custom("arabic_custom", ca => ca
-                                .Tokenizer("standard")
-                                .Filters("lowercase", "arabic_normalization", "arabic_stem")
-                            )
-                        )
-                    )
+                    .Analysis(a => a)
                 )
                 .Map<NovelSearchDocument>(m => m
                     .Properties(p => p
                         .Keyword(k => k.Name(n => n.Id))
                         .Text(t => t
                             .Name(n => n.Title)
-                            .Analyzer("arabic_custom")
+                            .Analyzer("arabic")
                             .Fields(f => f.Keyword(k => k.Name("keyword")))
                         )
                         .Keyword(k => k.Name(n => n.Slug))
-                        .Text(t => t.Name(n => n.Summary))
+                        .Text(t => t
+                            .Name(n => n.Summary)
+                            .Analyzer("arabic")
+                        )
                         .Keyword(k => k.Name(n => n.CoverImageUrl))
                         .Keyword(k => k.Name(n => n.Status))
                         .Boolean(b => b.Name(n => n.IsDraft))
@@ -394,7 +353,6 @@ public class NovelSearchService(
     {
         var mustClauses = new List<QueryContainer>();
 
-        // Only filter out drafts - IsEligibleForRanking is for ranking only, not search
         mustClauses.Add(q.Term(t => t.Field(f => f.IsDraft).Value(false)));
 
         // Text search query
@@ -422,15 +380,12 @@ public class NovelSearchService(
             mustClauses.Add(q.Term(t => t.Field(f => f.Status).Value(request.Status)));
         }
 
-        // Chapter count range filter - support multiple ranges with OR logic
         var rangesToUse = new List<ChapterCountRange>();
         
-        // Prioritize ChapterRanges (new multiple ranges)
         if (request.ChapterRanges != null && request.ChapterRanges.Any())
         {
             rangesToUse.AddRange(request.ChapterRanges);
         }
-        // Fallback to single ChapterRange for backward compatibility
         else if (request.ChapterRange.HasValue)
         {
             rangesToUse.Add(request.ChapterRange.Value);
@@ -438,7 +393,6 @@ public class NovelSearchService(
 
         if (rangesToUse.Any())
         {
-            // If only one range, use simple query
             if (rangesToUse.Count == 1)
             {
                 var rangeQuery = BuildChapterRangeQuery(q, rangesToUse[0]);
@@ -449,7 +403,6 @@ public class NovelSearchService(
             }
             else
             {
-                // Multiple ranges: use OR logic (should clause)
                 var rangeQueries = rangesToUse
                     .Select(range => BuildChapterRangeQuery(q, range))
                     .Where(rq => rq != null)
@@ -501,7 +454,7 @@ public class NovelSearchService(
             NovelSortBy.MostPopular => s.Descending(f => f.TotalViews),
             NovelSortBy.HighestRated => s.Descending(f => f.TotalAverageScore),
             NovelSortBy.MostReviewed => s.Descending(f => f.ReviewCount),
-            _ => s.Descending(SortSpecialField.Score) // Relevance (default)
+            _ => s.Descending(SortSpecialField.Score)
         };
     }
 

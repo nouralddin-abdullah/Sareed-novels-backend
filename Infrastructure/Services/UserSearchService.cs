@@ -6,16 +6,15 @@ using Domain.Repositories;
 using Infrastructure.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using OpenSearch.Client; // ✅ Changed from Nest
+using OpenSearch.Client;
 
 namespace Infrastructure.Services;
 
-// ✅ User search service using OpenSearch
 public class UserSearchService(
     ILogger<UserSearchService> logger,
-    IOpenSearchClient openSearchClient, // ✅ Changed from IElasticClient
+    IOpenSearchClient openSearchClient,
     IUsersRepository usersRepository,
-    IOptions<OpenSearchSettings> settings) : IUserSearchService // Used for advanced configuration
+    IOptions<OpenSearchSettings> settings) : IUserSearchService
 {
     private readonly string _indexName = "sareed-users";
 
@@ -30,7 +29,7 @@ public class UserSearchService(
                 .From((request.PageNumber - 1) * request.PageSize)
                 .Size(request.PageSize)
                 .Query(q => BuildSearchQuery(q, request))
-                .Sort(s => s.Descending(SortSpecialField.Score)) // Sort by relevance/match score
+                .Sort(s => s.Descending(SortSpecialField.Score))
                 .TrackTotalHits(true);
 
             var response = await openSearchClient.SearchAsync<UserSearchDocument>(searchDescriptor, cancellationToken);
@@ -105,7 +104,6 @@ public class UserSearchService(
                 return false;
             }
 
-            logger.LogInformation("Successfully indexed user {UserId}", userId);
             return true;
         }
         catch (Exception ex)
@@ -141,7 +139,6 @@ public class UserSearchService(
                 return false;
             }
 
-            logger.LogInformation("Successfully updated user {UserId} in index", userId);
             return true;
         }
         catch (Exception ex)
@@ -166,7 +163,6 @@ public class UserSearchService(
                 return false;
             }
 
-            logger.LogInformation("Successfully deleted user {UserId} from index", userId);
             return true;
         }
         catch (Exception ex)
@@ -193,10 +189,6 @@ public class UserSearchService(
                 .Settings(s => s
                     .Analysis(a => a
                         .Analyzers(an => an
-                            .Custom("arabic_custom", ca => ca
-                                .Tokenizer("standard")
-                                .Filters("lowercase", "arabic_normalization", "arabic_stem")
-                            )
                             .Custom("username_analyzer", ca => ca
                                 .Tokenizer("keyword")
                                 .Filters("lowercase")
@@ -235,7 +227,7 @@ public class UserSearchService(
                         )
                         .Text(t => t
                             .Name(n => n.DisplayName)
-                            .Analyzer("arabic_custom")
+                            .Analyzer("arabic")
                         )
                         .Keyword(k => k.Name(n => n.ProfilePhoto))
                         .Number(n => n.Name(nn => nn.FollowersCount).Type(NumberType.Integer))
