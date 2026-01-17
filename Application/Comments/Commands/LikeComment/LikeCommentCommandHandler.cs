@@ -1,4 +1,4 @@
-using Application.Users;
+﻿using Application.Users;
 using Application.Users.Commands.FollowUser;
 using Domain.Entities;
 using Domain.Exceptions;
@@ -100,13 +100,60 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
             var backgroundUserManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<User>>();
             var backgroundNotificationService = scope.ServiceProvider.GetRequiredService<Application.Services.INotificationService>();
             var backgroundCommentsRepository = scope.ServiceProvider.GetRequiredService<ICommentsRepository>();
+            var backgroundChaptersRepository = scope.ServiceProvider.GetRequiredService<IChaptersRepository>();
+            var backgroundParagraphsRepository = scope.ServiceProvider.GetRequiredService<IChapterParagraphsRepository>();
+            var backgroundNovelsRepository = scope.ServiceProvider.GetRequiredService<INovelsRepository>();
+            var backgroundPostsRepository = scope.ServiceProvider.GetRequiredService<IPostsRepository>();
             
             var liker = await backgroundUserManager.FindByIdAsync(likerUserId);
             var comment = await backgroundCommentsRepository.GetCommentById(commentId);
             
             if (liker != null && comment != null)
             {
-                await backgroundNotificationService.SendLikeOnCommentNotification(commentAuthorId, liker, commentId, comment);
+                // Get context for the notification URL
+                Novel? novel = null;
+                Chapter? chapter = null;
+                string? postAuthorUsername = null;
+
+                if (comment.ChapterId.HasValue)
+                {
+                    chapter = await backgroundChaptersRepository.GetChapterById(comment.ChapterId.Value);
+                    if (chapter != null)
+                    {
+                        novel = await backgroundNovelsRepository.GetOne(chapter.NovelId);
+                    }
+                }
+                else if (comment.ParagraphId.HasValue)
+                {
+                    var paragraph = await backgroundParagraphsRepository.GetParagraphById(comment.ParagraphId.Value);
+                    if (paragraph != null)
+                    {
+                        chapter = await backgroundChaptersRepository.GetChapterById(paragraph.ChapterId);
+                        if (chapter != null)
+                        {
+                            novel = await backgroundNovelsRepository.GetOne(chapter.NovelId);
+                        }
+                    }
+                }
+                else if (comment.PostId.HasValue)
+                {
+                    var post = await backgroundPostsRepository.GetPostById(comment.PostId.Value);
+                    if (post != null)
+                    {
+                        var postAuthor = await backgroundUserManager.FindByIdAsync(post.UserId);
+                        postAuthorUsername = postAuthor?.UserName;
+                    }
+                }
+
+                await backgroundNotificationService.SendLikeOnCommentNotification(
+                    commentAuthorId, 
+                    liker, 
+                    commentId, 
+                    comment, 
+                    novel, 
+                    chapter, 
+                    postAuthorUsername);
+                    
                 _logger.LogDebug("Sent LikeOnComment notification to user {UserId}", commentAuthorId);
             }
         }

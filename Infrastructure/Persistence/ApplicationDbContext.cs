@@ -46,6 +46,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     // Privilege System
     internal DbSet<NovelPrivilege> NovelPrivileges { get; set; }
     internal DbSet<NovelPrivilegeSubscription> NovelPrivilegeSubscriptions { get; set; }
+    
+    // Competition System
+    internal DbSet<Competition> Competitions { get; set; }
+    internal DbSet<CompetitionParticipant> CompetitionParticipants { get; set; }
+    internal DbSet<CompetitionWinner> CompetitionWinners { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1230,6 +1235,144 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(nps => nps.SubscribedAt)
                 .HasDatabaseName("IX_NovelPrivilegeSubscriptions_SubscribedAt");
+        });
+
+        // Competition configuration
+        modelBuilder.Entity<Competition>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+
+            entity.Property(c => c.Name)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(c => c.Slug)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(c => c.ImageUrl)
+                .HasMaxLength(500);
+
+            entity.Property(c => c.TotalPrize)
+                .HasPrecision(18, 2);
+
+            entity.Property(c => c.PrizeFirstPlace)
+                .HasPrecision(18, 2);
+
+            entity.Property(c => c.PrizeSecondPlace)
+                .HasPrecision(18, 2);
+
+            entity.Property(c => c.PrizeThirdPlace)
+                .HasPrecision(18, 2);
+
+            entity.Property(c => c.Status)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasDefaultValue(CompetitionStatus.Upcoming);
+
+            entity.Property(c => c.MinChapters)
+                .HasDefaultValue(5);
+
+            entity.Property(c => c.IsActive)
+                .HasDefaultValue(true);
+
+            entity.HasIndex(c => c.Slug)
+                .IsUnique()
+                .HasDatabaseName("IX_Competitions_Slug_Unique");
+
+            entity.HasIndex(c => c.Status)
+                .HasDatabaseName("IX_Competitions_Status");
+
+            entity.HasIndex(c => new { c.IsActive, c.Status })
+                .HasDatabaseName("IX_Competitions_Active_Status");
+
+            entity.HasIndex(c => c.ParticipationStartDate)
+                .HasDatabaseName("IX_Competitions_ParticipationStart");
+        });
+
+        // CompetitionParticipant configuration
+        modelBuilder.Entity<CompetitionParticipant>(entity =>
+        {
+            entity.HasKey(cp => cp.Id);
+
+            entity.HasOne(cp => cp.Competition)
+                .WithMany(c => c.Participants)
+                .HasForeignKey(cp => cp.CompetitionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(cp => cp.Novel)
+                .WithMany()
+                .HasForeignKey(cp => cp.NovelId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.Property(cp => cp.CurrentPoints)
+                .HasPrecision(18, 2)
+                .HasDefaultValue(0);
+
+            entity.Property(cp => cp.ExtraPoints)
+                .HasPrecision(18, 2)
+                .HasDefaultValue(0);
+
+            entity.Property(cp => cp.ViewsAtJoin)
+                .HasDefaultValue(0);
+
+            entity.Property(cp => cp.CurrentRank)
+                .HasDefaultValue(0);
+
+            entity.HasIndex(cp => new { cp.CompetitionId, cp.NovelId })
+                .IsUnique()
+                .HasDatabaseName("IX_CompetitionParticipants_Competition_Novel_Unique");
+
+            entity.HasIndex(cp => cp.CompetitionId)
+                .HasDatabaseName("IX_CompetitionParticipants_CompetitionId");
+
+            entity.HasIndex(cp => cp.NovelId)
+                .HasDatabaseName("IX_CompetitionParticipants_NovelId");
+
+            entity.HasIndex(cp => new { cp.CompetitionId, cp.CurrentPoints })
+                .HasDatabaseName("IX_CompetitionParticipants_Competition_Points");
+
+            entity.HasIndex(cp => cp.JoinedAt)
+                .HasDatabaseName("IX_CompetitionParticipants_JoinedAt");
+        });
+
+        // CompetitionWinner configuration
+        modelBuilder.Entity<CompetitionWinner>(entity =>
+        {
+            entity.HasKey(cw => cw.Id);
+
+            entity.HasOne(cw => cw.Competition)
+                .WithMany(c => c.Winners)
+                .HasForeignKey(cw => cw.CompetitionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(cw => cw.Novel)
+                .WithMany()
+                .HasForeignKey(cw => cw.NovelId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(cw => cw.Author)
+                .WithMany()
+                .HasForeignKey(cw => cw.AuthorId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.Property(cw => cw.FinalPoints)
+                .HasPrecision(18, 2);
+
+            entity.Property(cw => cw.PrizeWon)
+                .HasPrecision(18, 2);
+
+            entity.HasIndex(cw => cw.CompetitionId)
+                .HasDatabaseName("IX_CompetitionWinners_CompetitionId");
+
+            entity.HasIndex(cw => new { cw.CompetitionId, cw.Rank })
+                .HasDatabaseName("IX_CompetitionWinners_Competition_Rank");
+
+            entity.HasIndex(cw => cw.AuthorId)
+                .HasDatabaseName("IX_CompetitionWinners_AuthorId");
+
+            entity.HasIndex(cw => cw.NovelId)
+                .HasDatabaseName("IX_CompetitionWinners_NovelId");
         });
     }
 }

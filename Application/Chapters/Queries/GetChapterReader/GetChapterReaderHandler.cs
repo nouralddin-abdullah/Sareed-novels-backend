@@ -5,6 +5,7 @@ using AutoMapper;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Application.Chapters.Queries.GetChapterReader;
 
@@ -14,7 +15,8 @@ public class GetChapterReaderHandler(
     INovelsRepository novelsRepository, 
     IMapper mapper,
     IUserContext userContext,
-    IPrivilegeService privilegeService) : IRequestHandler<GetChapterReaderQuery, ChapterSingleReaderDTO>
+    IPrivilegeService privilegeService,
+    IServiceProvider serviceProvider) : IRequestHandler<GetChapterReaderQuery, ChapterSingleReaderDTO>
 {
     public async Task<ChapterSingleReaderDTO> Handle(GetChapterReaderQuery request, CancellationToken cancellationToken)
     {
@@ -51,6 +53,23 @@ public class GetChapterReaderHandler(
         var paragraphs = await paragraphsRepository.GetChapterParagraphs(chapter.Id);
         chapterDTO.Paragraphs = mapper.Map<List<ChapterParagraphDTO>>(paragraphs);
         
+        // Fire-and-forget view count increment
+        _ = IncrementViewsInBackground(chapter.Id);
+        
         return chapterDTO;
+    }
+
+    private async Task IncrementViewsInBackground(Guid chapterId)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var backgroundChaptersRepository = scope.ServiceProvider.GetRequiredService<IChaptersRepository>();
+            await backgroundChaptersRepository.IncrementChapterViewsCountAsync(chapterId);
+        }
+        catch
+        {
+            // Silently ignore - fire-and-forget
+        }
     }
 }

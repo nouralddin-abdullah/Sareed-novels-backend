@@ -8,7 +8,7 @@ public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
     public CreateUserCommandValidator()
     {
         RuleFor(dto => dto.UserName)
-            .Length(4, 20)
+            .Length(3, 20)
             .NotEmpty()
             .WithMessage("A user should have valid user name");
 

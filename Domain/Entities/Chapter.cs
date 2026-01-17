@@ -20,6 +20,7 @@ public class Chapter
     public int CommentsCount { get; set; } = 0; // Chapter-level only
     public int TotalCommentsCount { get; set; } = 0; // Chapter + paragraphs
     public int ParagraphsCount { get; set; } = 0;
+    public int ViewsCount { get; set; } = 0;
 
     public void IncrementCommentsCount()
     {
@@ -50,5 +51,10 @@ public class Chapter
         {
             TotalCommentsCount--;
         }
+    }
+
+    public void IncrementViewsCount()
+    {
+        ViewsCount++;
     }
 }

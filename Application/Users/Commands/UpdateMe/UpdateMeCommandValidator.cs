@@ -8,7 +8,7 @@ public class UpdateMeCommandValidator : AbstractValidator<UpdateMeCommand>
     public UpdateMeCommandValidator()
     {
         RuleFor(dto => dto.UserName)
-            .Length(4, 20)
+            .Length(3, 20)
             .NotEmpty()
             .When(dto => dto.UserName != null)
             .WithMessage("A user should have valid user name");

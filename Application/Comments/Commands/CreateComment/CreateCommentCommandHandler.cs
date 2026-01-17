@@ -135,11 +135,50 @@ public class CreateCommentCommandHandler(
                 var parentComment = await backgroundCommentsRepository.GetCommentById(parentCommentId.Value);
                 if (parentComment != null)
                 {
+                    // Get context for the reply notification URL
+                    Novel? novel = null;
+                    Chapter? chapter = null;
+                    string? postAuthorUsername = null;
+
+                    if (parentComment.ChapterId.HasValue)
+                    {
+                        chapter = await backgroundChaptersRepository.GetChapterById(parentComment.ChapterId.Value);
+                        if (chapter != null)
+                        {
+                            novel = await backgroundNovelsRepository.GetOne(chapter.NovelId);
+                        }
+                    }
+                    else if (parentComment.ParagraphId.HasValue)
+                    {
+                        var paragraph = await scope.ServiceProvider.GetRequiredService<IChapterParagraphsRepository>()
+                            .GetParagraphById(parentComment.ParagraphId.Value);
+                        if (paragraph != null)
+                        {
+                            chapter = await backgroundChaptersRepository.GetChapterById(paragraph.ChapterId);
+                            if (chapter != null)
+                            {
+                                novel = await backgroundNovelsRepository.GetOne(chapter.NovelId);
+                            }
+                        }
+                    }
+                    else if (parentComment.PostId.HasValue)
+                    {
+                        var post = await backgroundPostsRepository.GetPostById(parentComment.PostId.Value);
+                        if (post != null)
+                        {
+                            var postAuthor = await backgroundUserManager.FindByIdAsync(post.UserId);
+                            postAuthorUsername = postAuthor?.UserName;
+                        }
+                    }
+
                     await backgroundNotificationService.SendReplyToCommentNotification(
                         parentComment.UserId,
                         commenter,
                         commentId,
-                        parentComment);
+                        parentComment,
+                        novel,
+                        chapter,
+                        postAuthorUsername);
                 }
             }
             else if (chapterId.HasValue)

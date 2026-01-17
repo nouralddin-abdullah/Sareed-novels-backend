@@ -101,4 +101,14 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         var result = await dbContext.SaveChangesAsync();
         return result > 0;
     }
+
+    public async Task IncrementChapterViewsCountAsync(Guid chapterId)
+    {
+        var chapter = await dbContext.Chapters.FindAsync(chapterId);
+        if (chapter != null)
+        {
+            chapter.IncrementViewsCount();
+            await dbContext.SaveChangesAsync();
+        }
+    }
 }

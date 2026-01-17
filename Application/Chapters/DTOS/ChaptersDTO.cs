@@ -10,6 +10,7 @@ public class ChaptersDTO
     public string Status { get; set; } = default!;
     public int ParagraphsCount { get; set; }
     public int TotalCommentsCount { get; set; }
+    public int ViewsCount { get; set; }
     public DateTime CreatedAt { get; set; } = default!;
     
     // Privilege System

@@ -14,4 +14,5 @@ public interface IChaptersRepository
     Task<IEnumerable<Chapter>> GetChaptersReaderView(Guid novelId);
     Task<bool> ReorderChapters(Guid novelId, List<Guid> orderedChapterIds);
     Task<string?> GetNextChapterSlug(Guid novelId, int currentChapterIndex);
+    Task IncrementChapterViewsCountAsync(Guid chapterId);
 }

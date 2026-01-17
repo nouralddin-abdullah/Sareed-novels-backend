@@ -4,6 +4,7 @@ using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251217154948_addChapterViewCount")]
+    partial class addChapterViewCount
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -255,209 +258,6 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("IX_Comments_Post_Parent");
 
                     b.ToTable("Comments");
-                });
-
-            modelBuilder.Entity("Domain.Entities.Competition", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ImageUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<DateTime>("JudgmentEndDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("JudgmentStartDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("MaxNovelAgeDays")
-                        .HasColumnType("int");
-
-                    b.Property<int>("MinChapters")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(5);
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<DateTime>("ParticipationEndDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("ParticipationStartDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<decimal>("PrizeFirstPlace")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("PrizeSecondPlace")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("PrizeThirdPlace")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("ResultsDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Slug")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasDefaultValue("Upcoming");
-
-                    b.Property<decimal>("TotalPrize")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ParticipationStartDate")
-                        .HasDatabaseName("IX_Competitions_ParticipationStart");
-
-                    b.HasIndex("Slug")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Competitions_Slug_Unique");
-
-                    b.HasIndex("Status")
-                        .HasDatabaseName("IX_Competitions_Status");
-
-                    b.HasIndex("IsActive", "Status")
-                        .HasDatabaseName("IX_Competitions_Active_Status");
-
-                    b.ToTable("Competitions");
-                });
-
-            modelBuilder.Entity("Domain.Entities.CompetitionParticipant", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("CompetitionId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<decimal>("CurrentPoints")
-                        .ValueGeneratedOnAdd()
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)")
-                        .HasDefaultValue(0m);
-
-                    b.Property<int>("CurrentRank")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
-
-                    b.Property<decimal>("ExtraPoints")
-                        .ValueGeneratedOnAdd()
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)")
-                        .HasDefaultValue(0m);
-
-                    b.Property<DateTime>("JoinedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("NovelId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("ViewsAtJoin")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompetitionId")
-                        .HasDatabaseName("IX_CompetitionParticipants_CompetitionId");
-
-                    b.HasIndex("JoinedAt")
-                        .HasDatabaseName("IX_CompetitionParticipants_JoinedAt");
-
-                    b.HasIndex("NovelId")
-                        .HasDatabaseName("IX_CompetitionParticipants_NovelId");
-
-                    b.HasIndex("CompetitionId", "CurrentPoints")
-                        .HasDatabaseName("IX_CompetitionParticipants_Competition_Points");
-
-                    b.HasIndex("CompetitionId", "NovelId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_CompetitionParticipants_Competition_Novel_Unique");
-
-                    b.ToTable("CompetitionParticipants");
-                });
-
-            modelBuilder.Entity("Domain.Entities.CompetitionWinner", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("AuthorId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<DateTime>("AwardedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("CompetitionId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<decimal>("FinalPoints")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("FinalViews")
-                        .HasColumnType("int");
-
-                    b.Property<Guid>("NovelId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<decimal>("PrizeWon")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("Rank")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AuthorId")
-                        .HasDatabaseName("IX_CompetitionWinners_AuthorId");
-
-                    b.HasIndex("CompetitionId")
-                        .HasDatabaseName("IX_CompetitionWinners_CompetitionId");
-
-                    b.HasIndex("NovelId")
-                        .HasDatabaseName("IX_CompetitionWinners_NovelId");
-
-                    b.HasIndex("CompetitionId", "Rank")
-                        .HasDatabaseName("IX_CompetitionWinners_Competition_Rank");
-
-                    b.ToTable("CompetitionWinners");
                 });
 
             modelBuilder.Entity("Domain.Entities.EntityArticle", b =>
@@ -2245,52 +2045,6 @@ namespace Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Domain.Entities.CompetitionParticipant", b =>
-                {
-                    b.HasOne("Domain.Entities.Competition", "Competition")
-                        .WithMany("Participants")
-                        .HasForeignKey("CompetitionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.Novel", "Novel")
-                        .WithMany()
-                        .HasForeignKey("NovelId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.Navigation("Competition");
-
-                    b.Navigation("Novel");
-                });
-
-            modelBuilder.Entity("Domain.Entities.CompetitionWinner", b =>
-                {
-                    b.HasOne("Domain.Entities.User", "Author")
-                        .WithMany()
-                        .HasForeignKey("AuthorId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.Competition", "Competition")
-                        .WithMany("Winners")
-                        .HasForeignKey("CompetitionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.Novel", "Novel")
-                        .WithMany()
-                        .HasForeignKey("NovelId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.Navigation("Author");
-
-                    b.Navigation("Competition");
-
-                    b.Navigation("Novel");
-                });
-
             modelBuilder.Entity("Domain.Entities.EntityArticle", b =>
                 {
                     b.HasOne("Domain.Entities.NovelEntity", "Entity")
@@ -2785,13 +2539,6 @@ namespace Infrastructure.Migrations
                     b.Navigation("Likes");
 
                     b.Navigation("Replies");
-                });
-
-            modelBuilder.Entity("Domain.Entities.Competition", b =>
-                {
-                    b.Navigation("Participants");
-
-                    b.Navigation("Winners");
                 });
 
             modelBuilder.Entity("Domain.Entities.Genre", b =>

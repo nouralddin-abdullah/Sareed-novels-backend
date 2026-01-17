@@ -40,10 +40,11 @@ namespace Application.Users.Commands.GoogleLogin
                 if (user == null)
                 {
                     // Create new user from Google account
+                    var randomNumber = new Random().Next(100000, 999999);
                     user = new User
                     {
                         Id = Guid.NewGuid().ToString(),
-                        UserName = payload.Email,
+                        UserName = $"sarduser{randomNumber}",
                         Email = payload.Email,
                         DisplayName = payload.Name ?? payload.Email,
                         EmailConfirmed = payload.EmailVerified,

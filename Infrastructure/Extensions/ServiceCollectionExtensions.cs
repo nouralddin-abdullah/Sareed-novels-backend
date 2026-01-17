@@ -86,6 +86,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INovelPrivilegeRepository, NovelPrivilegeRepository>();
         services.AddScoped<IPrivilegeSubscriptionRepository, PrivilegeSubscriptionRepository>();
         services.AddScoped<IPrivilegeService, PrivilegeService>();
+        
+        // Competition System
+        services.AddScoped<ICompetitionRepository, CompetitionRepository>();
+        services.AddScoped<ICompetitionParticipantRepository, CompetitionParticipantRepository>();
+        services.AddScoped<ICompetitionWinnerRepository, CompetitionWinnerRepository>();
 
         //adding cloudflare settings
         services.Configure<CloudflareR2Settings>(

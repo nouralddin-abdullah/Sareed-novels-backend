@@ -101,27 +101,25 @@ public class NotificationService(
         }
     }
 
-    public async Task SendReplyToCommentNotification(string originalCommentAuthorId, User replier, Guid replyId, Domain.Entities.Comments originalComment)
+    public async Task SendReplyToCommentNotification(string originalCommentAuthorId, User replier, Guid replyId, Domain.Entities.Comments originalComment, Novel? novel = null, Chapter? chapter = null, string? postAuthorUsername = null)
     {
         try
         {
             // Don't notify if user replies to their own comment
             if (originalCommentAuthorId == replier.Id) return;
 
-            string actionUrl;
-            if (originalComment.ChapterId.HasValue || originalComment.ParagraphId.HasValue)
+            // ✅ Build direct URL to chapter or post (frontend doesn't support comment anchors)
+            string actionUrl = "/notifications"; // Default fallback
+            
+            // For chapter/paragraph comments, link directly to chapter
+            if ((originalComment.ChapterId.HasValue || originalComment.ParagraphId.HasValue) && novel != null && chapter != null)
             {
-                // Will need chapter ID from backend - use GetComment endpoint
-                actionUrl = $"/notifications/comment/{replyId}";
+                actionUrl = $"/novel/{novel.Slug}/chapter/{chapter.Id}";
             }
-            else if (originalComment.PostId.HasValue)
+            // For post comments, link to user profile
+            else if (originalComment.PostId.HasValue && !string.IsNullOrEmpty(postAuthorUsername))
             {
-                // Will need post author username from backend
-                actionUrl = $"/notifications/comment/{replyId}";
-            }
-            else
-            {
-                actionUrl = "/notifications";
+                actionUrl = $"/profile/{postAuthorUsername}";
             }
 
             var notification = new Notification
@@ -135,7 +133,7 @@ public class NotificationService(
                 Message = $"{replier.DisplayName} رد على تعليقك",
                 ActionUrl = actionUrl,
                 IsRead = false,
-                RelatedEntityId = replyId,
+                RelatedEntityId = replyId,  // Keep reply ID for reference
                 RelatedEntityType = "Comment",
                 CreatedAt = DateTime.UtcNow
             };
@@ -247,15 +245,26 @@ public class NotificationService(
         }
     }
 
-    public async Task SendLikeOnCommentNotification(string commentAuthorId, User liker, Guid commentId, Domain.Entities.Comments comment)
+    public async Task SendLikeOnCommentNotification(string commentAuthorId, User liker, Guid commentId, Domain.Entities.Comments comment, Novel? novel = null, Chapter? chapter = null, string? postAuthorUsername = null)
     {
         try
         {
             // Don't notify if user likes their own comment
             if (commentAuthorId == liker.Id) return;
 
-            // Use GetComment endpoint to resolve the correct URL on frontend
-            string actionUrl = $"/notifications/comment/{commentId}";
+            // ✅ Build direct URL: chapter comment → chapter, post comment → profile
+            string actionUrl = "/notifications"; // Default fallback
+            
+            // For chapter/paragraph comments, link directly to chapter
+            if ((comment.ChapterId.HasValue || comment.ParagraphId.HasValue) && novel != null && chapter != null)
+            {
+                actionUrl = $"/novel/{novel.Slug}/chapter/{chapter.Id}";
+            }
+            // For post comments, link to user profile
+            else if (comment.PostId.HasValue && !string.IsNullOrEmpty(postAuthorUsername))
+            {
+                actionUrl = $"/profile/{postAuthorUsername}";
+            }
 
             var notification = new Notification
             {
