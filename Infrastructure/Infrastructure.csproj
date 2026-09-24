@@ -9,7 +9,6 @@
   <ItemGroup>
     <PackageReference Include="AWSSDK.Core" Version="4.0.0.14" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.4.1" />
-    <PackageReference Include="OpenSearch.Client" Version="1.8.0" />
   </ItemGroup>
   
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
@@ -35,6 +34,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Application\Application.csproj" />
     <ProjectReference Include="..\Domain\Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sareed-novels-backend.Tests" />
   </ItemGroup>
 
 </Project>

@@ -12,8 +12,7 @@ public class RemoveGalleryImageCommandHandler(
     ILogger<RemoveGalleryImageCommandHandler> logger,
     INovelEntityRepository entityRepository,
     INovelsRepository novelsRepository,
-    IUserContext userContext,
-    ISearchIndexQueueService searchQueue) : IRequestHandler<RemoveGalleryImageCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<RemoveGalleryImageCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(RemoveGalleryImageCommand request, CancellationToken cancellationToken)
     {
@@ -40,9 +39,6 @@ public class RemoveGalleryImageCommandHandler(
         }
 
         await entityRepository.DeleteGalleryImageAsync(request.ImageId);
-
-        // Queue entity update for Elasticsearch
-        await searchQueue.QueueEntityUpdateAsync(entity.Id);
 
         logger.LogInformation("Gallery image {ImageId} removed from entity {EntityId}", request.ImageId, entity.Id);
 

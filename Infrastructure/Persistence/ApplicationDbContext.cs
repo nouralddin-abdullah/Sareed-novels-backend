@@ -1,4 +1,5 @@
 ﻿using Domain.Entities;
+using Domain.Search;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,6 +8,7 @@ namespace Infrastructure.Persistence;
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<User>(options)
 {
     internal DbSet<Novel> Novels { get; set; }
+    internal DbSet<DailyUniqueView> DailyUniqueViews { get; set; }
     internal DbSet<Follow> Follows { get; set; }
     internal DbSet<Review> Reviews { get; set; }
     internal DbSet<ReviewLike> ReviewLikes { get; set; }
@@ -110,6 +112,38 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             // Add index for sorting by rating
             entity.HasIndex(n => n.TotalAverageScore);
+
+            entity.Property(n => n.SearchTitle)
+                  .HasMaxLength(SearchText.TitleMaxLength)
+                  .HasDefaultValue(string.Empty);
+            entity.HasIndex(n => n.SearchTitle);
+        });
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.Property(u => u.SearchName)
+                  .HasMaxLength(SearchText.TitleMaxLength)
+                  .HasDefaultValue(string.Empty);
+            entity.HasIndex(u => u.SearchName);
+        });
+
+        modelBuilder.Entity<DailyUniqueView>(entity =>
+        {
+            entity.HasKey(v => new { v.TargetId, v.Day, v.VisitorKey });
+
+            entity.Property(v => v.Day).HasColumnType("date");
+            // nvarchar on purpose: with this DB's SQL_ collation, varchar vs nvarchar parameters forces index scans.
+            entity.Property(v => v.VisitorKey).HasMaxLength(64);
+            entity.Property(v => v.Kind).HasConversion<byte>();
+
+            entity.HasOne<Novel>()
+                  .WithMany()
+                  .HasForeignKey(v => v.NovelId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // Distinct readers/visitors per novel over a date range.
+            entity.HasIndex(v => new { v.NovelId, v.Day, v.Kind })
+                  .IncludeProperties(v => v.VisitorKey);
         });
 
         modelBuilder.Entity<Review>(entity =>
@@ -723,6 +757,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.Name)
                 .IsRequired()
                 .HasMaxLength(200);
+
+            entity.Property(e => e.SearchName)
+                .HasMaxLength(SearchText.TitleMaxLength)
+                .HasDefaultValue(string.Empty);
+
+            entity.Property(e => e.SearchText)
+                .HasMaxLength(SearchText.BodyMaxLength)
+                .HasDefaultValue(string.Empty);
 
             entity.Property(e => e.ShortDescription)
                 .HasMaxLength(500);
@@ -1374,5 +1416,69 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(cw => cw.NovelId)
                 .HasDatabaseName("IX_CompetitionWinners_NovelId");
         });
+    }
+
+    // Both parameterless SaveChanges overloads funnel into these, as does ASP.NET Identity's UserStore.
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        RefreshSearchColumns();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        RefreshSearchColumns();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
+    /// Fills search columns for rows that predate them (or were written with ExecuteUpdate). Cheap when there's
+    /// nothing to do, so it runs on every startup.
+    /// </summary>
+    public async Task<int> BackfillSearchColumnsAsync(CancellationToken cancellationToken = default)
+    {
+        var novels = await Novels.IgnoreQueryFilters()
+            .Where(n => n.SearchTitle == "" && n.Title != "")
+            .ToListAsync(cancellationToken);
+        var users = await Users
+            .Where(u => u.SearchName == "")
+            .ToListAsync(cancellationToken);
+        var entities = await NovelEntities.IgnoreQueryFilters()
+            .Where(e => e.SearchName == "" && e.Name != "")
+            .ToListAsync(cancellationToken);
+
+        // Setting the column marks just that property modified; RefreshSearchColumns computes the same value.
+        foreach (var novel in novels) novel.SearchTitle = SearchText.Normalize(novel.Title);
+        foreach (var user in users) user.SearchName = SearchText.ForUser(user.DisplayName, user.UserName);
+        foreach (var entity in entities) entity.SearchName = SearchText.Normalize(entity.Name);
+
+        return novels.Count + users.Count + entities.Count == 0 ? 0 : await SaveChangesAsync(cancellationToken);
+    }
+
+    private void RefreshSearchColumns()
+    {
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Modified))
+            {
+                continue;
+            }
+
+            switch (entry.Entity)
+            {
+                case Novel novel:
+                    novel.SearchTitle = SearchText.Normalize(novel.Title);
+                    break;
+                case User user:
+                    user.SearchName = SearchText.ForUser(user.DisplayName, user.UserName);
+                    break;
+                case NovelEntity novelEntity:
+                    novelEntity.SearchName = SearchText.Normalize(novelEntity.Name);
+                    novelEntity.SearchText = SearchText.Normalize(
+                        $"{novelEntity.Name} {novelEntity.ShortDescription} {novelEntity.Description}",
+                        SearchText.BodyMaxLength);
+                    break;
+            }
+        }
     }
 }

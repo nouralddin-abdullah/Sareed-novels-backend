@@ -16,8 +16,10 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
 
     public async Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber)
     {
+        // Only published novels a reader can actually open: not a draft and at least one published chapter.
         var query = dbContext.Novels
-        .Where(n => n.IsEligibleForRanking)
+        .AsNoTracking()
+        .Where(n => n.IsEligibleForRanking && !n.IsDraft && n.Chapters.Any(c => c.Status == "Published"))
         .Include(n => n.NovelGenres)
             .ThenInclude(ng => ng.Genre)
         .Include(n => n.Owner)

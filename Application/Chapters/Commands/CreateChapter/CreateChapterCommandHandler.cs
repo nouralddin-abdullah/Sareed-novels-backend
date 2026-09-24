@@ -21,7 +21,6 @@ public class CreateChapterCommandHandler(
     INovelsRepository novelsRepository, 
     IMapper mapper,
     IChapterSequenceService sequenceService,
-    ISearchIndexQueueService searchIndexQueue,
     IServiceProvider serviceProvider) : IRequestHandler<CreateChapterCommand, ChapterSingleAuthorDTO>
 {
     public async Task<ChapterSingleAuthorDTO> Handle(CreateChapterCommand request, CancellationToken cancellationToken)
@@ -83,11 +82,7 @@ public class CreateChapterCommandHandler(
             // Fire-and-forget: Send notifications to users who have this novel in their library
             _ = SendNewChapterNotificationsInBackground(novel.Id, chapter.Id, chapter.Slug, chapter.Title);
         }
-        
-        // Queue for Elasticsearch update (ChapterCount changed)
-        await searchIndexQueue.QueueUpdateAsync(novel.Id);
-        logger.LogDebug("Queued novel {NovelId} for search index update (chapter added)", novel.Id);
-        
+
         var chapterDto = mapper.Map<ChapterSingleAuthorDTO>(chapter);
         
         logger.LogInformation("Chapter {ChapterId} created successfully with {ParagraphCount} paragraphs for novel {NovelId}", 

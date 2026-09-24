@@ -14,7 +14,6 @@ public class FollowUserCommandHandler(
     IUserContext userContext, 
     UserManager<User> userManager, 
     IUsersRepository usersRepository,
-    ISearchIndexQueueService searchIndexQueue,
     IServiceProvider serviceProvider) : IRequestHandler<FollowUserCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(FollowUserCommand request, CancellationToken cancellationToken)
@@ -49,10 +48,6 @@ public class FollowUserCommandHandler(
             // Fire-and-forget: Send notification
             _ = SendNewFollowerNotificationInBackground(userToFollow.Id, currentUser.Id);
             
-            // Update both users in search index (follower count changed)
-            await searchIndexQueue.QueueUserUpdateAsync(currentUser.Id);
-            await searchIndexQueue.QueueUserUpdateAsync(userToFollow.Id);
-            logger.LogDebug("Queued users for search index update after follow");
         }
 
         var message = result ? $"Successfully followed {userToFollow.DisplayName}" : "Failed to follow user";

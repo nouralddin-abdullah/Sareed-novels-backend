@@ -12,8 +12,7 @@ namespace Application.Entities.Commands.AddArticle;
 public class AddArticleCommandHandler(
     ILogger<AddArticleCommandHandler> logger,
     INovelEntityRepository entityRepository,
-    IUserContext userContext,
-    ISearchIndexQueueService searchQueue) : IRequestHandler<AddArticleCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<AddArticleCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(AddArticleCommand request, CancellationToken cancellationToken)
     {
@@ -51,9 +50,6 @@ public class AddArticleCommandHandler(
         };
 
         await entityRepository.AddArticleAsync(article);
-
-        // Queue entity update for Elasticsearch (to include new article)
-        await searchQueue.QueueEntityUpdateAsync(entity.Id);
 
         logger.LogInformation("Article {ArticleId} added to entity {EntityId}", article.Id, entity.Id);
 

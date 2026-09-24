@@ -1,4 +1,3 @@
-using Application.Search.Commands.MigrateNovels;
 using Application.Search.DTOs;
 using Application.Search.Queries.SearchNovels;
 using Application.Search.Queries.SearchUsers;
@@ -83,18 +82,5 @@ public class SearchController(IMediator mediator) : ControllerBase
         var searchQuery = new SearchUsersQuery(request);
         var result = await mediator.Send(searchQuery);
         return Ok(result);
-    }
-
-    [HttpPost("admin/reindex-novels")]
-    public async Task<IActionResult> ReindexNovels()
-    {
-        var command = new MigrateNovelsToElasticsearchCommand();
-        var result = await mediator.Send(command);
-
-        if (result.Success)
-        {
-            return Ok(result);
-        }
-        return BadRequest(result);
     }
 }

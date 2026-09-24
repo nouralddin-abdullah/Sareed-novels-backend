@@ -12,8 +12,7 @@ public class DeleteArticleCommandHandler(
     ILogger<DeleteArticleCommandHandler> logger,
     INovelEntityRepository entityRepository,
     INovelsRepository novelsRepository,
-    IUserContext userContext,
-    ISearchIndexQueueService searchQueue) : IRequestHandler<DeleteArticleCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<DeleteArticleCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(DeleteArticleCommand request, CancellationToken cancellationToken)
     {
@@ -38,9 +37,6 @@ public class DeleteArticleCommandHandler(
         }
 
         await entityRepository.DeleteArticleAsync(request.ArticleId);
-
-        // Queue entity update for Elasticsearch
-        await searchQueue.QueueEntityUpdateAsync(entity.Id);
 
         logger.LogInformation("Article {ArticleId} deleted", request.ArticleId);
 

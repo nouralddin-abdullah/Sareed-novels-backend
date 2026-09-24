@@ -1,6 +1,7 @@
 ﻿using Application.Rankings.Commands.CalculateAllRankings;
 using Application.Rankings.Commands.CalculateGenreRankings;
 using Application.Rankings.Queries.GetRankingStatus;
+using Domain.Constants;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,7 @@ namespace Sareed_novels_backend.Controllers;
 
 [ApiController]
 [Route("api/admin/ranking-test")]
+[Authorize(Roles = UserRoles.Admin)]
 public class RankingTestController(IMediator mediator) : ControllerBase
 {
 

@@ -460,6 +460,33 @@ namespace Infrastructure.Migrations
                     b.ToTable("CompetitionWinners");
                 });
 
+            modelBuilder.Entity("Domain.Entities.DailyUniqueView", b =>
+                {
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<string>("VisitorKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<byte>("Kind")
+                        .HasColumnType("tinyint");
+
+                    b.Property<Guid>("NovelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("TargetId", "Day", "VisitorKey");
+
+                    b.HasIndex("NovelId", "Day", "Kind");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("NovelId", "Day", "Kind"), new[] { "VisitorKey" });
+
+                    b.ToTable("DailyUniqueViews");
+                });
+
             modelBuilder.Entity("Domain.Entities.EntityArticle", b =>
                 {
                     b.Property<Guid>("Id")
@@ -910,6 +937,13 @@ namespace Infrastructure.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(0);
 
+                    b.Property<string>("SearchTitle")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)")
+                        .HasDefaultValue("");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -941,6 +975,8 @@ namespace Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AuthorId");
+
+                    b.HasIndex("SearchTitle");
 
                     b.HasIndex("TotalAverageScore");
 
@@ -988,6 +1024,20 @@ namespace Infrastructure.Migrations
                     b.Property<string>("Role")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("SearchName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)")
+                        .HasDefaultValue("");
+
+                    b.Property<string>("SearchText")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)")
+                        .HasDefaultValue("");
 
                     b.Property<string>("Section")
                         .IsRequired()
@@ -1842,6 +1892,13 @@ namespace Infrastructure.Migrations
                     b.Property<int>("ReviewsCount")
                         .HasColumnType("int");
 
+                    b.Property<string>("SearchName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)")
+                        .HasDefaultValue("");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
 
@@ -1867,6 +1924,8 @@ namespace Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex")
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
+
+                    b.HasIndex("SearchName");
 
                     b.ToTable("AspNetUsers", (string)null);
                 });
@@ -2289,6 +2348,15 @@ namespace Infrastructure.Migrations
                     b.Navigation("Competition");
 
                     b.Navigation("Novel");
+                });
+
+            modelBuilder.Entity("Domain.Entities.DailyUniqueView", b =>
+                {
+                    b.HasOne("Domain.Entities.Novel", null)
+                        .WithMany()
+                        .HasForeignKey("NovelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Domain.Entities.EntityArticle", b =>

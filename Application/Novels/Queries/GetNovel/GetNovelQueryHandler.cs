@@ -1,4 +1,4 @@
-﻿using Application.Novels.DTOS;
+using Application.Novels.DTOS;
 using Application.Services;
 using Application.Users;
 using AutoMapper;
@@ -14,7 +14,9 @@ public class GetNovelQueryHandler(
     ILogger<GetNovelQueryHandler> logger,
     INovelsRepository novelsRepository,
     IMapper mapper,
-    IServiceProvider serviceProvider) : IRequestHandler<GetNovelQuery, NovelsDTO>
+    IUserContext userContext,
+    IVisitorContext visitorContext,
+    IServiceScopeFactory scopeFactory) : IRequestHandler<GetNovelQuery, NovelsDTO>
 {
     public async Task<NovelsDTO> Handle(GetNovelQuery request, CancellationToken cancellationToken)
     {
@@ -22,28 +24,27 @@ public class GetNovelQueryHandler(
         var novel = await novelsRepository.GetOneBySlug(request.NovelSlug) ?? throw new NotFoundException("This novel was not found");
         var novelDto = mapper.Map<NovelsDTO>(novel);
 
-        // Fire-and-forget background tracking with proper scope
-        _ = TrackViewInBackground(novelDto.Id);
+        // Resolve the visitor now: the background task outlives the request and can't read HttpContext.
+        var visitorKey = visitorContext.GetVisitorKey();
+        var isAuthor = userContext.GetCurrentUser()?.Id == novel.AuthorId;
+        if (visitorKey != null && !isAuthor)
+        {
+            _ = TrackViewInBackground(novel.Id, visitorKey);
+        }
 
-        return novelDto; // Returns immediately without waiting for view tracking
+        return novelDto;
     }
 
-    private async Task TrackViewInBackground(Guid novelId)
+    private async Task TrackViewInBackground(Guid novelId, string visitorKey)
     {
         try
         {
-            // Create a new scope for background operation (this fixes the disposed context issue)
-            using var scope = serviceProvider.CreateScope();
-            var backgroundViewTrackingService = scope.ServiceProvider.GetRequiredService<IViewTrackingService>();
-
-            // This runs in the background with a fresh ApplicationDbContext
-            await backgroundViewTrackingService.TrackNovelView(novelId);
-
-            logger.LogDebug("Successfully tracked view for novel {NovelId}", novelId);
+            using var scope = scopeFactory.CreateScope();
+            var viewTracking = scope.ServiceProvider.GetRequiredService<IViewTrackingService>();
+            await viewTracking.TrackNovelView(novelId, visitorKey);
         }
         catch (Exception ex)
         {
-            // Log error but don't propagate (fire-and-forget)
             logger.LogWarning(ex, "Failed to track view for novel {NovelId} in background", novelId);
         }
     }

@@ -5,6 +5,8 @@ namespace Domain.Entities;
 public class User : IdentityUser
 {
     public string DisplayName { get; set; } = default!;
+    /// <summary>Normalized display name + user name for search; maintained by ApplicationDbContext on save.</summary>
+    public string SearchName { get; set; } = string.Empty;
     public string? ProfilePhoto { get; set; }
     public string? ProfileBanner { get; set; }
     public string? UserBio { get; set; }

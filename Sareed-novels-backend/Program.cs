@@ -11,7 +11,7 @@ using Serilog;
 var builder = WebApplication.CreateBuilder(args);
 
 //Add Services Extensions
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
 builder.AddPresentation();
 builder.Services.AddApplication();
 var app = builder.Build();
@@ -49,6 +49,13 @@ using (var scope = app.Services.CreateScope())
         var genreLogger = services.GetRequiredService<ILogger<GenreSeeder>>();
         var genreSeeder = new GenreSeeder(dbContext, genreLogger);
         await genreSeeder.SeedAsync();
+
+        // Fill normalized search columns for rows that predate them (no-op once done)
+        var backfilled = await dbContext.BackfillSearchColumnsAsync();
+        if (backfilled > 0)
+        {
+            logger.LogInformation("Backfilled search columns for {Count} rows", backfilled);
+        }
     }
     catch (Exception ex)
     {

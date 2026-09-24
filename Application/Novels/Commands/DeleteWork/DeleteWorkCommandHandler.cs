@@ -12,8 +12,7 @@ namespace Application.Novels.Commands.DeleteWork;
 public class DeleteWorkCommandHandler(
     ILogger<DeleteWorkCommandHandler> logger,
     INovelsRepository novelsRepository, 
-    IUserContext userContext,
-    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<DeleteWorkCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<DeleteWorkCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(DeleteWorkCommand request, CancellationToken cancellationToken)
     {
@@ -38,11 +37,7 @@ public class DeleteWorkCommandHandler(
             // Orphaned entries will be cleaned up lazily when lists are accessed
             
             logger.LogInformation("Novel {NovelId} soft-deleted by user {UserId}", request.NovelId, currentUser.Id);
-            
-            // Queue for Elasticsearch deletion
-            await searchIndexQueue.QueueDeleteAsync(request.NovelId);
-            logger.LogInformation("Queued novel {NovelId} for search index deletion", request.NovelId);
-            
+
             return new OperationResult
             {
                 Success = true,

@@ -16,7 +16,6 @@ internal class DeleteReviewHandler(
     IUserContext userContext, 
     INovelsRepository novelsRepository, 
     IReviewsRepository reviewsRepository,
-    ISearchIndexQueueService searchIndexQueue,
     IServiceProvider serviceProvider) : IRequestHandler<DeleteReviewCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(DeleteReviewCommand request, CancellationToken cancellationToken)
@@ -47,10 +46,6 @@ internal class DeleteReviewHandler(
 
         logger.LogInformation("Successfully deleted review for novel {NovelId}, user {UserId}",
             request.NovelId, currentUser.Id);
-
-        // Queue for Elasticsearch update (review stats changed)
-        await searchIndexQueue.QueueUpdateAsync(request.NovelId);
-        logger.LogDebug("Queued novel {NovelId} for search index update (review deleted)", request.NovelId);
 
         return new OperationResult
         {

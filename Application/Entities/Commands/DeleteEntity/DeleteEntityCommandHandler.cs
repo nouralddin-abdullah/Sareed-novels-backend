@@ -12,8 +12,7 @@ public class DeleteEntityCommandHandler(
     ILogger<DeleteEntityCommandHandler> logger,
     INovelEntityRepository entityRepository,
     INovelsRepository novelsRepository,
-    IUserContext userContext,
-    ISearchIndexQueueService searchQueue) : IRequestHandler<DeleteEntityCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<DeleteEntityCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(DeleteEntityCommand request, CancellationToken cancellationToken)
     {
@@ -41,9 +40,6 @@ public class DeleteEntityCommandHandler(
         }
 
         await entityRepository.DeleteEntityAsync(request.EntityId);
-
-        // Queue for Elasticsearch deletion
-        await searchQueue.QueueEntityDeleteAsync(request.EntityId);
 
         logger.LogInformation("Entity {EntityId} deleted successfully", request.EntityId);
 
