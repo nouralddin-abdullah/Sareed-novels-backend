@@ -6,8 +6,8 @@ namespace Application.Novels.Commands.CreateNovel
 {
     public class CreateNovelCommandValidator : AbstractValidator<CreateNovelCommand>
     {
-        public const string CoverRequiredMessage = "A cover image is required (JPEG, PNG or WebP, at most 5 MB).";
-        public const string CoverInvalidMessage = "The cover must be a JPEG, PNG or WebP image of at most 5 MB.";
+        public const string CoverRequiredMessage = "صورة الغلاف مطلوبة (JPEG أو PNG أو WebP، بحد أقصى 5 ميجابايت).";
+        public const string CoverInvalidMessage = "يجب أن يكون الغلاف صورة JPEG أو PNG أو WebP لا يتجاوز حجمها 5 ميجابايت.";
 
         public CreateNovelCommandValidator()
         {

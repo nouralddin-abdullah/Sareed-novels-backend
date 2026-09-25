@@ -160,6 +160,39 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         return (novels, totalCount);
     }
 
+    public async Task<bool> SetCoverUrlAsync(Guid novelId, string coverUrl, string? expectedUrl = null, CancellationToken cancellationToken = default)
+    {
+        var novels = dbContext.Novels.Where(n => n.Id == novelId);
+        if (expectedUrl is not null)
+        {
+            novels = novels.Where(n => n.CoverImageUrl == expectedUrl);
+        }
+        return await novels.ExecuteUpdateAsync(s => s.SetProperty(n => n.CoverImageUrl, coverUrl), cancellationToken) > 0;
+    }
+
+    public async Task<List<NovelCoverRef>> GetCoversNotMatchingAsync(string standardMarker, Guid? afterId, int take, CancellationToken cancellationToken = default)
+    {
+        var novels = dbContext.Novels.AsNoTracking()
+            .Where(n => !n.IsDeleted && !n.CoverImageUrl.Contains(standardMarker));
+        if (afterId is { } after)
+        {
+            novels = novels.Where(n => n.Id.CompareTo(after) > 0);
+        }
+        return await novels
+            .OrderBy(n => n.Id)
+            .Take(take)
+            .Select(n => new NovelCoverRef(n.Id, n.Title, n.CoverImageUrl))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<(int Total, int NotMatching)> CountCoversAsync(string standardMarker, CancellationToken cancellationToken = default)
+    {
+        var novels = dbContext.Novels.AsNoTracking().Where(n => !n.IsDeleted);
+        var total = await novels.CountAsync(cancellationToken);
+        var notMatching = await novels.CountAsync(n => !n.CoverImageUrl.Contains(standardMarker), cancellationToken);
+        return (total, notMatching);
+    }
+
     public async Task<bool> UpdateOne(Novel novel)
     {
         dbContext.Novels.Update(novel);

@@ -31,6 +31,9 @@ public sealed class SardApiFactory : WebApplicationFactory<Program>, IAsyncLifet
 
     public FakeEmailSender Emails { get; } = new();
 
+    /// <summary>The file bucket behind novel covers (other uploads go to <see cref="FakeFileUploadService"/>).</summary>
+    public InMemoryObjectStorage Storage { get; } = new("https://files.test");
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -50,6 +53,8 @@ public sealed class SardApiFactory : WebApplicationFactory<Program>, IAsyncLifet
             services.AddSingleton<IEmailSender>(Emails);
             services.RemoveAll<IFileUploadService>();
             services.AddSingleton<IFileUploadService, FakeFileUploadService>();
+            services.RemoveAll<IObjectStorage>();
+            services.AddSingleton<IObjectStorage>(Storage);
 
             // Scheduled jobs aren't under test here.
             foreach (var job in services.Where(d => d.ServiceType == typeof(IHostedService)
@@ -188,6 +193,8 @@ public class AccountSecurityHttpTests(SardApiFactory api) : IClassFixture<SardAp
     [InlineData("POST", "/api/admin/ranking-test/calculate-all")]
     [InlineData("POST", "/api/library/admin/migrate-sequences")]
     [InlineData("POST", "/api/gift/admin/recalculate-weekly")]
+    [InlineData("GET", "/api/admin/covers/status")]
+    [InlineData("POST", "/api/admin/covers/convert")]
     public async Task Admin_endpoints_need_an_admin(string method, string url)
     {
         var client = api.ClientFrom(NewIp());
@@ -354,7 +361,7 @@ public class AccountSecurityHttpTests(SardApiFactory api) : IClassFixture<SardAp
             { new StringContent("ملخص الرواية"), "Summary" },
             { new StringContent("1"), "GenreIds" }
         };
-        var cover = new ByteArrayContent([0x89, 0x50, 0x4E, 0x47]);
+        var cover = new ByteArrayContent(TestImages.Solid(300, 450, SkiaSharp.SKColors.Teal));
         cover.Headers.ContentType = new MediaTypeHeaderValue("image/png");
         form.Add(cover, "CoverImageUrl", "cover.png");
 

@@ -16,6 +16,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Infrastructure.BackgroundJobs;
 using Infrastructure.Services.Search;
+using Infrastructure.Services.Covers;
 
 namespace Infrastructure.Extensions;
 
@@ -143,6 +144,10 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped<IFileUploadService, CloudflareR2Service>();
+        services.AddScoped<IObjectStorage, CloudflareR2Service>();
+
+        // Novel covers: normalized to the 2:3 WebP standard on upload (Application.Covers.NovelCovers).
+        services.AddScoped<INovelCoverService, NovelCoverService>();
 
         // Configure SMTP settings
         services.Configure<SmtpSettings>(

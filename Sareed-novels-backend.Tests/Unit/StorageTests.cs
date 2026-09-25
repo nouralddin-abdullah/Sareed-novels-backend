@@ -1,3 +1,5 @@
+using Domain.Exceptions;
+using Application.Covers;
 using Application.Novels.Commands.ChangeCover;
 using Application.Services;
 using Application.Users;
@@ -71,25 +73,62 @@ public class StorageKeysTests
 
 public class ChangeCoverCommandHandlerTests
 {
-    [Fact]
-    public async Task A_new_cover_is_uploaded_under_the_novel_id_and_its_url_is_saved()
+    private static (Novel Novel, INovelsRepository Novels, IUserContext User, IFormFile File) World()
     {
         var novel = new Novel { Id = Guid.NewGuid(), AuthorId = "author", Title = "امراة فى الظلام ", Slug = "s", Summary = "", CoverImageUrl = "old" };
         var novels = Substitute.For<INovelsRepository>();
         novels.GetOne(novel.Id).Returns(novel);
         var userContext = Substitute.For<IUserContext>();
         userContext.GetCurrentUser().Returns(new CurrentUser("author", "e", "u", "d"));
-        var uploads = Substitute.For<IFileUploadService>();
-        uploads.UploadNovelImageAsync(Arg.Any<Stream>(), "image/png", novel.Id.ToString()).Returns("https://cdn/new.png");
         var file = Substitute.For<IFormFile>();
         file.ContentType.Returns("image/png");
         file.OpenReadStream().Returns(new MemoryStream([1, 2, 3]));
+        return (novel, novels, userContext, file);
+    }
 
-        var handler = new ChangeCoverCommandHandler(NullLogger<ChangeCoverCommandHandler>.Instance, uploads, userContext, novels);
+    [Fact]
+    public async Task A_new_cover_is_stored_for_the_novel_and_only_its_url_column_is_updated()
+    {
+        var (novel, novels, userContext, file) = World();
+        var covers = Substitute.For<INovelCoverService>();
+        covers.StoreUploadAsync(novel.Id, Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns("https://cdn/new/960.webp");
+
+        var handler = new ChangeCoverCommandHandler(NullLogger<ChangeCoverCommandHandler>.Instance, covers, userContext, novels);
         var result = await handler.Handle(new ChangerCoverCommand(novel.Id, file), CancellationToken.None);
 
         Assert.True(result.Success);
-        Assert.Equal("https://cdn/new.png", novel.CoverImageUrl);
-        await novels.Received(1).UpdateOne(novel);
+        Assert.Equal("https://cdn/new/960.webp", result.CoverImageUrl);
+        await novels.Received(1).SetCoverUrlAsync(novel.Id, "https://cdn/new/960.webp", null, Arg.Any<CancellationToken>());
+        await novels.DidNotReceive().UpdateOne(Arg.Any<Novel>());
+    }
+
+    [Fact]
+    public async Task A_refused_image_is_a_failed_result_with_its_code_and_nothing_is_saved()
+    {
+        var (novel, novels, userContext, file) = World();
+        var covers = Substitute.For<INovelCoverService>();
+        covers.StoreUploadAsync(novel.Id, Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns<string>(_ => throw new CoverImageException(CoverErrorCodes.TooSmall, "too small"));
+
+        var handler = new ChangeCoverCommandHandler(NullLogger<ChangeCoverCommandHandler>.Instance, covers, userContext, novels);
+        var result = await handler.Handle(new ChangerCoverCommand(novel.Id, file), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(CoverErrorCodes.TooSmall, result.ErrorCode);
+        await novels.DidNotReceive().SetCoverUrlAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Only_the_author_can_change_the_cover()
+    {
+        var (novel, novels, _, file) = World();
+        var stranger = Substitute.For<IUserContext>();
+        stranger.GetCurrentUser().Returns(new CurrentUser("someone-else", "e", "u", "d"));
+        var covers = Substitute.For<INovelCoverService>();
+
+        var handler = new ChangeCoverCommandHandler(NullLogger<ChangeCoverCommandHandler>.Instance, covers, stranger, novels);
+
+        await Assert.ThrowsAsync<ForbidException>(() => handler.Handle(new ChangerCoverCommand(novel.Id, file), CancellationToken.None));
+        await covers.DidNotReceive().StoreUploadAsync(Arg.Any<Guid>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>());
     }
 }
