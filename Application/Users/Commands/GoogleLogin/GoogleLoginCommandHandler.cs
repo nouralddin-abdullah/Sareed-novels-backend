@@ -30,7 +30,15 @@ namespace Application.Users.Commands.GoogleLogin
                     Audience = new[] { googleClientId }
                 });
 
-                logger.LogInformation("Google authentication successful for email: {email}", payload.Email);
+                // Accounts are matched by email, so an unverified Google email must not sign in to (or be linked
+                // with) the Sard account that uses that address.
+                if (!payload.EmailVerified)
+                {
+                    logger.LogWarning("Google sign-in refused: email not verified by Google");
+                    throw new ForbidException("Your Google account's email address is not verified");
+                }
+
+                logger.LogInformation("Google authentication successful");
 
                 // Find or create user
                 var user = await userManager.FindByEmailAsync(payload.Email);
@@ -95,6 +103,10 @@ namespace Application.Users.Commands.GoogleLogin
             {
                 logger.LogError(ex, "Invalid Google ID token");
                 throw new ForbidException("Invalid Google token");
+            }
+            catch (ForbidException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

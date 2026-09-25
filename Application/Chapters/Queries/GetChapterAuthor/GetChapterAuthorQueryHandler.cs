@@ -16,6 +16,9 @@ public class GetChapterAuthorQueryHandler(IChaptersRepository chaptersRepository
         if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel");
         
         var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("Chapter not found");
+
+        // Only chapters of the caller's own novel; otherwise any author could read any draft.
+        if (chapter.NovelId != novel.Id) throw new NotFoundException("Chapter not found");
         
         // Load paragraphs from database
         var paragraphs = await paragraphsRepository.GetChapterParagraphs(chapter.Id);

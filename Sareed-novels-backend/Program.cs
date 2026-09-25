@@ -98,6 +98,9 @@ app.Use(async (context, next) =>
 
 app.UseCors("AllowFrontend");  // Web frontend
 
+// After CORS, so a 429 still carries the CORS headers and the web app can read it.
+app.UseRateLimiter();
+
 app.UseAuthentication();
 
 app.UseAuthorization();

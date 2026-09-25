@@ -20,7 +20,7 @@ namespace Application.Users.Commands.CreateUser
 
         public async Task<CreateUserResponse> Handle(CreateUserCommand request, CancellationToken cancellationToken)
         {
-            logger.LogInformation("Creating a new user {@user}", request);
+            logger.LogInformation("Creating a new user {UserName}", request.UserName);
             var userMapped = mapper.Map<User>(request);
             userMapped.CreatedAt = DateTime.UtcNow;
             if (request.ProfilePhoto != null)

@@ -73,6 +73,28 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         return novel;
     }
 
+    public async Task RefreshChapterCountAsync(Guid novelId, DateTime? lastUpdatedAt = null)
+    {
+        var novel = dbContext.Novels.Where(n => n.Id == novelId);
+        if (lastUpdatedAt is { } updatedAt)
+        {
+            await novel.ExecuteUpdateAsync(s => s
+                .SetProperty(n => n.ChapterCount, n => n.Chapters.Count())
+                .SetProperty(n => n.LastUpdatedAt, updatedAt));
+        }
+        else
+        {
+            await novel.ExecuteUpdateAsync(s => s.SetProperty(n => n.ChapterCount, n => n.Chapters.Count()));
+        }
+
+        // A tracked copy would otherwise write its stale count back on the next SaveChanges.
+        var tracked = dbContext.Novels.Local.FirstOrDefault(n => n.Id == novelId);
+        if (tracked != null)
+        {
+            await dbContext.Entry(tracked).ReloadAsync();
+        }
+    }
+
     public async Task<Novel?> GetOneBySlug(string slug)
     {
         var novel = await dbContext.Novels

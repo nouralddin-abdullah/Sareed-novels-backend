@@ -32,5 +32,30 @@ public class UpdateMeCommandValidator : AbstractValidator<UpdateMeCommand>
         RuleFor(dto => dto.UserBio)
             .MaximumLength(150)
             .WithMessage("Bio must be maximum of 150 characters only");
+
+        // Profile pages render these as links: only http(s) addresses (or scheme-less ones like facebook.com/x),
+        // never javascript: or other schemes.
+        RuleFor(dto => dto.FacebookUrl)
+            .MaximumLength(300)
+            .Must(BeWebLink)
+            .WithMessage("Facebook link must be an http(s) address");
+
+        RuleFor(dto => dto.TwitterUrl)
+            .MaximumLength(300)
+            .Must(BeWebLink)
+            .WithMessage("X (Twitter) link must be an http(s) address");
+
+        RuleFor(dto => dto.DiscordUrl)
+            .MaximumLength(300);
+    }
+
+    internal static bool BeWebLink(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !value.Contains(':'))
+        {
+            return true;
+        }
+
+        return Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
     }
 }

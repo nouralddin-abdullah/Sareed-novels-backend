@@ -15,7 +15,7 @@ public class GetMyWorksQueryHandler(ILogger<GetMyWorksQueryHandler> logger, IUse
     public async Task<PagedResult<MyWorksDTO>> Handle(GetMyWorksQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-        logger.LogInformation("Getting all works for user {@user}", currentUser);
+        logger.LogInformation("Getting all works for user {UserId}", currentUser.Id);
         var (userNovels, totalCount) = await novelsRepository.GetWorks(currentUser.Id, request.PageNumber, request.PageSize);
         var userWorksList = mapper.Map<IEnumerable<MyWorksDTO>>(userNovels);
         var result = new PagedResult<MyWorksDTO>(userWorksList, totalCount, request.PageSize, request.PageNumber);
