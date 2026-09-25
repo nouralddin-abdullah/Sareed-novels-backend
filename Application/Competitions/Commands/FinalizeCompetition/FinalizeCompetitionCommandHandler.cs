@@ -1,4 +1,5 @@
 ﻿using Application.Competitions.DTOs;
+using Application.Services;
 using AutoMapper;
 using Domain.Entities;
 using Domain.Exceptions;
@@ -11,36 +12,38 @@ public class FinalizeCompetitionCommandHandler(
     ICompetitionRepository competitionRepository,
     ICompetitionParticipantRepository participantRepository,
     ICompetitionWinnerRepository winnerRepository,
+    ITransactionManager transactionManager,
     IMapper mapper) : IRequestHandler<FinalizeCompetitionCommand, List<CompetitionWinnerDto>>
 {
     public async Task<List<CompetitionWinnerDto>> Handle(FinalizeCompetitionCommand request, CancellationToken cancellationToken)
     {
-        var competition = await competitionRepository.GetByIdWithParticipantsAsync(request.CompetitionId)
-            ?? throw new NotFoundException("Competition not found");
-
-        // Check if already finalized
-        if (competition.Winners.Any())
+        var winners = await transactionManager.InTransactionAsync(async () =>
         {
-            // Return existing winners
-            return mapper.Map<List<CompetitionWinnerDto>>(competition.Winners.OrderBy(w => w.Rank));
-        }
+            // Lock the competition first: a concurrent finalize waits here until this one commits and then finds the
+            // winners, instead of both seeing none and inserting two sets.
+            if (!await competitionRepository.LockForUpdateAsync(request.CompetitionId))
+            {
+                throw new NotFoundException("Competition not found");
+            }
 
-        // Get top 3 participants
-        var topParticipants = await participantRepository.GetTopParticipantsAsync(request.CompetitionId, 3);
-        var topList = topParticipants.ToList();
+            // Already finalized: return the existing winners
+            var existing = (await winnerRepository.GetByCompetitionIdAsync(request.CompetitionId)).ToList();
+            if (existing.Count > 0)
+            {
+                return existing;
+            }
 
-        if (!topList.Any())
-        {
-            throw new InvalidOperationException("No participants in competition to finalize");
-        }
+            var competition = (await competitionRepository.GetByIdAsync(request.CompetitionId))!;
 
-        var winners = new List<CompetitionWinner>();
-        var prizes = new[] { competition.PrizeFirstPlace, competition.PrizeSecondPlace, competition.PrizeThirdPlace };
+            // Get top 3 participants
+            var topList = (await participantRepository.GetTopParticipantsAsync(request.CompetitionId, 3)).ToList();
+            if (topList.Count == 0)
+            {
+                throw new InvalidOperationException("No participants in competition to finalize");
+            }
 
-        for (int i = 0; i < topList.Count && i < 3; i++)
-        {
-            var participant = topList[i];
-            var winner = new CompetitionWinner
+            var prizes = new[] { competition.PrizeFirstPlace, competition.PrizeSecondPlace, competition.PrizeThirdPlace };
+            var created = topList.Select((participant, i) => new CompetitionWinner
             {
                 Id = Guid.NewGuid(),
                 CompetitionId = request.CompetitionId,
@@ -51,18 +54,18 @@ public class FinalizeCompetitionCommandHandler(
                 FinalViews = participant.Novel.TotalViews - participant.ViewsAtJoin,
                 PrizeWon = prizes[i],
                 AwardedAt = DateTime.UtcNow
-            };
-            winners.Add(winner);
-        }
+            }).ToList();
 
-        await winnerRepository.CreateRangeAsync(winners);
+            await winnerRepository.CreateRangeAsync(created);
 
-        // Update competition status to completed
-        competition.Status = CompetitionStatus.Completed;
-        await competitionRepository.UpdateAsync(competition);
+            // Update competition status to completed
+            competition.Status = CompetitionStatus.Completed;
+            await competitionRepository.UpdateAsync(competition);
 
-        // Reload winners with navigation properties
-        var savedWinners = await winnerRepository.GetByCompetitionIdAsync(request.CompetitionId);
-        return mapper.Map<List<CompetitionWinnerDto>>(savedWinners);
+            // Reload winners with navigation properties
+            return (await winnerRepository.GetByCompetitionIdAsync(request.CompetitionId)).ToList();
+        }, cancellationToken);
+
+        return mapper.Map<List<CompetitionWinnerDto>>(winners);
     }
 }

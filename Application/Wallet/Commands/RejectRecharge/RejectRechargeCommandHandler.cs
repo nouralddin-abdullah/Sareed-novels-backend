@@ -45,13 +45,14 @@ public class RejectRechargeCommandHandler(
             };
         }
 
-        // Update request status
-        rechargeRequest.Status = RequestStatus.Rejected;
-        rechargeRequest.ProcessedAt = DateTime.UtcNow;
-        rechargeRequest.ProcessedBy = currentUser.Id;
-        rechargeRequest.RejectionReason = request.RejectionReason;
-
-        await rechargeRepository.UpdateAsync(rechargeRequest);
+        if (!await rechargeRepository.TryMarkProcessedAsync(rechargeRequest.Id, RequestStatus.Rejected, currentUser.Id, request.RejectionReason))
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Message = "Request was already processed"
+            };
+        }
 
         logger.LogInformation(
             "Admin {AdminId} rejected recharge {RequestId} for user {UserId}. Reason: {Reason}",

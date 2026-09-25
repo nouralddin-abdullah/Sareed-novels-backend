@@ -18,4 +18,10 @@ public interface ICompetitionRepository
     Task<IEnumerable<Competition>> GetActiveCompetitionsAsync();
     Task<bool> ExistsAsync(Guid id);
     Task<bool> SlugExistsAsync(string slug);
+
+    /// <summary>
+    /// Write-locks the competition row until the current transaction ends (touches UpdatedAt), so work that must run
+    /// once per competition, like finalizing, is serialized. Returns false if the competition doesn't exist.
+    /// </summary>
+    Task<bool> LockForUpdateAsync(Guid id);
 }

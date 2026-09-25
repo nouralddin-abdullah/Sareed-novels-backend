@@ -117,6 +117,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.AddHostedService<RankingRecalculationService>();
         services.AddHostedService<DailyPrivilegeUnlockService>();
+        services.AddHostedService<GiftLeaderboardRecalculationService>();
 
         // Configure memory cache for recommendations
         services.AddMemoryCache(options =>
