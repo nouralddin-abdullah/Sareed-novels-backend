@@ -30,7 +30,7 @@ namespace Application.Users.Commands.CreateUser
                     stream,
                     request.ProfilePhoto.FileName,
                     request.ProfilePhoto.ContentType,
-                    request.UserName
+                    userMapped.Id
                     );
             }
             var result = await usersRepository.Create(userMapped, request.Password);
@@ -42,7 +42,7 @@ namespace Application.Users.Commands.CreateUser
                 // Clean up uploaded profile photo if user creation fails
                 if (!string.IsNullOrEmpty(userMapped.ProfilePhoto))
                 {
-                    await fileUploadService.DeleteImageAsync($"profile-images/{userMapped.UserName!}");
+                    await fileUploadService.DeleteImageAsync(userMapped.ProfilePhoto);
                 }
 
                 return new CreateUserResponse

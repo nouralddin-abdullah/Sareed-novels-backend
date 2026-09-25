@@ -47,7 +47,7 @@ public class UpdateMeCommandHandler(
                     stream,
                     request.ProfilePhoto.FileName,
                     request.ProfilePhoto.ContentType,
-                    request.UserName ?? user.UserName!
+                    user.Id
                     );
             }
             catch (Exception ex)
@@ -67,11 +67,10 @@ public class UpdateMeCommandHandler(
             try
             {
                 var stream = request.ProfileBanner.OpenReadStream();
-                newProfileBannerUrl = await fileUploadService.UploadImageAsync(
+                newProfileBannerUrl = await fileUploadService.UploadProfileBannerAsync(
                     stream,
-                    request.ProfileBanner.FileName,
                     request.ProfileBanner.ContentType,
-                    (request.UserName ?? user.UserName!) + "-banner"
+                    user.Id
                     );
             }
             catch (Exception ex)
