@@ -87,7 +87,9 @@ namespace Sareed_novels_backend.Controllers
             {
                 var command = new GoogleCallbackCommand { Code = code, State = state };
                 var result = await mediator.Send(command);
-                return Redirect($"{frontendUrl}/auth/success?token={result.AccessToken}");
+                // The token goes in the URL fragment, which browsers never send to servers, so it stays
+                // out of access logs, proxies and Referer headers. The web app reads it and strips it.
+                return Redirect($"{frontendUrl}/auth/success#token={Uri.EscapeDataString(result.AccessToken)}");
             }
             catch (Exception)
             {
