@@ -1,6 +1,7 @@
 ﻿using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Persistence;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories;
@@ -34,15 +35,35 @@ public class UserWalletRepository(ApplicationDbContext dbContext) : IUserWalletR
             return;
         }
 
-        // UPDLOCK+HOLDLOCK makes the existence check and the insert one step, so two first-time requests for the same
-        // user can't both insert (the second used to fail on IX_UserWallets_UserId_Unique).
+        // Created on its own connection and committed at once, never inside the caller's transfer transaction: a new
+        // wallet row inserted there stays locked until the whole gift or subscription commits, and concurrent first
+        // gifts to the same author deadlocked on it (as did the HOLDLOCK range lock this replaced, which also covered
+        // the neighbouring UserId key). An empty wallet left behind by a transfer that later fails is harmless.
+        // Two first-time requests can both pass NOT EXISTS; the second then hits IX_UserWallets_UserId_Unique.
         var now = DateTime.UtcNow;
-        await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+        await using var connection = new SqlConnection(dbContext.Database.GetConnectionString());
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
             INSERT INTO UserWallets (Id, UserId, CurrentBalance, TotalRecharged, TotalWithdrawn, TotalSpent, TotalEarned, CreatedAt, UpdatedAt)
-            SELECT {Guid.NewGuid()}, {userId}, 0, 0, 0, 0, 0, {now}, {now}
-            WHERE NOT EXISTS (SELECT 1 FROM UserWallets WITH (UPDLOCK, HOLDLOCK) WHERE UserId = {userId})
-            """);
+            SELECT @id, @userId, 0, 0, 0, 0, 0, @now, @now
+            WHERE NOT EXISTS (SELECT 1 FROM UserWallets WHERE UserId = @userId)
+            """;
+        command.Parameters.Add(new SqlParameter("@id", Guid.NewGuid()));
+        command.Parameters.Add(new SqlParameter("@userId", System.Data.SqlDbType.NVarChar, 450) { Value = userId });
+        command.Parameters.Add(new SqlParameter("@now", System.Data.SqlDbType.DateTime2) { Value = now });
+        try
+        {
+            await command.ExecuteNonQueryAsync();
+        }
+        catch (SqlException ex) when (IsDuplicateKey(ex))
+        {
+            // Created by a concurrent request.
+        }
     }
+
+    private static bool IsDuplicateKey(Exception ex) =>
+        (ex as SqlException ?? ex.InnerException as SqlException)?.Number is 2601 or 2627;
 
     public async Task<decimal> CreditAsync(string userId, decimal amount)
     {
