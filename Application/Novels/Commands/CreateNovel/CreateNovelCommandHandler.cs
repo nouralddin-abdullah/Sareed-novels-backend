@@ -1,4 +1,5 @@
-﻿using Application.Services;
+﻿using Application.Covers;
+using Application.Services;
 using Application.Users;
 using Application.Users.Commands.FollowUser;
 using AutoMapper;
@@ -18,7 +19,7 @@ public class CreateNovelCommandHandler(
     IUserContext userContext,
     IGenresRepository genresRepository, 
     INovelsRepository novelsRepository, 
-    IFileUploadService fileUploadService) : IRequestHandler<CreateNovelCommand, CreateNovelResult>
+    INovelCoverService coverService) : IRequestHandler<CreateNovelCommand, CreateNovelResult>
 {
     public async Task<CreateNovelResult> Handle(CreateNovelCommand request, CancellationToken cancellationToken)
     {
@@ -47,12 +48,21 @@ public class CreateNovelCommandHandler(
         novel.RecalculateAverageScores();
         if (request.CoverImageUrl != null)
         {
-            using var stream = request.CoverImageUrl.OpenReadStream();
-            novel.CoverImageUrl = await fileUploadService.UploadNovelImageAsync(
-                stream,
-                request.CoverImageUrl.ContentType,
-                novel.Id.ToString()
-                );
+            try
+            {
+                await using var stream = request.CoverImageUrl.OpenReadStream();
+                novel.CoverImageUrl = await coverService.StoreUploadAsync(novel.Id, stream, cancellationToken);
+            }
+            catch (CoverImageException ex)
+            {
+                logger.LogInformation("Refused the cover of new novel {Title}: {Code}", request.Title, ex.Code);
+                return new CreateNovelResult
+                {
+                    Success = false,
+                    Message = ex.Message,
+                    ErrorCode = ex.Code
+                };
+            }
         }
         // The novel and its genres are inserted together (one SaveChanges), never one without the other.
         novel.NovelGenres = request.GenreIds
