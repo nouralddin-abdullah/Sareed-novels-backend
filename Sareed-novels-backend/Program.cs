@@ -65,9 +65,11 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// Request logging goes outside the error handler so it records the status the client actually gets:
+// inside it, every handled 403/404/429 (a wrong password, a missing novel) was logged as an ERR 500 with a stack trace.
+app.UseSerilogRequestLogging();
 app.UseMiddleware<ErrorHandlingMiddleware>();
 app.UseMiddleware<ExecutedTimeMiddleware>();
-app.UseSerilogRequestLogging();
 // Configure the HTTP request pipeline.
 //if (app.Environment.IsDevelopment())
 //{
