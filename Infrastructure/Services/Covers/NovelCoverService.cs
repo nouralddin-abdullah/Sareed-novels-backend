@@ -35,7 +35,7 @@ public sealed class NovelCoverService(
             logger.LogError(CoverImageProcessor.AvailabilityError,
                 "Cover processing is unavailable; storing the cover for novel {NovelId} unprocessed", novelId);
             var contentType = SniffImageType(bytes)
-                ?? throw new CoverImageException(CoverErrorCodes.UnsupportedFormat, "The cover must be a JPEG, PNG or WebP image.");
+                ?? throw new CoverImageException(CoverErrorCodes.UnsupportedFormat, "يجب أن يكون الغلاف صورة بصيغة JPEG أو PNG أو WebP.");
             using var original = new MemoryStream(bytes, writable: false);
             return await legacyUploads.UploadNovelImageAsync(original, contentType, novelId.ToString());
         }
@@ -130,7 +130,7 @@ public sealed class NovelCoverService(
         {
             if (buffer.Length + read > maxBytes)
             {
-                throw new CoverImageException(CoverErrorCodes.FileTooLarge, $"The cover file must be at most {maxBytes / (1024 * 1024)} MB.");
+                throw new CoverImageException(CoverErrorCodes.FileTooLarge, $"يجب ألا يتجاوز حجم ملف الغلاف {maxBytes / (1024 * 1024)} ميجابايت.");
             }
             buffer.Write(chunk, 0, read);
         }

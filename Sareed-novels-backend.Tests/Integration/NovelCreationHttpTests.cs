@@ -98,7 +98,9 @@ public class NovelCreationHttpTests(SardApiFactory api) : IClassFixture<SardApiF
 
         var withoutCover = await CreateNovel(client, token, genreId, cover: null);
         Assert.Equal(HttpStatusCode.BadRequest, withoutCover.StatusCode);
-        Assert.Contains(CreateNovelCommandValidator.CoverRequiredMessage, await withoutCover.Content.ReadAsStringAsync());
+        var errors = (await withoutCover.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors");
+        Assert.Contains(errors.EnumerateObject().SelectMany(e => e.Value.EnumerateArray()),
+            m => m.GetString() == CreateNovelCommandValidator.CoverRequiredMessage);
 
         var withCover = await CreateNovel(client, token, genreId, File(Portrait(), "image/png"));
         Assert.Equal(HttpStatusCode.OK, withCover.StatusCode);

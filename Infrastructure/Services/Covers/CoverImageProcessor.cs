@@ -62,22 +62,22 @@ public sealed class CoverImageProcessor
     {
         using var data = SKData.CreateCopy(bytes);
         using var codec = SKCodec.Create(data)
-            ?? throw new CoverImageException(CoverErrorCodes.UnsupportedFormat, "The cover must be a JPEG, PNG or WebP image.");
+            ?? throw new CoverImageException(CoverErrorCodes.UnsupportedFormat, "يجب أن يكون الغلاف صورة بصيغة JPEG أو PNG أو WebP.");
 
         var format = codec.EncodedFormat;
         if (format is not (SKEncodedImageFormat.Jpeg or SKEncodedImageFormat.Png or SKEncodedImageFormat.Webp))
         {
-            throw new CoverImageException(CoverErrorCodes.UnsupportedFormat, $"The cover must be a JPEG, PNG or WebP image (this file is {format}).");
+            throw new CoverImageException(CoverErrorCodes.UnsupportedFormat, $"يجب أن يكون الغلاف صورة بصيغة JPEG أو PNG أو WebP (هذا الملف بصيغة {format}).");
         }
 
         var raw = codec.Info.Size;
         if (raw.Width <= 0 || raw.Height <= 0)
         {
-            throw new CoverImageException(CoverErrorCodes.Unreadable, "The image has no pixels.");
+            throw new CoverImageException(CoverErrorCodes.Unreadable, "الصورة فارغة.");
         }
         if ((long)raw.Width * raw.Height > MaxSourcePixels)
         {
-            throw new CoverImageException(CoverErrorCodes.TooManyPixels, $"The image is too large ({raw.Width}x{raw.Height}); use one under {MaxSourcePixels / 1_000_000} megapixels.");
+            throw new CoverImageException(CoverErrorCodes.TooManyPixels, $"أبعاد الصورة كبيرة جداً ({raw.Width}×{raw.Height})؛ استخدم صورة أقل من {MaxSourcePixels / 1_000_000} ميغابكسل.");
         }
 
         var origin = codec.EncodedOrigin;
@@ -93,7 +93,7 @@ public sealed class CoverImageProcessor
             {
                 var inSource = ScaleRect(content, (double)raw.Width / decoded.Width, (double)raw.Height / decoded.Height, raw);
                 var uprightContent = Round(CoverGeometry.OrientationMatrix(origin, raw.Width, raw.Height).MapRect(inSource), upright);
-                var inner = CoverGeometry.Plan(uprightContent.Width, uprightContent.Height, maxCropLoss: CoverGeometry.MaxCropLossAfterTrim);
+                var inner = CoverGeometry.Plan(uprightContent.Width, uprightContent.Height, allowance: CropAllowance.AfterTrim);
                 var source = inner.Source;
                 source.Offset(uprightContent.Left, uprightContent.Top);
                 plan = inner with { Source = source };
@@ -109,7 +109,7 @@ public sealed class CoverImageProcessor
             if (enforceMinimumSize && plan.Width < NovelCovers.MinUploadWidth)
             {
                 throw new CoverImageException(CoverErrorCodes.TooSmall,
-                    $"The cover is too small ({plan.Source.Width}x{plan.Source.Height}); it needs at least {NovelCovers.MinUploadWidth}x{NovelCovers.MinUploadHeight} pixels at 2:3.");
+                    $"الغلاف صغير جداً ({plan.Source.Width}×{plan.Source.Height})؛ يلزم {NovelCovers.MinUploadWidth}×{NovelCovers.MinUploadHeight} بكسل على الأقل بنسبة 2:3.");
             }
 
             var reduced = HalveWhileLarge(decoded, raw, plan.ContentScale);
@@ -169,25 +169,25 @@ public sealed class CoverImageProcessor
         if ((long)size.Width * size.Height > MaxDecodedPixels)
         {
             throw new CoverImageException(CoverErrorCodes.TooManyPixels,
-                $"The image is too large to process ({raw.Width}x{raw.Height}); use a smaller image, or a JPEG.");
+                $"أبعاد الصورة كبيرة جداً للمعالجة ({raw.Width}×{raw.Height})؛ صغّرها أو استخدم صيغة JPEG.");
         }
 
         var info = new SKImageInfo(size.Width, size.Height, SKColorType.Rgba8888, SKAlphaType.Premul, SKColorSpace.CreateSrgb());
         using var bitmap = new SKBitmap();
         if (!bitmap.TryAllocPixels(info))
         {
-            throw new CoverImageException(CoverErrorCodes.TooManyPixels, "The image is too large to process right now.");
+            throw new CoverImageException(CoverErrorCodes.TooManyPixels, "الصورة كبيرة جداً للمعالجة الآن.");
         }
 
         var result = codec.GetPixels(info, bitmap.GetPixels());
         if (result != SKCodecResult.Success)
         {
-            throw new CoverImageException(CoverErrorCodes.Unreadable, $"The image couldn't be read ({result}); it may be damaged or incomplete.");
+            throw new CoverImageException(CoverErrorCodes.Unreadable, $"تعذّرت قراءة الصورة ({result})؛ قد يكون الملف تالفاً أو ناقصاً.");
         }
 
         bitmap.SetImmutable();
         return SKImage.FromBitmap(bitmap)
-            ?? throw new CoverImageException(CoverErrorCodes.Unreadable, "The image couldn't be read.");
+            ?? throw new CoverImageException(CoverErrorCodes.Unreadable, "تعذّرت قراءة الصورة.");
     }
 
     /// <summary>

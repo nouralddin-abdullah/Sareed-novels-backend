@@ -17,6 +17,10 @@ public class CoverGeometryTests
     [InlineData(1054, 1492, 29, 0, 1024, 1492, 960)]
     // 3:4 phone photo (0.75): the crop loses 11%, still a crop.
     [InlineData(3024, 4032, 168, 0, 2856, 4032, 960)]
+    // Near-portrait art from production (0.81-0.83): the sides go (17-20%), which beats thin blurred bars top and bottom.
+    [InlineData(800, 973, 75, 0, 724, 973, 648)]
+    [InlineData(800, 958, 80, 0, 719, 958, 638)]
+    [InlineData(735, 910, 64, 0, 671, 910, 606)]
     public void Near_two_by_three_sources_are_centre_cropped(int width, int height, int left, int top, int right, int bottom, int coverWidth)
     {
         var plan = CoverGeometry.Plan(width, height);
@@ -25,6 +29,26 @@ public class CoverGeometryTests
         Assert.Equal(new SKRectI(left, top, right, bottom), plan.Source);
         Assert.Equal(coverWidth, plan.Width);
         Assert.Equal(coverWidth * 3 / 2, plan.Height);
+    }
+
+    [Fact]
+    public void Sides_may_lose_more_than_top_and_bottom_where_titles_usually_are()
+    {
+        // The same 16.7% loss: from the sides of a 4:5 image it is a crop, from the top and bottom of a 5:9 one a fit.
+        Assert.Equal(CoverLayout.Crop, CoverGeometry.Plan(1200, 1500).Layout);
+        Assert.Equal(CoverLayout.Fit, CoverGeometry.Plan(1000, 1800).Layout);
+
+        // Up to a quarter from the sides (8:9 is just inside), no more.
+        Assert.Equal(CoverLayout.Crop, CoverGeometry.Plan(1600, 1800).Layout);
+        Assert.Equal(CoverLayout.Fit, CoverGeometry.Plan(1700, 1800).Layout);
+    }
+
+    [Fact]
+    public void After_bars_are_trimmed_top_and_bottom_only_lose_a_sliver()
+    {
+        Assert.Equal(CoverLayout.Fit, CoverGeometry.Plan(1080, 1800, allowance: CropAllowance.AfterTrim).Layout);
+        Assert.Equal(CoverLayout.Crop, CoverGeometry.Plan(1080, 1650, allowance: CropAllowance.AfterTrim).Layout);
+        Assert.Equal(CoverLayout.Crop, CoverGeometry.Plan(800, 960, allowance: CropAllowance.AfterTrim).Layout);
     }
 
     [Fact]

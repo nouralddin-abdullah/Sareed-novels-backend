@@ -29,20 +29,30 @@ public readonly record struct CoverPlan(CoverLayout Layout, SKRectI Source, int 
         : Math.Min((double)Width / Source.Width, (double)Height / Source.Height);
 }
 
+/// <summary>How much of an image a centre crop may remove (as a share of its area) before it is fitted whole instead.</summary>
+/// <param name="Sides">For images wider than 2:3, whose left and right edges are cut.</param>
+/// <param name="TopAndBottom">For images taller than 2:3, whose top and bottom edges are cut.</param>
+public readonly record struct CropAllowance(double Sides, double TopAndBottom)
+{
+    /// <summary>
+    /// Near-portrait art (up to about 8:9) is cropped, losing only side margins, which rarely hold text; that is how
+    /// Wattpad-style thumbnails treat it, and a fitted near-portrait image leaves thin smudgy bars. Cutting the top and
+    /// bottom reaches the title sooner, so tall images (phone screenshots) are cropped less and fitted sooner.
+    /// </summary>
+    public static readonly CropAllowance Default = new(0.25, 0.15);
+
+    /// <summary>
+    /// After solid bars were trimmed off: the artwork's top and bottom edges are then often its title, so only a sliver
+    /// may go there; the sides are treated as usual.
+    /// </summary>
+    public static readonly CropAllowance AfterTrim = new(0.25, 0.02);
+}
+
 /// <summary>The arithmetic of turning an image into a cover. No pixels here, so it is cheap to test exhaustively.</summary>
 public static class CoverGeometry
 {
     /// <summary>Target width/height.</summary>
     public const double Ratio = (double)NovelCovers.RatioWidth / NovelCovers.RatioHeight;
-
-    /// <summary>Crop when it removes at most this share of the image; otherwise fit (see <see cref="CoverLayout"/>).</summary>
-    public const double MaxCropLoss = 0.15;
-
-    /// <summary>
-    /// The crop allowance once solid bars have been trimmed off: the artwork's edge is then often its title, with no
-    /// margin left to lose, so only rounding-sized crops are made and anything more is fitted.
-    /// </summary>
-    public const double MaxCropLossAfterTrim = 0.02;
 
     /// <summary>Sources this close to 2:3 are used whole (the rounding of a 2:3 export is not worth a crop).</summary>
     private const double RatioTolerance = 0.005;
@@ -51,9 +61,10 @@ public static class CoverGeometry
     /// Plans the cover for an upright source of <paramref name="width"/> x <paramref name="height"/> pixels. The result is
     /// never upscaled: a source narrower than <see cref="NovelCovers.MaxWidth"/> gives a cover as wide as its 2:3 part.
     /// </summary>
-    public static CoverPlan Plan(int width, int height, int maxWidth = NovelCovers.MaxWidth, double maxCropLoss = MaxCropLoss)
+    public static CoverPlan Plan(int width, int height, int maxWidth = NovelCovers.MaxWidth, CropAllowance? allowance = null)
     {
         if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width), "Image has no pixels.");
+        var allowed = allowance ?? CropAllowance.Default;
 
         var ratio = (double)width / height;
         SKRectI crop;
@@ -77,7 +88,7 @@ public static class CoverGeometry
         }
 
         var loss = 1 - (double)crop.Width * crop.Height / ((double)width * height);
-        if (loss <= maxCropLoss)
+        if (loss <= (ratio > Ratio ? allowed.Sides : allowed.TopAndBottom))
         {
             var coverWidth = EvenWidth(Math.Min(maxWidth, crop.Width));
             return new CoverPlan(CoverLayout.Crop, crop, coverWidth, NovelCovers.HeightFor(coverWidth));

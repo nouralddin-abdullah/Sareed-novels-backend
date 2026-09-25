@@ -1,8 +1,8 @@
 namespace Application.Covers;
 
 /// <summary>
-/// The uploaded file can't be used as a cover. <see cref="Code"/> is stable (the web app maps it to a translated
-/// message); <see cref="Exception.Message"/> is English text for API clients and logs. Handlers turn this into a 400.
+/// The uploaded file can't be used as a cover. <see cref="Code"/> is stable (the web app maps it to its own message);
+/// <see cref="Exception.Message"/> is Arabic text for other API clients. Handlers turn this into a 400.
 /// </summary>
 public class CoverImageException(string code, string message) : Exception(message)
 {
