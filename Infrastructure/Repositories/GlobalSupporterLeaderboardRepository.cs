@@ -24,16 +24,19 @@ public class GlobalSupporterLeaderboardRepository(ApplicationDbContext dbContext
         return (supporters, totalCount);
     }
 
-    public async Task RecalculateWeeklyLeaderboard()
+    public Task RecalculateWeeklyLeaderboard() => Recalculate("Weekly", since: DateTime.UtcNow.AddDays(-7));
+
+    public Task RecalculateAllTimeLeaderboard() => Recalculate("AllTime", since: null);
+
+    private async Task Recalculate(string period, DateTime? since)
     {
-        var weekAgo = DateTime.UtcNow.AddDays(-7);
+        var gifts = dbContext.GiftTransactions.AsQueryable();
+        if (since.HasValue)
+        {
+            gifts = gifts.Where(t => t.CreatedAt >= since.Value);
+        }
 
-        // Clear existing weekly leaderboard
-        await ClearLeaderboard("Weekly");
-
-        // Calculate new weekly leaderboard
-        var weeklyStats = await dbContext.GiftTransactions
-            .Where(t => t.CreatedAt >= weekAgo)
+        var stats = await gifts
             .GroupBy(t => t.SenderId)
             .Select(g => new
             {
@@ -42,55 +45,27 @@ public class GlobalSupporterLeaderboardRepository(ApplicationDbContext dbContext
                 TotalGifts = g.Sum(t => t.Count)
             })
             .OrderByDescending(x => x.TotalPoints)
+            .ThenByDescending(x => x.TotalGifts)
             .ToListAsync();
 
-        // Insert with ranks
-        var leaderboard = weeklyStats.Select((stat, index) => new GlobalSupporterLeaderboard
+        var now = DateTime.UtcNow;
+
+        // Swap the board in one transaction: it used to be cleared and refilled in separate commits, so a reader could
+        // see it empty, and a failed insert left it empty until the next recalculation.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await dbContext.GlobalSupporterLeaderboards.Where(l => l.Period == period).ExecuteDeleteAsync();
+        dbContext.GlobalSupporterLeaderboards.AddRange(stats.Select((stat, index) => new GlobalSupporterLeaderboard
         {
             Id = Guid.NewGuid(),
             UserId = stat.UserId,
             TotalPointsGifted = stat.TotalPoints,
             TotalGiftsCount = stat.TotalGifts,
             Rank = index + 1,
-            Period = "Weekly",
-            LastUpdated = DateTime.UtcNow
-        });
-
-        dbContext.GlobalSupporterLeaderboards.AddRange(leaderboard);
+            Period = period,
+            LastUpdated = now
+        }));
         await dbContext.SaveChangesAsync();
-    }
-
-    public async Task RecalculateAllTimeLeaderboard()
-    {
-        // Clear existing all-time leaderboard
-        await ClearLeaderboard("AllTime");
-
-        // Calculate all-time leaderboard
-        var allTimeStats = await dbContext.GiftTransactions
-            .GroupBy(t => t.SenderId)
-            .Select(g => new
-            {
-                UserId = g.Key,
-                TotalPoints = g.Sum(t => t.TotalCost),
-                TotalGifts = g.Sum(t => t.Count)
-            })
-            .OrderByDescending(x => x.TotalPoints)
-            .ToListAsync();
-
-        // Insert with ranks
-        var leaderboard = allTimeStats.Select((stat, index) => new GlobalSupporterLeaderboard
-        {
-            Id = Guid.NewGuid(),
-            UserId = stat.UserId,
-            TotalPointsGifted = stat.TotalPoints,
-            TotalGiftsCount = stat.TotalGifts,
-            Rank = index + 1,
-            Period = "AllTime",
-            LastUpdated = DateTime.UtcNow
-        });
-
-        dbContext.GlobalSupporterLeaderboards.AddRange(leaderboard);
-        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
     public async Task ClearLeaderboard(string period)
