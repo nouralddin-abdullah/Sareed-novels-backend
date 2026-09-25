@@ -45,6 +45,11 @@ public static class ServiceCollectionExtensions
             options.Password.RequireNonAlphanumeric = false;    // Don't require special characters
             options.Password.RequiredLength = 6;                // Minimum 6 characters
             options.Password.RequiredUniqueChars = 0;           // At least 0 unique character
+
+            // Sign-in lockout (UserLoginCommandHandler): 5 wrong passwords lock the account for 5 minutes.
+            options.Lockout.AllowedForNewUsers = true;
+            options.Lockout.MaxFailedAccessAttempts = 5;
+            options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
         })
         .AddEntityFrameworkStores<ApplicationDbContext>()
         .AddClaimsPrincipalFactory<SardUserClaimsPrincipalFactory>()

@@ -12,8 +12,15 @@ public class SendConfirmEmailCommandHandler(UserManager<User> userManager, ILogg
 {
     public async Task Handle(SendConfirmEmailCommand request, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Generating email confirmation token for {email}:", request.Email);
-        var user = await userManager.FindByEmailAsync(request.Email) ?? throw new NotFoundException("The user not found");
+        var user = await userManager.FindByEmailAsync(request.Email);
+        if (user == null || user.EmailConfirmed)
+        {
+            // Answer the same either way, so the endpoint can't be used to find out who has an account.
+            logger.LogInformation("Confirmation email not sent: no account or already confirmed");
+            return;
+        }
+
+        logger.LogInformation("Generating email confirmation token for user {UserId}", user.Id);
         var token = await usersRepository.GenerateEmailToken(user);
         var confirmationLink = $"https://www.sardnovels.com/confirm-email?UserId={user.Id}&token={Uri.EscapeDataString(token)}";
 

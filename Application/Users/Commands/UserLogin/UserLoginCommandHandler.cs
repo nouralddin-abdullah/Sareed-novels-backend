@@ -12,7 +12,7 @@ public class UserLoginCommandHandler(UserManager<User> userManager, ILogger<User
     public async Task<UserLoginResult> Handle(UserLoginCommand request, CancellationToken cancellationToken)
     {
         User? user;
-        logger.LogInformation("Trying to login for {loginCardinality}", request.LoginCardinality);
+        logger.LogInformation("Sign-in attempt");
         if (request.LoginCardinality.Contains('@'))
         {
             user = await userManager.FindByEmailAsync(request.LoginCardinality);
@@ -22,8 +22,21 @@ public class UserLoginCommandHandler(UserManager<User> userManager, ILogger<User
             user = await userManager.FindByNameAsync(request.LoginCardinality);
         }
 
-        if (user == null || !await userManager.CheckPasswordAsync(user, request.Password))
+        if (user == null)
             throw new ForbidException("Invalid email or password");
+
+        // Identity lockout: after MaxFailedAccessAttempts wrong passwords the account refuses sign-in for a while.
+        if (await userManager.IsLockedOutAsync(user))
+            throw new TooManyRequestsException("Too many failed sign-in attempts. Try again in a few minutes.");
+
+        if (!await userManager.CheckPasswordAsync(user, request.Password))
+        {
+            await userManager.AccessFailedAsync(user);
+            throw new ForbidException("Invalid email or password");
+        }
+
+        if (await userManager.GetAccessFailedCountAsync(user) > 0)
+            await userManager.ResetAccessFailedCountAsync(user);
 
         var accessToken = jWTService.GenerateAccessToken(user);
         var expiresAt = DateTime.UtcNow.AddDays(60);

@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -88,6 +89,26 @@ public static class WebApplicationBuilderExtensions
             };
         });
 
+        // Per-client-IP limits on the anonymous account endpoints (password guessing, sign-up spam, email bombing).
+        builder.Services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.OnRejected = async (context, cancellationToken) =>
+            {
+                if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                {
+                    context.HttpContext.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
+                }
+                await context.HttpContext.Response.WriteAsync("Too many requests. Try again in a few minutes.", cancellationToken);
+            };
+            options.AddPolicy(RateLimitPolicies.Auth, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            options.AddPolicy(RateLimitPolicies.Email, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 }));
+        });
+
         // 2. Add MVC Controllers
         builder.Services.AddControllers();
 
@@ -126,4 +147,13 @@ public static class WebApplicationBuilderExtensions
             configuration.ReadFrom.Configuration(context.Configuration);
         });
     }
+}
+
+public static class RateLimitPolicies
+{
+    /// <summary>Sign-in, sign-up and token endpoints: 10 requests per minute per IP.</summary>
+    public const string Auth = "auth";
+
+    /// <summary>Endpoints that send an email: 5 requests per 15 minutes per IP.</summary>
+    public const string Email = "email";
 }
