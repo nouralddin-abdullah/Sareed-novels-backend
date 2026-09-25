@@ -13,6 +13,7 @@ public class UpdateNovelCommandHandler(
     ILogger<UpdateNovelCommandHandler> logger, 
     IUserContext userContext, 
     INovelGenresRepository novelGenresRepository,
+    IGenresRepository genresRepository,
     INovelsRepository novelsRepository, 
     IMapper mapper,
     INovelRecommendationService recommendationService) : IRequestHandler<UpdateNovelCommand, OperationResult>
@@ -26,6 +27,23 @@ public class UpdateNovelCommandHandler(
         {
             throw new ForbidException("Forbidden");
         }
+
+        // Validate the genres before changing anything, so a bad genre list can't leave a half-applied update.
+        if (request.GenreIds != null)
+        {
+            var knownGenreIds = (await genresRepository.GetAllGenres()).Select(g => g.Id).ToHashSet();
+            if (request.GenreIds.Count == 0 || request.GenreIds.Count > 4
+                || request.GenreIds.Distinct().Count() != request.GenreIds.Count
+                || !request.GenreIds.All(knownGenreIds.Contains))
+            {
+                return new OperationResult
+                {
+                    Message = "A novel must have between 1 and 4 different, existing genres",
+                    Success = false
+                };
+            }
+        }
+
         if (request.Title != null)
         {
             novel.Slug = $"{novel.Id.ToString().Substring(0, 5)}-{request.Title.Replace(" ", "-").ToLower()}";
@@ -42,16 +60,6 @@ public class UpdateNovelCommandHandler(
         }
         if (request.GenreIds != null)
         {
-            //Validation
-
-            if (request.GenreIds.Count == 0 || request.GenreIds.Count > 4)
-            {
-                return new OperationResult
-                {
-                    Message = "A novel must have between 1 and 4 genres",
-                    Success = false
-                };
-            }
             bool genresUpdateResult = await novelGenresRepository.UpdateNovelGenres(request.NovelId, request.GenreIds);
             if (!genresUpdateResult)
             {

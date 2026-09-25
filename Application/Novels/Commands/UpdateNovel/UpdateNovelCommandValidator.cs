@@ -23,6 +23,14 @@ namespace Application.Novels.Commands.UpdateNovel
                 .When(x => x.Status != null)
                 .WithMessage("Status must be either 'Ongoing' or 'Completed'");
 
+            RuleFor(x => x.GenreIds)
+                .Must(genres => genres!.Count >= 1 && genres.Count <= 4)
+                .When(x => x.GenreIds != null)
+                .WithMessage("A novel must have between 1 and 4 genres")
+                .Must(genres => genres!.Distinct().Count() == genres!.Count)
+                .When(x => x.GenreIds != null)
+                .WithMessage("A genre can only be selected once");
+
         }
     }
 }
