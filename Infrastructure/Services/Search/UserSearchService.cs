@@ -17,9 +17,14 @@ public class UserSearchService(ApplicationDbContext dbContext) : IUserSearchServ
         SearchUsersRequest request,
         CancellationToken cancellationToken = default)
     {
-        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageNumber = Math.Clamp(request.PageNumber, 1, NovelSearchService.MaxPageNumber);
         var pageSize = Math.Clamp(request.PageSize, 1, NovelSearchService.MaxPageSize);
         var tokens = SearchText.Tokens(request.Query);
+        if (SearchText.HasNothingSearchable(request.Query, tokens))
+        {
+            return new PagedResult<UserSearchResult>([], 0, pageSize, pageNumber);
+        }
+
         var phrase = string.Join(' ', tokens);
         var wordStart = " " + phrase;
         var rawQuery = request.Query?.Trim() ?? string.Empty;

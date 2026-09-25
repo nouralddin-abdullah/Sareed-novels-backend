@@ -18,4 +18,6 @@ public class UserSearchResult
     public int FollowersCount { get; set; }
     public int FollowingCount { get; set; }
     public int NovelsCount { get; set; }
+    /// <summary>Whether the signed-in caller follows this user; null for guests.</summary>
+    public bool? IsFollowing { get; set; }
 }

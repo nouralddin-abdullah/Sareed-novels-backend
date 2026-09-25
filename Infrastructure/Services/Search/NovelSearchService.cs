@@ -10,23 +10,33 @@ namespace Infrastructure.Services.Search;
 /// <summary>
 /// Novel search straight from SQL. Every query word must appear in the normalized title (Novel.SearchTitle);
 /// relevance is exact title > title starts with the query > a word starts with it > contains it, then popularity.
+/// Like the sitemap and new arrivals, only novels a reader can open are listed: not a draft, and at least one
+/// published chapter.
 /// </summary>
 public class NovelSearchService(ApplicationDbContext dbContext) : INovelSearchService
 {
     private const string Published = "Published";
     internal const int MaxPageSize = 50;
+    // Keeps (page - 1) * size inside int: a huge page number used to overflow into a negative OFFSET and a 500.
+    internal const int MaxPageNumber = int.MaxValue / MaxPageSize;
 
     public async Task<PagedResult<NovelSearchResult>> SearchNovelsAsync(
         SearchNovelsRequest request,
         CancellationToken cancellationToken = default)
     {
-        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageNumber = Math.Clamp(request.PageNumber, 1, MaxPageNumber);
         var pageSize = Math.Clamp(request.PageSize, 1, MaxPageSize);
         var tokens = SearchText.Tokens(request.Query);
+        if (SearchText.HasNothingSearchable(request.Query, tokens))
+        {
+            return new PagedResult<NovelSearchResult>([], 0, pageSize, pageNumber);
+        }
+
         var phrase = string.Join(' ', tokens);
         var wordStart = " " + phrase;
 
-        var query = dbContext.Novels.AsNoTracking().Where(n => !n.IsDraft);
+        var query = dbContext.Novels.AsNoTracking()
+            .Where(n => !n.IsDraft && n.Chapters.Any(c => c.Status == Published));
 
         foreach (var token in tokens)
         {
