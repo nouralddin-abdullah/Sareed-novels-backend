@@ -21,16 +21,4 @@ public class Review
     {
         TotalAverageScore = (WritingQualityScore + UpdatingStabilityScore + CharacterDevelopmentScore + WorldBuildingScore) / 4;
     }
-
-    public void IncrementLikeCount()
-    {
-        LikeCount++;
-    }
-    public void DecrementLikeCount()
-    {
-        if (LikeCount > 0)
-        {
-            LikeCount--;
-        }
-    }
 }

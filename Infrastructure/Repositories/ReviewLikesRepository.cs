@@ -29,52 +29,41 @@ public class ReviewLikesRepository(ApplicationDbContext dbContext) : IReviewLike
 
     }
 
-    public async Task<bool> LikeReview(ReviewLike reviewLike)
+    public async Task<bool> LikeReview(string userId, Guid reviewId)
     {
-        try
+        // See PostLikesRepository.LikePost: insert once under concurrency, count in the same transaction.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO ReviewLikes (UserId, ReviewId, CreatedAt)
+            SELECT {userId}, {reviewId}, {DateTime.UtcNow}
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ReviewLikes WITH (UPDLOCK, HOLDLOCK) WHERE UserId = {userId} AND ReviewId = {reviewId})
+            """);
+        if (inserted == 1)
         {
-            await dbContext.ReviewLikes.AddAsync(reviewLike);
-            await dbContext.SaveChangesAsync();
+            await dbContext.Reviews
+                .Where(r => r.Id == reviewId)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.LikeCount, r => r.LikeCount + 1));
+        }
 
-            //increment like on review
-            var review = await dbContext.Reviews.FindAsync(reviewLike.ReviewId);
-            if (review != null)
-            {
-                review.IncrementLikeCount();
-                dbContext.Reviews.Update(review);
-                await dbContext.SaveChangesAsync();
-            }
-            return true;
-        }
-        catch (DbUpdateException)
-        {
-            return false;
-        }
+        await transaction.CommitAsync();
+        return inserted == 1;
     }
 
     public async Task<bool> UnLikeReview(string userId, Guid reviewId)
     {
-        try
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        var deleted = await dbContext.ReviewLikes
+            .Where(rl => rl.UserId == userId && rl.ReviewId == reviewId)
+            .ExecuteDeleteAsync();
+        if (deleted > 0)
         {
-            var existingLike = await dbContext.ReviewLikes.FirstOrDefaultAsync(rl => rl.UserId == userId && rl.ReviewId == reviewId);
-            if (existingLike == null)
-                return false;
-            dbContext.ReviewLikes.Remove(existingLike);
-            await dbContext.SaveChangesAsync();
+            await dbContext.Reviews
+                .Where(r => r.Id == reviewId)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.LikeCount, r => r.LikeCount > 0 ? r.LikeCount - 1 : 0));
+        }
 
-            //decrease like count
-            var review = await dbContext.Reviews.FindAsync(reviewId);
-            if (review != null)
-            {
-                review.DecrementLikeCount();
-                dbContext.Reviews.Update(review);
-                await dbContext.SaveChangesAsync();
-            }
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        await transaction.CommitAsync();
+        return deleted > 0;
     }
 }

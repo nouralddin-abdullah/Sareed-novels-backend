@@ -29,41 +29,43 @@ public class CommentLikesRepository(ApplicationDbContext dbContext) : ICommentLi
             .AnyAsync(cl => cl.UserId == userId && cl.CommentId == commentId);
     }
 
-    public async Task<bool> LikeComment(CommentLikes commentLike)
+    public async Task<bool> LikeComment(string userId, Guid commentId)
     {
-            await dbContext.CommentLikes.AddAsync(commentLike);
-            return await dbContext.SaveChangesAsync() > 0;
+        // See PostLikesRepository.LikePost: insert once under concurrency, count in the same transaction.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO CommentLikes (UserId, CommentId, CreatedAt)
+            SELECT {userId}, {commentId}, {DateTime.UtcNow}
+            WHERE NOT EXISTS (
+                SELECT 1 FROM CommentLikes WITH (UPDLOCK, HOLDLOCK) WHERE UserId = {userId} AND CommentId = {commentId})
+            """);
+        if (inserted == 1)
+        {
+            await dbContext.Comments
+                .IgnoreQueryFilters()
+                .Where(c => c.Id == commentId)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.LikesCount, c => c.LikesCount + 1));
+        }
+
+        await transaction.CommitAsync();
+        return inserted == 1;
     }
 
     public async Task<bool> UnLikeComment(string userId, Guid commentId)
     {
-        var existingLike = await dbContext.CommentLikes
-            .FirstOrDefaultAsync(cl => cl.UserId == userId && cl.CommentId == commentId);
-
-        if (existingLike == null)
-            return false;
-
-        dbContext.CommentLikes.Remove(existingLike);
-        return await dbContext.SaveChangesAsync() > 0;
-    }
-
-    public async Task IncrementCommentLikesCount(Guid commentId)
-    {
-        var comment = await dbContext.Comments.FindAsync(commentId);
-        if (comment != null)
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        var deleted = await dbContext.CommentLikes
+            .Where(cl => cl.UserId == userId && cl.CommentId == commentId)
+            .ExecuteDeleteAsync();
+        if (deleted > 0)
         {
-            comment.IncrementLikeCount();
-            await dbContext.SaveChangesAsync();
+            await dbContext.Comments
+                .IgnoreQueryFilters()
+                .Where(c => c.Id == commentId)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.LikesCount, c => c.LikesCount > 0 ? c.LikesCount - 1 : 0));
         }
-    }
 
-    public async Task DecrementCommentLikesCount(Guid commentId)
-    {
-        var comment = await dbContext.Comments.FindAsync(commentId);
-        if (comment != null)
-        {
-            comment.DecrementLikeCount();
-            await dbContext.SaveChangesAsync();
-        }
+        await transaction.CommitAsync();
+        return deleted > 0;
     }
 }

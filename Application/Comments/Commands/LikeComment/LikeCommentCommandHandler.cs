@@ -50,8 +50,8 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
             };
         }
 
-        var existingLike = await _commentLikesRepository.GetUserLikeForComment(currentUser.Id, request.CommentId);
-        if (existingLike != null)
+        // Inserts the like and bumps LikesCount in one transaction; a concurrent duplicate is a no-op here.
+        if (!await _commentLikesRepository.LikeComment(currentUser.Id, request.CommentId))
         {
             return new OperationResult
             {
@@ -60,25 +60,6 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
             };
         }
 
-        var commentLike = new CommentLikes
-        {
-            UserId = currentUser.Id,
-            CommentId = request.CommentId,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        var result = await _commentLikesRepository.LikeComment(commentLike);
-        if (!result)
-        {
-            return new OperationResult
-            {
-                Success = false,
-                Message = "Failed to like this comment"
-            };
-        }
-
-        _ = UpdateCommentLikesCountInBackground(request.CommentId, increment: true);
-        
         // Fire-and-forget: Send notification
         _ = SendLikeOnCommentNotificationInBackground(comment.UserId, currentUser.Id, request.CommentId);
 
@@ -160,27 +141,6 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to send LikeOnComment notification");
-        }
-    }
-
-    private async Task UpdateCommentLikesCountInBackground(Guid commentId, bool increment)
-    {
-        try
-        {
-            using var scope = _serviceProvider.CreateScope();
-            var backgroundCommentLikesRepository = scope.ServiceProvider.GetRequiredService<ICommentLikesRepository>();
-
-            if (increment)
-                await backgroundCommentLikesRepository.IncrementCommentLikesCount(commentId);
-            else
-                await backgroundCommentLikesRepository.DecrementCommentLikesCount(commentId);
-
-            _logger.LogDebug("Successfully updated likes count for comment {CommentId}: {Action}",
-                commentId, increment ? "increment" : "decrement");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to update likes count for comment {CommentId} in background", commentId);
         }
     }
 }

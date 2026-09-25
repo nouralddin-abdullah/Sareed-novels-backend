@@ -37,10 +37,6 @@ public class User : IdentityUser
     public ICollection<ReadingListFollower> FollowedReadingLists { get; set; } = new List<ReadingListFollower>();
     
     // Helper methods for counters
-    public void IncrementReviewsCount() => ReviewsCount++;
-    public void DecrementReviewsCount() => ReviewsCount = Math.Max(0, ReviewsCount - 1);
-    public void IncrementCommentsCount() => CommentsCount++;
-    public void DecrementCommentsCount() => CommentsCount = Math.Max(0, CommentsCount - 1);
     public void IncrementLibraryNovelsCount() => LibraryNovelsCount++;
     public void DecrementLibraryNovelsCount() => LibraryNovelsCount = Math.Max(0, LibraryNovelsCount - 1);
 }

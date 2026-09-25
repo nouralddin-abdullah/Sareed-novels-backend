@@ -14,7 +14,7 @@ public interface INotificationService
     Task SendPrivilegeSubscribedNotification(string novelAuthorId, User subscriber, Novel novel, decimal cost); // ✅ NEW
     
     // Phase 2: Like notifications
-    Task SendLikeOnPostNotification(string postAuthorId, User liker, string postAuthorUsername);
+    Task SendLikeOnPostNotification(string postAuthorId, User liker, Guid postId, string postAuthorUsername);
     Task SendLikeOnCommentNotification(string commentAuthorId, User liker, Guid commentId, Domain.Entities.Comments comment, Novel? novel = null, Chapter? chapter = null, string? postAuthorUsername = null);
     Task SendLikeOnReviewNotification(string reviewAuthorId, User liker, Guid reviewId, Novel novel);
     Task SendReadingListFollowedNotification(string listOwnerId, User follower, Guid readingListId, string readingListName);

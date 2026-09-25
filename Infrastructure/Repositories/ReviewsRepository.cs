@@ -9,45 +9,68 @@ public class ReviewsRepository(ApplicationDbContext dbContext) : IReviewsReposit
 {
     public async Task<bool> CreateOne(Review review)
     {
-        await dbContext.Reviews.AddAsync(review);
-        var result = await dbContext.SaveChangesAsync();
-        if (result > 0)
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync())
         {
-            return true;
+            await dbContext.Reviews.AddAsync(review);
+            if (await dbContext.SaveChangesAsync() == 0)
+            {
+                return false;
+            }
+
+            await dbContext.Users
+                .Where(u => u.Id == review.ReviewerId)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.ReviewsCount, u => u.ReviewsCount + 1));
+            await transaction.CommitAsync();
         }
-        return false;
+
+        // After the commit, not inside it: the stats are a recount, so the last writer sees every committed review
+        // and a failure here heals on the novel's next review.
+        await RefreshNovelReviewStats(review.NovelId);
+        return true;
     }
 
     public async Task<bool> DeleteReview(Review review)
     {
-        dbContext.Reviews.Remove(review!);
-        var result = await dbContext.SaveChangesAsync();
-        return result > 0;
-    }
-
-    public async Task<bool> DeleteReviewWithNovelUpdate(Review review, Novel novel)
-    {
-        using var transaction = await dbContext.Database.BeginTransactionAsync();
-        try
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync())
         {
-            dbContext.Novels.Update(novel);
-            dbContext.Reviews.Remove(review);
-            var result = await dbContext.SaveChangesAsync();
-
-            if (result > 0)
+            // Review likes reference the review without a cascade.
+            await dbContext.ReviewLikes.Where(rl => rl.ReviewId == review.Id).ExecuteDeleteAsync();
+            if (await dbContext.Reviews.Where(r => r.Id == review.Id).ExecuteDeleteAsync() == 0)
             {
-                await transaction.CommitAsync();
-                return true;
+                return false;
             }
 
-            await transaction.RollbackAsync();
-            return false;
+            await dbContext.Users
+                .Where(u => u.Id == review.ReviewerId)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.ReviewsCount, u => u.ReviewsCount > 0 ? u.ReviewsCount - 1 : 0));
+            await transaction.CommitAsync();
         }
-        catch
-        {
-            await transaction.RollbackAsync();
-            throw;
-        }
+
+        await RefreshNovelReviewStats(review.NovelId);
+        return true;
+    }
+
+    public Task RefreshNovelReviewStats(Guid novelId)
+    {
+        var reviews = dbContext.Reviews;
+        return dbContext.Novels
+            .IgnoreQueryFilters()
+            .Where(n => n.Id == novelId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(n => n.ReviewCount, n => reviews.Count(r => r.NovelId == n.Id))
+                .SetProperty(n => n.AverageWritingQualityScore,
+                    n => reviews.Where(r => r.NovelId == n.Id).Average(r => (decimal?)r.WritingQualityScore) ?? 0)
+                .SetProperty(n => n.AverageUpdatingStabilityScore,
+                    n => reviews.Where(r => r.NovelId == n.Id).Average(r => (decimal?)r.UpdatingStabilityScore) ?? 0)
+                .SetProperty(n => n.AverageCharacterDevelopmentScore,
+                    n => reviews.Where(r => r.NovelId == n.Id).Average(r => (decimal?)r.CharacterDevelopmentScore) ?? 0)
+                .SetProperty(n => n.AverageWorldBuildingScore,
+                    n => reviews.Where(r => r.NovelId == n.Id).Average(r => (decimal?)r.WorldBuildingScore) ?? 0)
+                .SetProperty(n => n.TotalAverageScore,
+                    n => ((reviews.Where(r => r.NovelId == n.Id).Average(r => (decimal?)r.WritingQualityScore) ?? 0)
+                          + (reviews.Where(r => r.NovelId == n.Id).Average(r => (decimal?)r.UpdatingStabilityScore) ?? 0)
+                          + (reviews.Where(r => r.NovelId == n.Id).Average(r => (decimal?)r.CharacterDevelopmentScore) ?? 0)
+                          + (reviews.Where(r => r.NovelId == n.Id).Average(r => (decimal?)r.WorldBuildingScore) ?? 0)) / 4));
     }
 
     public async Task<(IEnumerable<Review>, int)> GetNovelReviews(Guid novelId, int PageSize, int PageNumber, string sorting)

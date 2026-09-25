@@ -29,28 +29,13 @@ internal class CreateLikeReviewCommandHandler(
                 Message = "You cannot like your own review"
             };
         }
-        var existingLike = await reviewLikesRepository.GetUserLikeForReview(currentUser.Id, request.ReviewId);
-        if (existingLike != null)
+        // Inserts the like and bumps LikeCount in one transaction; a concurrent duplicate is a no-op here.
+        if (!await reviewLikesRepository.LikeReview(currentUser.Id, request.ReviewId))
         {
             return new OperationResult
             {
                 Success = false,
                 Message = "You already liked this review"
-            };
-        }
-
-        var reviewLike = new ReviewLike
-        {
-            UserId = currentUser.Id,
-            ReviewId = request.ReviewId
-        };
-        var result = await reviewLikesRepository.LikeReview(reviewLike);
-        if (!result)
-        {
-            return new OperationResult
-            {
-                Success = false,
-                Message = "Failed to like this review"
             };
         }
         

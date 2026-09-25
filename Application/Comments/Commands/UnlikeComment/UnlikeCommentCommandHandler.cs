@@ -44,9 +44,6 @@ public class UnlikeCommentCommandHandler : IRequestHandler<UnlikeCommentCommand,
             };
         }
 
-        // Fire-and-forget: Update likes count in background
-        _ = UpdateCommentLikesCountInBackground(request.CommentId, increment: false);
-
         _logger.LogInformation("Comment {CommentId} unliked successfully by user {UserId}",
             request.CommentId, currentUser.Id);
 
@@ -55,26 +52,5 @@ public class UnlikeCommentCommandHandler : IRequestHandler<UnlikeCommentCommand,
             Success = true,
             Message = "Comment unliked successfully"
         };
-    }
-
-    private async Task UpdateCommentLikesCountInBackground(Guid commentId, bool increment)
-    {
-        try
-        {
-            using var scope = _serviceProvider.CreateScope();
-            var backgroundCommentLikesRepository = scope.ServiceProvider.GetRequiredService<ICommentLikesRepository>();
-
-            if (increment)
-                await backgroundCommentLikesRepository.IncrementCommentLikesCount(commentId);
-            else
-                await backgroundCommentLikesRepository.DecrementCommentLikesCount(commentId);
-
-            _logger.LogDebug("Successfully updated likes count for comment {CommentId}: {Action}",
-                commentId, increment ? "increment" : "decrement");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to update likes count for comment {CommentId} in background", commentId);
-        }
     }
 }
