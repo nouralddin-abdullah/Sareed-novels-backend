@@ -28,7 +28,12 @@ public class NotificationService(
                 CreatedAt = DateTime.UtcNow
             };
 
-            await notificationsRepository.CreateNotification(notification);
+            // Like/unlike or follow/unfollow repeated doesn't pile up notifications: one unread per actor and item.
+            if (!await notificationsRepository.CreateUnlessUnreadExists(notification))
+            {
+                logger.LogDebug("Skipped duplicate NewFollower notification for user {UserId}", followedUserId);
+                return;
+            }
             logger.LogDebug("Created NewFollower notification for user {UserId}", followedUserId);
         }
         catch (Exception ex)
@@ -213,7 +218,7 @@ public class NotificationService(
     }
 
     // Phase 2: Like notifications
-    public async Task SendLikeOnPostNotification(string postAuthorId, User liker, string postAuthorUsername)
+    public async Task SendLikeOnPostNotification(string postAuthorId, User liker, Guid postId, string postAuthorUsername)
     {
         try
         {
@@ -231,12 +236,17 @@ public class NotificationService(
                 Message = $"{liker.DisplayName} أعجب بمنشورك",
                 ActionUrl = $"/profile/{postAuthorUsername}",
                 IsRead = false,
-                RelatedEntityId = null,
+                RelatedEntityId = postId,
                 RelatedEntityType = "Post",
                 CreatedAt = DateTime.UtcNow
             };
 
-            await notificationsRepository.CreateNotification(notification);
+            // Like/unlike or follow/unfollow repeated doesn't pile up notifications: one unread per actor and item.
+            if (!await notificationsRepository.CreateUnlessUnreadExists(notification))
+            {
+                logger.LogDebug("Skipped duplicate LikeOnPost notification for user {UserId}", postAuthorId);
+                return;
+            }
             logger.LogDebug("Created LikeOnPost notification for user {UserId}", postAuthorId);
         }
         catch (Exception ex)
@@ -282,7 +292,12 @@ public class NotificationService(
                 CreatedAt = DateTime.UtcNow
             };
 
-            await notificationsRepository.CreateNotification(notification);
+            // Like/unlike or follow/unfollow repeated doesn't pile up notifications: one unread per actor and item.
+            if (!await notificationsRepository.CreateUnlessUnreadExists(notification))
+            {
+                logger.LogDebug("Skipped duplicate LikeOnComment notification for user {UserId}", commentAuthorId);
+                return;
+            }
             logger.LogDebug("Created LikeOnComment notification for user {UserId}", commentAuthorId);
         }
         catch (Exception ex)
@@ -314,7 +329,12 @@ public class NotificationService(
                 CreatedAt = DateTime.UtcNow
             };
 
-            await notificationsRepository.CreateNotification(notification);
+            // Like/unlike or follow/unfollow repeated doesn't pile up notifications: one unread per actor and item.
+            if (!await notificationsRepository.CreateUnlessUnreadExists(notification))
+            {
+                logger.LogDebug("Skipped duplicate LikeOnReview notification for user {UserId}", reviewAuthorId);
+                return;
+            }
             logger.LogDebug("Created LikeOnReview notification for user {UserId}", reviewAuthorId);
         }
         catch (Exception ex)
@@ -346,7 +366,12 @@ public class NotificationService(
                 CreatedAt = DateTime.UtcNow
             };
 
-            await notificationsRepository.CreateNotification(notification);
+            // Like/unlike or follow/unfollow repeated doesn't pile up notifications: one unread per actor and item.
+            if (!await notificationsRepository.CreateUnlessUnreadExists(notification))
+            {
+                logger.LogDebug("Skipped duplicate ReadingListFollowed notification for user {UserId}", listOwnerId);
+                return;
+            }
             logger.LogDebug("Created ReadingListFollowed notification for user {UserId}", listOwnerId);
         }
         catch (Exception ex)

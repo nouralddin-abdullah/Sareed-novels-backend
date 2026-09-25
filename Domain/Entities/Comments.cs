@@ -35,17 +35,4 @@ public class Comments
     public bool IsChapterComment => ChapterId.HasValue && !ParagraphId.HasValue;
     public bool IsParagraphComment => ParagraphId.HasValue;
     public bool IsPostComment => PostId.HasValue;
-
-    public void IncrementLikeCount()
-    {
-        LikesCount++;
-    }
-
-    public void DecrementLikeCount()
-    {
-        if (LikesCount > 0)
-        {
-            LikesCount--;
-        }
-    }
 }

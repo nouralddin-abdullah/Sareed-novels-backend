@@ -22,36 +22,8 @@ public class Chapter
     public int ParagraphsCount { get; set; } = 0;
     public int ViewsCount { get; set; } = 0;
 
-    public void IncrementCommentsCount()
-    {
-        CommentsCount++;
-        TotalCommentsCount++;
-    }
-
-    public void DecrementCommentsCount()
-    {
-        if (CommentsCount > 0)
-        {
-            CommentsCount--;
-        }
-        if (TotalCommentsCount > 0)
-        {
-            TotalCommentsCount--;
-        }
-    }
     
-    public void IncrementTotalCommentsCount()
-    {
-        TotalCommentsCount++;
-    }
     
-    public void DecrementTotalCommentsCount()
-    {
-        if (TotalCommentsCount > 0)
-        {
-            TotalCommentsCount--;
-        }
-    }
 
     public void IncrementViewsCount()
     {

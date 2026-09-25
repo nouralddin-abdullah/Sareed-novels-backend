@@ -12,17 +12,4 @@ public class ChapterParagraph
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public int CommentsCount { get; set; } = 0;
-
-    public void IncrementCommentsCount()
-    {
-        CommentsCount++;
-    }
-
-    public void DecrementCommentsCount()
-    {
-        if (CommentsCount > 0)
-        {
-            CommentsCount--;
-        }
-    }
 }

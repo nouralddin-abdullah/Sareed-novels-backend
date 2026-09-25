@@ -18,6 +18,8 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
         await MoveReadersOffChapter(chapter);
+        // Comment likes, replies and paragraph comments reference the chapter's comments without a cascade.
+        await SocialCounters.DeleteChapterComments(dbContext, chapter.Id);
         dbContext.Chapters.Remove(chapter);
         var result = await dbContext.SaveChangesAsync();
         await transaction.CommitAsync();

@@ -16,30 +16,4 @@ public class Post
 
     public ICollection<PostLike> Likes { get; set; } = new List<PostLike>();
     public ICollection<Comments> Comments { get; set; } = new List<Comments>();
-
-    public void IncrementLikeCount()
-    {
-        LikesCount++;
-    }
-
-    public void DecrementLikeCount()
-    {
-        if (LikesCount > 0)
-        {
-            LikesCount--;
-        }
-    }
-
-    public void IncrementCommentsCount()
-    {
-        CommentsCount++;
-    }
-
-    public void DecrementCommentsCount()
-    {
-        if (CommentsCount > 0)
-        {
-            CommentsCount--;
-        }
-    }
 }

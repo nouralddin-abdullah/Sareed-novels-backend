@@ -49,10 +49,4 @@ public class PostsRepository(ApplicationDbContext dbContext) : IPostsRepository
 
         return (posts, totalCount);
     }
-
-    public async Task<bool> UpdatePost(Post post)
-    {
-        dbContext.Posts.Update(post);
-        return await dbContext.SaveChangesAsync() > 0;
-    }
 }

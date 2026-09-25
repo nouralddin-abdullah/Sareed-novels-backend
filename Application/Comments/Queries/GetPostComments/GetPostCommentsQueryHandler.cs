@@ -20,20 +20,15 @@ public class GetPostCommentsQueryHandler(
         logger.LogInformation("Getting comments for post {PostId}, page {PageNumber}, sorting {Sorting}",
             request.PostId, request.PageNumber, request.Sorting);
 
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         var (comments, totalCount) = await commentsRepository.GetPostComments(
             request.PostId,
-            request.PageNumber,
-            request.PageSize,
+            pageNumber,
+            pageSize,
             request.Sorting);
 
         var commentDtos = mapper.Map<List<CommentsDTO>>(comments);
-
-        foreach (var commentDto in commentDtos)
-        {
-            var repliesCount = await commentsRepository.GetRepliesCountForComment(commentDto.Id);
-            commentDto.TotalRepliesCount = repliesCount;
-            commentDto.HasMoreReplies = repliesCount > 0;
-        }
+        await CommentReplyCounts.Fill(commentsRepository, commentDtos);
 
         var currentUser = userContext.GetCurrentUser();
         if (currentUser != null && commentDtos.Any())
@@ -50,7 +45,7 @@ public class GetPostCommentsQueryHandler(
         return new PagedResult<CommentsDTO>(
             commentDtos,
             totalCount,
-            request.PageSize,
-            request.PageNumber);
+            pageSize,
+            pageNumber);
     }
 }

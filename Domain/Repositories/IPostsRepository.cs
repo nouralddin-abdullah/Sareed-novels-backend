@@ -8,5 +8,4 @@ public interface IPostsRepository
     Task<Post?> GetPostById(Guid postId);
     Task<(IEnumerable<Post>, int)> GetUserPosts(string userId, int pageNumber, int pageSize);
     Task<bool> DeletePost(Guid postId);
-    Task<bool> UpdatePost(Post post);
 }

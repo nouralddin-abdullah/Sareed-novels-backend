@@ -47,6 +47,7 @@ public class CreateReviewCommandHandler(
         review.NovelId = novel.Id;
         review.ReviewerId = currentUser.Id;
         review.CalculateAverageScore();
+        // Also counts the review for its author and recomputes the novel's review stats with SQL COUNT/AVG.
         var result = await reviewsRepository.CreateOne(review);
         if (!result)
         {
@@ -56,14 +57,9 @@ public class CreateReviewCommandHandler(
                 Message = "Failed to create review"
             };
         }
-        novel.AddReviewToAverages(review);
-        await novelsRepository.UpdateOne(novel);
-        
+
         // Fire-and-forget: Send notification to novel author
         _ = SendReviewNotificationInBackground(novel.AuthorId, currentUser.Id, review.Id, novel.Id);
-        
-        // Fire-and-forget: Increment user's reviews count
-        _ = IncrementUserReviewsCountInBackground(currentUser.Id);
 
         return new OperationResult
         {
@@ -94,27 +90,6 @@ public class CreateReviewCommandHandler(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to send ReviewOnNovel notification in background");
-        }
-    }
-    
-    private async Task IncrementUserReviewsCountInBackground(string userId)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundUserManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
-            
-            var user = await backgroundUserManager.FindByIdAsync(userId);
-            if (user != null)
-            {
-                user.IncrementReviewsCount();
-                await backgroundUserManager.UpdateAsync(user);
-            }
-            logger.LogDebug("Successfully incremented reviews count for user {UserId}", userId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to increment reviews count for user {UserId}", userId);
         }
     }
 }

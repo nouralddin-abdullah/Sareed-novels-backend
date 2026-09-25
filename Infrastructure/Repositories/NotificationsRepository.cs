@@ -14,6 +14,24 @@ public class NotificationsRepository(ApplicationDbContext dbContext) : INotifica
         return notification;
     }
 
+    public async Task<bool> CreateUnlessUnreadExists(Notification notification)
+    {
+        var n = notification;
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO Notifications (Id, UserId, Type, ActorId, ActorDisplayName, ActorProfilePhoto, Message, ActionUrl,
+                                       IsRead, CreatedAt, RelatedEntityId, RelatedEntityType)
+            SELECT {n.Id}, {n.UserId}, {n.Type}, {n.ActorId}, {n.ActorDisplayName}, {n.ActorProfilePhoto}, {n.Message},
+                   {n.ActionUrl}, 0, {n.CreatedAt}, {n.RelatedEntityId}, {n.RelatedEntityType}
+            WHERE NOT EXISTS (
+                SELECT 1 FROM Notifications WITH (UPDLOCK, HOLDLOCK)
+                WHERE UserId = {n.UserId} AND IsRead = 0 AND Type = {n.Type} AND ActorId = {n.ActorId}
+                  AND (RelatedEntityId = {n.RelatedEntityId} OR (RelatedEntityId IS NULL AND {n.RelatedEntityId} IS NULL)))
+            """);
+        await transaction.CommitAsync();
+        return inserted == 1;
+    }
+
     public async Task<(IEnumerable<Notification>, int)> GetUserNotifications(string userId, int pageNumber, int pageSize, bool unreadOnly = false)
     {
         IQueryable<Notification> query = dbContext.Notifications

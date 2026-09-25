@@ -15,7 +15,8 @@ public class GetCommentRepliesQueryHandler(ILogger<GetCommentRepliesQueryHandler
     {
         logger.LogInformation("Getting replies for comment {ParentCommentId}", request.ParentCommentId);
         var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId) ?? throw new NotFoundException("Parent comment not found");
-        var (replies, totalCount) = await commentsRepository.GetCommentReplies(request.ParentCommentId, request.PageNumber, request.PageSize, request.Sorting);
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
+        var (replies, totalCount) = await commentsRepository.GetCommentReplies(request.ParentCommentId, pageNumber, pageSize, request.Sorting);
         var replyDtos = mapper.Map<List<CommentReplyDTO>>(replies);
         var currentUser = userContext.GetCurrentUser();
         if (currentUser != null && replyDtos.Any())
@@ -32,8 +33,8 @@ public class GetCommentRepliesQueryHandler(ILogger<GetCommentRepliesQueryHandler
         return new PagedResult<CommentReplyDTO>(
             replyDtos,
             totalCount,
-            request.PageSize,
-            request.PageNumber);
+            pageSize,
+            pageNumber);
 
     }
 }
