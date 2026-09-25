@@ -64,8 +64,7 @@ public class FollowReadingListCommandHandler(
 
         if (result)
         {
-            // Fire-and-forget count update
-            _ = UpdateFollowersCountInBackground(request.ReadingListId);
+            await readingListsRepository.AdjustFollowersCountAsync(request.ReadingListId, +1);
             
             // Fire-and-forget: Send notification
             _ = SendReadingListFollowedNotificationInBackground(readingList.UserId, currentUser.Id, request.ReadingListId, readingList.Name);
@@ -104,28 +103,6 @@ public class FollowReadingListCommandHandler(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to send ReadingListFollowed notification");
-        }
-    }
-
-    private async Task UpdateFollowersCountInBackground(Guid readingListId)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundRepository = scope.ServiceProvider.GetRequiredService<IReadingListsRepository>();
-
-            var list = await backgroundRepository.GetByIdAsync(readingListId);
-            if (list != null)
-            {
-                list.IncrementFollowersCount();
-                await backgroundRepository.UpdateAsync(list);
-            }
-
-            logger.LogDebug("Updated followers count for reading list {ListId}", readingListId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to update followers count for reading list {ListId}", readingListId);
         }
     }
 }

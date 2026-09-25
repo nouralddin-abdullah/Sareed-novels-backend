@@ -23,7 +23,11 @@ public class CreateReadingListCommandHandler(
 
         if (await readingListsRepository.IsNameTakenByUserAsync(currentUser.Id, request.Name))
         {
-            throw new InvalidOperationException($"You already have a reading list named '{request.Name}'");
+            return new OperationResult
+            {
+                Success = false,
+                Message = $"You already have a reading list named '{request.Name}'"
+            };
         }
 
         var readlingList = new ReadingList

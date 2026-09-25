@@ -1,4 +1,5 @@
 ﻿using Domain.Entities;
+using Domain.ReadingLists;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -61,34 +62,8 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
         return (lists, totalCount);
     }
 
-    public async Task<(IEnumerable<ReadingList>, int)> GetUserReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize)
-    {
-        var query = dbContext.ReadingLists
-            .Where(rl => rl.UserId == userId)
-            .OrderByDescending(rl => rl.UpdatedAt);
-
-        var totalCount = await query.CountAsync();
-        
-        var lists = await query
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .AsSplitQuery()
-            .ToListAsync();
-
-        foreach (var list in lists)
-        {
-            await dbContext.Entry(list)
-                .Collection(rl => rl.Novels)
-                .Query()
-                .OrderBy(rln => rln.OrderIndex)
-                .Take(5)
-                .Include(rln => rln.Novel)
-                .Where(rln => !rln.Novel.IsDraft)
-                .LoadAsync();
-        }
-
-        return (lists, totalCount);
-    }
+    public Task<(IReadOnlyList<ReadingListSummary>, int)> GetUserReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize) =>
+        PageWithPreviews(dbContext.ReadingLists.Where(rl => rl.UserId == userId), pageNumber, pageSize);
 
     public async Task<(IEnumerable<ReadingList>, int)> GetPublicReadingListsAsync(int pageNumber, int pageSize)
     {
@@ -126,44 +101,11 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
         return (lists, totalCount);
     }
 
-    public async Task<(IEnumerable<ReadingList>, int)> GetFollowedReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize)
-    {
-        var followedListIds = await dbContext.ReadingListFollowers
-            .Where(rlf => rlf.UserId == userId)
-            .Select(rlf => rlf.ReadingListId)
-            .ToListAsync();
-
-        if (!followedListIds.Any())
-        {
-            return (Enumerable.Empty<ReadingList>(), 0);
-        }
-
-        var query = dbContext.ReadingLists
-            .Where(rl => followedListIds.Contains(rl.Id))
-            .OrderByDescending(rl => rl.UpdatedAt);
-
-        var totalCount = followedListIds.Count;
-        
-        var lists = await query
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .AsSplitQuery()
-            .ToListAsync();
-
-        foreach (var list in lists)
-        {
-            await dbContext.Entry(list)
-                .Collection(rl => rl.Novels)
-                .Query()
-                .OrderBy(rln => rln.OrderIndex)
-                .Take(5)
-                .Include(rln => rln.Novel)
-                .Where(rln => !rln.Novel.IsDraft)
-                .LoadAsync();
-        }
-
-        return (lists, totalCount);
-    }
+    public Task<(IReadOnlyList<ReadingListSummary>, int)> GetFollowedReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize) =>
+        PageWithPreviews(
+            dbContext.ReadingLists.Where(rl => rl.IsPublic && rl.Followers.Any(f => f.UserId == userId)),
+            pageNumber,
+            pageSize);
 
     public async Task<bool> CreateAsync(ReadingList readingList)
     {
@@ -200,32 +142,53 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
         return await query.AnyAsync();
     }
 
-    public async Task<(IEnumerable<ReadingList>, int)> GetUserPublicReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize)
-    {
-        var query = dbContext.ReadingLists
-            .Where(rl => rl.UserId == userId && rl.IsPublic)
-            .OrderByDescending(rl => rl.UpdatedAt);
+    public Task<(IReadOnlyList<ReadingListSummary>, int)> GetUserPublicReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize) =>
+        PageWithPreviews(dbContext.ReadingLists.Where(rl => rl.UserId == userId && rl.IsPublic), pageNumber, pageSize);
 
+    public Task AdjustNovelsCountAsync(Guid readingListId, int delta) =>
+        dbContext.ReadingLists
+            .Where(rl => rl.Id == readingListId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(rl => rl.NovelsCount, rl => rl.NovelsCount + delta < 0 ? 0 : rl.NovelsCount + delta)
+                .SetProperty(rl => rl.UpdatedAt, DateTime.UtcNow));
+
+    public Task AdjustFollowersCountAsync(Guid readingListId, int delta) =>
+        dbContext.ReadingLists
+            .Where(rl => rl.Id == readingListId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(rl => rl.FollowersCount, rl => rl.FollowersCount + delta < 0 ? 0 : rl.FollowersCount + delta));
+
+    private const int PreviewSize = 5;
+
+    /// <summary>
+    /// One page of lists, most recently updated first, each with its visible-novel count and first few visible novels,
+    /// in the same few queries whatever the page size. Draft novels are skipped here; the Novel query filter skips deleted ones.
+    /// </summary>
+    private async Task<(IReadOnlyList<ReadingListSummary>, int)> PageWithPreviews(IQueryable<ReadingList> query, int pageNumber, int pageSize)
+    {
         var totalCount = await query.CountAsync();
-        
-        var lists = await query
+
+        var page = await query
+            .AsNoTracking()
+            .OrderByDescending(rl => rl.UpdatedAt)
+            .ThenBy(rl => rl.Id)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
+            .Select(rl => new
+            {
+                List = rl,
+                VisibleNovelsCount = rl.Novels.Count(rln => !rln.Novel.IsDraft),
+                Preview = rl.Novels
+                    .Where(rln => !rln.Novel.IsDraft)
+                    .OrderBy(rln => rln.OrderIndex)
+                    .ThenBy(rln => rln.AddedAt)
+                    .Take(PreviewSize)
+                    .Select(rln => new NovelPreview(rln.Novel.Id, rln.Novel.Slug, rln.Novel.CoverImageUrl, rln.Novel.Title))
+                    .ToList()
+            })
             .AsSplitQuery()
             .ToListAsync();
 
-        foreach (var list in lists)
-        {
-            await dbContext.Entry(list)
-                .Collection(rl => rl.Novels)
-                .Query()
-                .OrderBy(rln => rln.OrderIndex)
-                .Take(5)
-                .Include(rln => rln.Novel)
-                .Where(rln => !rln.Novel.IsDraft)
-                .LoadAsync();
-        }
-
-        return (lists, totalCount);
+        return (page.Select(p => new ReadingListSummary(p.List, p.VisibleNovelsCount, p.Preview)).ToList(), totalCount);
     }
 }

@@ -68,6 +68,15 @@ public class ReadingListNovelsRepository(ApplicationDbContext dbContext) : IRead
             .CountAsync();
     }
     
+    public async Task<int> GetNextOrderIndexAsync(Guid readingListId)
+    {
+        var last = await dbContext.ReadingListNovels
+            .IgnoreQueryFilters() // hidden novels still hold their place
+            .Where(rln => rln.ReadingListId == readingListId)
+            .MaxAsync(rln => (int?)rln.OrderIndex);
+        return last + 1 ?? 0;
+    }
+
     public async Task<int> RemoveDeletedNovelsAsync(Guid readingListId)
     {
         // Use IgnoreQueryFilters to find deleted novels
