@@ -15,7 +15,7 @@ public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logg
     {
         var currentUser = userContext.GetCurrentUser() ?? null;
         var user = await userManager.FindByNameAsync(request.UserName) ?? throw new NotFoundException("User is not found");
-        logger.LogInformation("Getting profile for {@user}", user);
+        logger.LogInformation("Getting profile for {UserId}", user.Id);
         
         // Only get total counts (no recent followers/following)
         var totalFollowers = await usersRepository.GetFollowersCount(user);

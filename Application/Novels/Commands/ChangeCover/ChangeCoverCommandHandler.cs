@@ -18,7 +18,7 @@ namespace Application.Novels.Commands.ChangeCover
             {
                 throw new ForbidException("Forbidden");
             }
-            logger.LogInformation("Changing the cover for {@novel}", novel);
+            logger.LogInformation("Changing the cover for {NovelId}", novel.Id);
 
             try
             {
