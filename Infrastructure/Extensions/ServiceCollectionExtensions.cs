@@ -127,12 +127,12 @@ public static class ServiceCollectionExtensions
         {
             var settings = configuration.GetSection(CloudflareR2Settings.SectionName).Get<CloudflareR2Settings>();
 
-            var config = new AmazonS3Config
-            {
-                ServiceURL = $"https://1700ebc57525e0a0f6a5ff6f27d93218.r2.cloudflarestorage.com"
-            };
+            // ServiceUrl is only set to point at an S3-compatible stand-in (local runs, tests); production uses R2.
+            var config = string.IsNullOrWhiteSpace(settings!.ServiceUrl)
+                ? new AmazonS3Config { ServiceURL = "https://1700ebc57525e0a0f6a5ff6f27d93218.r2.cloudflarestorage.com" }
+                : new AmazonS3Config { ServiceURL = settings.ServiceUrl, ForcePathStyle = true };
 
-            var credentials = new BasicAWSCredentials(settings!.AccessKey, settings.SecretKey);
+            var credentials = new BasicAWSCredentials(settings.AccessKey, settings.SecretKey);
             return new AmazonS3Client(credentials, config);
         });
 
