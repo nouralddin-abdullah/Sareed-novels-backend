@@ -1,5 +1,6 @@
 using Application.Library.DTOs;
 using Application.Users;
+using Domain.Library;
 using Domain.Repositories;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -9,13 +10,12 @@ namespace Application.Library.Queries.GetNovelProgress;
 public class GetNovelProgressQueryHandler(
     ILogger<GetNovelProgressQueryHandler> logger,
     ILibraryRepository libraryRepository,
-    IChaptersRepository chaptersRepository,
     IUserContext userContext) : IRequestHandler<GetNovelProgressQuery, NovelProgressDTO?>
 {
     public async Task<NovelProgressDTO?> Handle(GetNovelProgressQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser();
-        
+
         if (currentUser == null)
         {
             return null;
@@ -23,37 +23,28 @@ public class GetNovelProgressQueryHandler(
 
         logger.LogInformation("Getting progress for novel {NovelId}, user {UserId}", request.NovelId, currentUser.Id);
 
-        var progress = await libraryRepository.GetProgressAsync(currentUser.Id, request.NovelId);
+        var entry = await libraryRepository.GetLibraryEntryAsync(currentUser.Id, request.NovelId);
 
-        if (progress == null)
+        if (entry == null)
         {
             return null;
         }
 
-        var publishedChapters = await chaptersRepository.GetChaptersReaderView(request.NovelId);
-        var publishedChaptersList = publishedChapters.OrderBy(c => c.ChapterIndex).ToList();
-        var publishedCount = publishedChaptersList.Count;
-        
-        var currentSequence = publishedChaptersList.FindIndex(c => c.Id == progress.LastReadChapterId) + 1;
-        
-        if (currentSequence == 0)
+        var resume = ReadingPosition.Resolve(entry.LastReadChapter, entry.PublishedChapters);
+        if (resume.ChapterId != entry.LastReadChapter.Id)
         {
-            logger.LogWarning("User {UserId} has progress for deleted/unpublished chapter {ChapterId} in novel {NovelId}", 
-                currentUser.Id, progress.LastReadChapterId, request.NovelId);
-            currentSequence = progress.LastReadChapterNumber;
+            logger.LogInformation(
+                "Chapter {ChapterId} that user {UserId} last read in novel {NovelId} is no longer published; resuming at {ResumeChapterId}",
+                entry.LastReadChapter.Id, currentUser.Id, request.NovelId, resume.ChapterId);
         }
 
-        var dto = new NovelProgressDTO
+        return new NovelProgressDTO
         {
-            NovelId = progress.NovelId,
-            LastReadChapterId = progress.LastReadChapterId,
-            LastReadChapterNumber = currentSequence,
-            ProgressPercentage = publishedCount > 0
-                ? Math.Round((decimal)currentSequence / publishedCount * 100, 1)
-                : 0,
-            LastReadAt = progress.LastReadAt
+            NovelId = entry.NovelId,
+            LastReadChapterId = resume.ChapterId,
+            LastReadChapterNumber = resume.ChapterNumber,
+            ProgressPercentage = resume.ProgressPercentage,
+            LastReadAt = entry.LastReadAt
         };
-
-        return dto;
     }
 }
