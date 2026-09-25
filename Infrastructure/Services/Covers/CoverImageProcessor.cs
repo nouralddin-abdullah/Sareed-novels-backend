@@ -92,7 +92,7 @@ public sealed class CoverImageProcessor
             if (content != new SKRectI(0, 0, decoded.Width, decoded.Height))
             {
                 var inSource = ScaleRect(content, (double)raw.Width / decoded.Width, (double)raw.Height / decoded.Height, raw);
-                var uprightContent = Round(CoverGeometry.OrientationMatrix(origin, raw.Width, raw.Height).MapRect(inSource), upright);
+                var uprightContent = Round(CoverGeometry.MapRect(CoverGeometry.OrientationMatrix(origin, raw.Width, raw.Height), inSource), upright);
                 var inner = CoverGeometry.Plan(uprightContent.Width, uprightContent.Height, allowance: CropAllowance.AfterTrim);
                 var source = inner.Source;
                 source.Offset(uprightContent.Left, uprightContent.Top);

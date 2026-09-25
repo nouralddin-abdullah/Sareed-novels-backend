@@ -124,5 +124,26 @@ public static class CoverGeometry
         _ => SKMatrix.Identity,
     };
 
+    /// <summary>
+    /// The bounding box of <paramref name="rect"/> under the affine <paramref name="matrix"/>, computed in managed code.
+    /// SKMatrix.MapRect calls native Skia, and on the production host (Windows, 32-bit IIS app pool) it gave an empty
+    /// or invalid rect: every cover with trimmed bars then failed with "Image has no pixels".
+    /// </summary>
+    public static SKRect MapRect(SKMatrix matrix, SKRect rect)
+    {
+        float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+        foreach (var (x, y) in new[] { (rect.Left, rect.Top), (rect.Right, rect.Top), (rect.Right, rect.Bottom), (rect.Left, rect.Bottom) })
+        {
+            var mappedX = matrix.ScaleX * x + matrix.SkewX * y + matrix.TransX;
+            var mappedY = matrix.SkewY * x + matrix.ScaleY * y + matrix.TransY;
+            minX = Math.Min(minX, mappedX);
+            maxX = Math.Max(maxX, mappedX);
+            minY = Math.Min(minY, mappedY);
+            maxY = Math.Max(maxY, mappedY);
+        }
+
+        return new SKRect(minX, minY, maxX, maxY);
+    }
+
     private static int EvenWidth(int width) => Math.Max(2, width - width % 2);
 }
