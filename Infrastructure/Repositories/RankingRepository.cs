@@ -1,4 +1,5 @@
-﻿using Domain.Entities;
+﻿using Domain.Constants;
+using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -35,6 +36,31 @@ public class RankingRepository(ApplicationDbContext dbContext) : IRankingReposit
             .Skip(skip)
             .Take(pageSize)
             .ToListAsync();
+    }
+
+    public async Task<(IEnumerable<RankingEntry> Entries, int TotalCount)> GetRankingEntriesPaged(
+        int rankingListId, int pageSize, int pageNumber, bool? isCompleted)
+    {
+        var query = dbContext.RankingEntries.Where(re => re.RankingListId == rankingListId);
+        if (isCompleted.HasValue)
+        {
+            var completed = NovelStatus.Completed.ToString();
+            query = isCompleted.Value
+                ? query.Where(re => re.Novel.Status == completed)
+                : query.Where(re => re.Novel.Status != completed);
+        }
+
+        var totalCount = await query.CountAsync();
+        var entries = await query
+            .Include(re => re.Novel)
+                .ThenInclude(n => n.NovelGenres)
+                    .ThenInclude(ng => ng.Genre)
+            .OrderBy(re => re.Rank)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (entries, totalCount);
     }
 
     public async Task<RankingList?> GetSiteWideRankingListByType(string rankingType)
