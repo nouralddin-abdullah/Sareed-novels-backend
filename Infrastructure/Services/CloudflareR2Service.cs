@@ -60,6 +60,9 @@ public class CloudflareR2Service(IAmazonS3 s3Client, IOptions<CloudflareR2Settin
     public Task<string> UploadGiftImageAsync(Stream fileStream, string contentType, string giftId) =>
         PutAsync("gift-images", giftId, fileStream, contentType);
 
+    private bool IsPlainHttpStandIn =>
+        settings.Value.ServiceUrl?.StartsWith("http://", StringComparison.OrdinalIgnoreCase) == true;
+
     private async Task<string> PutAsync(string folder, string ownerId, Stream fileStream, string contentType)
     {
         var key = StorageKeys.NewKey(folder, ownerId, contentType);
@@ -70,7 +73,9 @@ public class CloudflareR2Service(IAmazonS3 s3Client, IOptions<CloudflareR2Settin
             InputStream = fileStream,
             ContentType = contentType,
             Headers = { CacheControl = ImmutableCache },
-            DisablePayloadSigning = true,
+            // R2 needs unsigned payloads; the SDK only allows that over HTTPS, so a plain-http local stand-in
+            // (CloudflareR2:ServiceUrl, local runs only) gets a signed payload instead of a failed upload.
+            DisablePayloadSigning = !IsPlainHttpStandIn,
             DisableDefaultChecksumValidation = true
         });
         return StorageKeys.PublicUrl(settings.Value.PublicUrl, key);
