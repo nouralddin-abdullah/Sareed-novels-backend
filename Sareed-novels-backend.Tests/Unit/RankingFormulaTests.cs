@@ -111,6 +111,34 @@ public class RankingFormulaTests
         Assert.False(RankingFormula.IsNew(Novel(firstChapterDaysAgo: 61), Now));
     }
 
+    [Fact]
+    public void Bad_inputs_are_clamped_instead_of_skewing_scores()
+    {
+        // Progress past the last published chapter (chapters unpublished later) or below zero counts as 1 / 0.
+        Assert.Equal(RankingFormula.DepthBayes(Novel(depths: [0, 1])), RankingFormula.DepthBayes(Novel(depths: [-1, 2.5])), 9);
+        // A negative daily view count adds nothing rather than a NaN from a square root.
+        Assert.Equal(RankingFormula.Trending(Novel(), Now), RankingFormula.Trending(Novel(views: [(1, -5)]), Now), 9);
+    }
+
+    [Fact]
+    public void A_novel_with_no_signals_still_gets_finite_scores()
+    {
+        var quiet = Novel(chapters: 1, firstChapterDaysAgo: -1, lastChapterDaysAgo: -1); // clock skew: "future" chapter
+
+        foreach (var score in new[]
+                 {
+                     RankingFormula.Trending(quiet, Now), RankingFormula.New(quiet, Now),
+                     RankingFormula.AllTime(quiet, 3.5), RankingFormula.TopRated(quiet, 3.5)
+                 })
+        {
+            Assert.True(double.IsFinite(score) && score >= 0);
+        }
+
+        // With no readers AllTime is exactly 0 (log 1), and with no ratings TopRated sits on the priors.
+        Assert.Equal(0, RankingFormula.AllTime(quiet, 3.5), 9);
+        Assert.Equal(0.6 * 3.5 / 5 + 0.4 * 0.3, RankingFormula.TopRated(quiet, 3.5), 9);
+    }
+
     [Theory]
     [InlineData(1, false)]
     [InlineData(2, false)]
