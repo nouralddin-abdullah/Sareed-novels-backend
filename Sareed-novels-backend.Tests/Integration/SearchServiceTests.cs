@@ -1,6 +1,9 @@
 using Application.Search.DTOs;
+using Application.Search.Queries.SuggestNovels;
 using Domain.Entities;
 using Infrastructure.Services.Search;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Sareed_novels_backend.Tests.Integration;
 
@@ -152,5 +155,184 @@ public class SearchServiceTests(SqlServerDatabase database) : IClassFixture<SqlS
         var service = new NovelSearchService(check);
         Assert.Empty((await service.SearchNovelsAsync(new SearchNovelsRequest { Query = $"{m} قديم" })).Items);
         Assert.Single((await service.SearchNovelsAsync(new SearchNovelsRequest { Query = $"{m} جديد" })).Items);
+    }
+
+    [Fact]
+    public async Task Novels_a_reader_cannot_open_are_not_listed_until_a_chapter_is_published()
+    {
+        var m = Seed.Marker();
+        var (author, genre) = await SeedAuthorAndGenre();
+        var published = await AddNovel(author, $"{m} منشورة", genre: genre);
+        var empty = await AddNovel(author, $"{m} فارغة", chapters: 0, genre: genre);
+        await AddNovel(author, $"{m} مسودات", chapters: 0, draftChapters: 2, genre: genre);
+        await AddNovel(author, $"{m} مخفية", isDraft: true, genre: genre);
+
+        await using (var db = database.CreateContext())
+        {
+            var service = new NovelSearchService(db);
+            var byQuery = await service.SearchNovelsAsync(new SearchNovelsRequest { Query = m });
+            Assert.Equal(published.Id, Assert.Single(byQuery.Items).Id);
+            Assert.Equal(1, byQuery.TotalItemsCount);
+
+            // Browsing without a query (the search page before anything is typed) follows the same rule.
+            var browse = await service.SearchNovelsAsync(new SearchNovelsRequest { Genres = [genre.Name] });
+            Assert.Equal(published.Id, Assert.Single(browse.Items).Id);
+        }
+
+        // Publishing the first chapter makes the novel findable at once; nothing has to be re-indexed.
+        await using (var db = database.CreateContext())
+        {
+            db.Chapters.AddRange(Seed.Chapters(empty, 1, LongAgo));
+            await db.SaveChangesAsync();
+        }
+
+        await using var check = database.CreateContext();
+        var after = await new NovelSearchService(check).SearchNovelsAsync(new SearchNovelsRequest { Query = $"{m} فارغه" });
+        Assert.Equal(empty.Id, Assert.Single(after.Items).Id);
+    }
+
+    [Theory]
+    [InlineData("%")]
+    [InlineData("_")]
+    [InlineData("[")]
+    [InlineData("%%")]
+    [InlineData("!!")]
+    [InlineData("💫")]
+    [InlineData("🇵🇸")]
+    public async Task A_query_with_nothing_searchable_finds_nothing_instead_of_everything(string query)
+    {
+        var (author, _) = await SeedAuthorAndGenre();
+        var novel = await AddNovel(author, $"{Seed.Marker()} خطوة 💫");
+        await AddEntities(novel, ("شخصية", "راع", null));
+
+        await using var db = database.CreateContext();
+        var novels = await new NovelSearchService(db).SearchNovelsAsync(new SearchNovelsRequest { Query = query });
+        var users = await new UserSearchService(db).SearchUsersAsync(new SearchUsersRequest { Query = query });
+        var entities = await new EntitySearchService(db).SearchEntitiesAsync(novel.Id, query);
+        var suggestions = await new SuggestNovelsQueryHandler(
+                NullLogger<SuggestNovelsQueryHandler>.Instance, new NovelSearchService(db))
+            .Handle(new SuggestNovelsQuery(query), CancellationToken.None);
+
+        Assert.Equal(0, novels.TotalItemsCount);
+        Assert.Equal(0, users.TotalItemsCount);
+        Assert.Equal(0, entities.TotalItemsCount);
+        Assert.Empty(suggestions);
+    }
+
+    [Fact]
+    public async Task Sql_wildcards_and_emoji_in_a_query_are_plain_separators()
+    {
+        var m = Seed.Marker();
+        var (author, _) = await SeedAuthorAndGenre();
+        var percent = await AddNovel(author, $"{m} 100% حقيقة");
+        var emoji = await AddNovel(author, $"{m} خطوة 💫");
+        await AddNovel(author, $"{m} ac");
+
+        await using var db = database.CreateContext();
+        var service = new NovelSearchService(db);
+
+        Assert.Equal(percent.Id, Assert.Single((await service.SearchNovelsAsync(new SearchNovelsRequest { Query = $"[{m}] 100%" })).Items).Id);
+        Assert.Equal(emoji.Id, Assert.Single((await service.SearchNovelsAsync(new SearchNovelsRequest { Query = $"{m} خطوة 💫" })).Items).Id);
+        // As a LIKE pattern "[ab]c" would match "ac"; here brackets only split words, so it asks for "ab" and "c".
+        Assert.Empty((await service.SearchNovelsAsync(new SearchNovelsRequest { Query = $"{m} [ab]c" })).Items);
+    }
+
+    [Fact]
+    public async Task Whitespace_only_query_browses_every_listed_novel()
+    {
+        var (author, _) = await SeedAuthorAndGenre();
+        await AddNovel(author, $"{Seed.Marker()} تصفح");
+
+        await using var db = database.CreateContext();
+        var result = await new NovelSearchService(db).SearchNovelsAsync(new SearchNovelsRequest { Query = "   " });
+
+        Assert.True(result.TotalItemsCount >= 1);
+    }
+
+    [Fact]
+    public async Task A_huge_page_number_returns_an_empty_page_instead_of_failing()
+    {
+        var m = Seed.Marker();
+        var (author, _) = await SeedAuthorAndGenre();
+        var novel = await AddNovel(author, $"{m} صفحة");
+        var user = Seed.User(displayName: $"{m} كاتب");
+        await using (var seed = database.CreateContext())
+        {
+            seed.Users.Add(user);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var db = database.CreateContext();
+        var novels = await new NovelSearchService(db).SearchNovelsAsync(new SearchNovelsRequest { Query = m, PageNumber = int.MaxValue });
+        var users = await new UserSearchService(db).SearchUsersAsync(new SearchUsersRequest { Query = m, PageNumber = int.MaxValue });
+        var entities = await new EntitySearchService(db).SearchEntitiesAsync(novel.Id, m, pageNumber: int.MaxValue);
+
+        Assert.Empty(novels.Items);
+        Assert.Equal(1, novels.TotalItemsCount);
+        Assert.Empty(users.Items);
+        Assert.Equal(1, users.TotalItemsCount);
+        Assert.Empty(entities.Items);
+    }
+
+    [Fact]
+    public async Task A_renamed_user_is_found_by_the_new_name_right_away()
+    {
+        var m = Seed.Marker();
+        var user = Seed.User(displayName: $"{m} قديم");
+        await using (var seed = database.CreateContext())
+        {
+            seed.Users.Add(user);
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var db = database.CreateContext())
+        {
+            var tracked = await db.Users.SingleAsync(u => u.Id == user.Id);
+            tracked.DisplayName = $"{m} سارة";
+            await db.SaveChangesAsync();
+        }
+
+        await using var check = database.CreateContext();
+        var service = new UserSearchService(check);
+        Assert.Empty((await service.SearchUsersAsync(new SearchUsersRequest { Query = $"{m} قديم" })).Items);
+        Assert.Equal(user.Id, Assert.Single((await service.SearchUsersAsync(new SearchUsersRequest { Query = $"{m} ساره" })).Items).Id);
+    }
+
+    [Fact]
+    public async Task Wiki_search_skips_empty_section_placeholders_and_matches_descriptions()
+    {
+        var (author, _) = await SeedAuthorAndGenre();
+        var novel = await AddNovel(author, $"{Seed.Marker()} ويكي");
+        await AddEntities(novel,
+            ("شخصيات", "_section_شخصيات", null),
+            ("شخصيات", "الجوكر", "بطاقة الجوكر الأخيرة"),
+            ("أماكن", "القلعة", "حيث تبدأ الحكاية"));
+
+        await using var db = database.CreateContext();
+        var service = new EntitySearchService(db);
+
+        var all = await service.SearchEntitiesAsync(novel.Id);
+        Assert.Equal(new[] { "الجوكر", "القلعة" }, all.Items.Select(e => e.Name).OrderBy(n => n).ToArray());
+        Assert.Empty((await service.SearchEntitiesAsync(novel.Id, "شخصيات")).Items);
+        Assert.Empty((await service.SearchEntitiesAsync(novel.Id, "section")).Items);
+
+        var byDescription = await service.SearchEntitiesAsync(novel.Id, "الحكايه");
+        Assert.Equal("القلعة", Assert.Single(byDescription.Items).Name);
+        var byName = await service.SearchEntitiesAsync(novel.Id, "جوك", section: "شخصيات");
+        Assert.Equal("الجوكر", Assert.Single(byName.Items).Name);
+    }
+
+    private async Task AddEntities(Novel novel, params (string Section, string Name, string? ShortDescription)[] entities)
+    {
+        await using var db = database.CreateContext();
+        db.NovelEntities.AddRange(entities.Select(e => new NovelEntity
+        {
+            Id = Guid.NewGuid(),
+            NovelId = novel.Id,
+            Section = e.Section,
+            Name = e.Name,
+            ShortDescription = e.ShortDescription
+        }));
+        await db.SaveChangesAsync();
     }
 }

@@ -58,6 +58,28 @@ public class SearchTextTests
         Assert.Equal(new[] { "المدرسه", "احمد", "a", "b", "c", "d" }, tokens);
     }
 
+    [Theory]
+    [InlineData("💫")]
+    [InlineData("🇵🇸 ✨")]
+    [InlineData("% _ [ ]")]
+    public void Emoji_and_symbol_only_queries_have_no_tokens(string query)
+    {
+        var tokens = SearchText.Tokens(query);
+        Assert.Empty(tokens);
+        Assert.True(SearchText.HasNothingSearchable(query, tokens));
+    }
+
+    [Fact]
+    public void Emoji_next_to_words_are_dropped_from_the_tokens() =>
+        Assert.Equal(new[] { "خطوه" }, SearchText.Tokens("خطوة 💫"));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void A_blank_query_is_browsing_not_an_unsearchable_query(string? query) =>
+        Assert.False(SearchText.HasNothingSearchable(query, SearchText.Tokens(query)));
+
     [Fact]
     public void User_search_name_covers_display_name_and_user_name() =>
         Assert.Equal("احمد الكاتب ahmed writer", SearchText.ForUser("أحمد الكاتب", "Ahmed_Writer"));

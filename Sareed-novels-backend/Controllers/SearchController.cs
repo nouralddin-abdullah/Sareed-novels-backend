@@ -51,7 +51,7 @@ public class SearchController(IMediator mediator) : ControllerBase
     /// Get autocomplete suggestions as user types (returns max 5 results)
     /// </summary>
     [HttpGet("suggest")]
-    public async Task<IActionResult> SuggestNovels([FromQuery] string query)
+    public async Task<IActionResult> SuggestNovels([FromQuery] string? query)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
