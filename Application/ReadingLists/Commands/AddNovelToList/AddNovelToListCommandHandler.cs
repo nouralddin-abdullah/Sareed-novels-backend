@@ -4,7 +4,6 @@ using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Application.ReadingLists.Commands.AddNovelToList;
@@ -14,8 +13,7 @@ public class AddNovelToListCommandHandler(
     IReadingListsRepository readingListsRepository,
     IReadingListNovelsRepository readingListNovelsRepository,
     INovelsRepository novelsRepository,
-    IUserContext userContext,
-    IServiceProvider serviceProvider) : IRequestHandler<AddNovelToListCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<AddNovelToListCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(AddNovelToListCommand request, CancellationToken cancellationToken)
     {
@@ -57,15 +55,14 @@ public class AddNovelToListCommandHandler(
             ReadingListId = request.ReadingListId,
             NovelId = request.NovelId,
             AddedAt = DateTime.UtcNow,
-            OrderIndex = readingList.NovelsCount
+            OrderIndex = await readingListNovelsRepository.GetNextOrderIndexAsync(request.ReadingListId)
         };
 
         var result = await readingListNovelsRepository.AddNovelAsync(readingListNovel);
 
         if (result)
         {
-            // Fire-and-forget count update
-            _ = UpdateNovelsCountInBackground(request.ReadingListId);
+            await readingListsRepository.AdjustNovelsCountAsync(request.ReadingListId, +1);
 
             logger.LogInformation("Novel {NovelId} added to reading list {ListId}", request.NovelId, request.ReadingListId);
 
@@ -81,27 +78,5 @@ public class AddNovelToListCommandHandler(
             Success = false,
             Message = "Failed to add novel to reading list"
         };
-    }
-
-    private async Task UpdateNovelsCountInBackground(Guid readingListId)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundRepository = scope.ServiceProvider.GetRequiredService<IReadingListsRepository>();
-
-            var list = await backgroundRepository.GetByIdAsync(readingListId);
-            if (list != null)
-            {
-                list.IncrementNovelsCount();
-                await backgroundRepository.UpdateAsync(list);
-            }
-
-            logger.LogDebug("Updated novels count for reading list {ListId}", readingListId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to update novels count for reading list {ListId}", readingListId);
-        }
     }
 }
