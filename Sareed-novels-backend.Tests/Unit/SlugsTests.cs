@@ -90,7 +90,8 @@ public class SlugsTests
         mapper.When(m => m.Map(Arg.Any<UpdateNovelCommand>(), novel)).Do(call => novel.Title = ((UpdateNovelCommand)call[0]).Title ?? novel.Title);
 
         var handler = new UpdateNovelCommandHandler(
-            NullLogger<UpdateNovelCommandHandler>.Instance, userContext, Substitute.For<INovelGenresRepository>(), novels,
+            NullLogger<UpdateNovelCommandHandler>.Instance, userContext, Substitute.For<INovelGenresRepository>(),
+            Substitute.For<IGenresRepository>(), novels,
             mapper, Substitute.For<INovelRecommendationService>());
         return (handler, novel);
     }
