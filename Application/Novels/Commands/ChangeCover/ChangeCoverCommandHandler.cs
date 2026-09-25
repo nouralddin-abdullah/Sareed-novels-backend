@@ -1,6 +1,6 @@
-﻿using Application.Services;
+using Application.Covers;
+using Application.Services;
 using Application.Users;
-using Application.Users.Commands.FollowUser;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
@@ -8,9 +8,9 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Novels.Commands.ChangeCover
 {
-    public class ChangeCoverCommandHandler(ILogger<ChangeCoverCommandHandler> logger, IFileUploadService fileUploadService, IUserContext userContext, INovelsRepository novelsRepository) : IRequestHandler<ChangerCoverCommand, OperationResult>
+    public class ChangeCoverCommandHandler(ILogger<ChangeCoverCommandHandler> logger, INovelCoverService coverService, IUserContext userContext, INovelsRepository novelsRepository) : IRequestHandler<ChangerCoverCommand, ChangeCoverResult>
     {
-        public async Task<OperationResult> Handle(ChangerCoverCommand request, CancellationToken cancellationToken)
+        public async Task<ChangeCoverResult> Handle(ChangerCoverCommand request, CancellationToken cancellationToken)
         {
             var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
             var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("Novel was not found");
@@ -20,31 +20,28 @@ namespace Application.Novels.Commands.ChangeCover
             }
             logger.LogInformation("Changing the cover for {NovelId}", novel.Id);
 
+            string coverUrl;
             try
             {
-                if (request.CoverImageUrl != null)
-                {
-                    // A new object and URL every time: the stored URL must change, or readers keep seeing the old cover.
-                    using var stream = request.CoverImageUrl.OpenReadStream();
-                    novel.CoverImageUrl = await fileUploadService.UploadNovelImageAsync(
-                        stream,
-                        request.CoverImageUrl.ContentType,
-                        novel.Id.ToString()
-                        );
-                    await novelsRepository.UpdateOne(novel);
-                }
+                // A new folder and URL every time: the stored URL must change, or readers keep seeing the old cover.
+                await using var stream = request.CoverImageUrl.OpenReadStream();
+                coverUrl = await coverService.StoreUploadAsync(novel.Id, stream, cancellationToken);
             }
-            catch (Exception ex)
+            catch (CoverImageException ex)
             {
-                logger.LogError(ex, "Failed to change cover for novel {NovelId}", novel.Id);
-                throw new InvalidOperationException("Failed to change novel cover", ex);
+                logger.LogInformation("Refused a new cover for {NovelId}: {Code}", novel.Id, ex.Code);
+                return new ChangeCoverResult { Success = false, Message = ex.Message, ErrorCode = ex.Code };
             }
 
-            return new OperationResult
+            // One UPDATE of the cover column: saving the whole tracked novel would write back stale view/chapter counters.
+            await novelsRepository.SetCoverUrlAsync(novel.Id, coverUrl, cancellationToken: cancellationToken);
+
+            // The previous files stay: notifications and other snapshots may still point at them.
+            return new ChangeCoverResult
             {
                 Message = "Novel cover was changed successfully",
-                Success = true
-
+                Success = true,
+                CoverImageUrl = coverUrl
             };
         }
     }

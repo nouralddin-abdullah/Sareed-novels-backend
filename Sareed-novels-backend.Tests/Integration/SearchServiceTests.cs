@@ -212,17 +212,19 @@ public class SearchServiceTests(SqlServerDatabase database) : IClassFixture<SqlS
     {
         var m = Seed.Marker();
         var (author, _) = await SeedAuthorAndGenre();
-        var percent = await AddNovel(author, $"{m} 100% حقيقة");
+        // The marker is random hex, so the words searched for below must be ones that can't occur inside it
+        // (it once contained "ab", which made every novel here match).
+        var percent = await AddNovel(author, $"{m} نسبة% حقيقة");
         var emoji = await AddNovel(author, $"{m} خطوة 💫");
-        await AddNovel(author, $"{m} ac");
+        await AddNovel(author, $"{m} wq");
 
         await using var db = database.CreateContext();
         var service = new NovelSearchService(db);
 
-        Assert.Equal(percent.Id, Assert.Single((await service.SearchNovelsAsync(new SearchNovelsRequest { Query = $"[{m}] 100%" })).Items).Id);
+        Assert.Equal(percent.Id, Assert.Single((await service.SearchNovelsAsync(new SearchNovelsRequest { Query = $"[{m}] نسبة%" })).Items).Id);
         Assert.Equal(emoji.Id, Assert.Single((await service.SearchNovelsAsync(new SearchNovelsRequest { Query = $"{m} خطوة 💫" })).Items).Id);
-        // As a LIKE pattern "[ab]c" would match "ac"; here brackets only split words, so it asks for "ab" and "c".
-        Assert.Empty((await service.SearchNovelsAsync(new SearchNovelsRequest { Query = $"{m} [ab]c" })).Items);
+        // As a LIKE pattern "[vw]q" would match "wq"; here brackets only split words, so it asks for "vw" and "q".
+        Assert.Empty((await service.SearchNovelsAsync(new SearchNovelsRequest { Query = $"{m} [vw]q" })).Items);
     }
 
     [Fact]

@@ -30,6 +30,8 @@ dotnet ef migrations add <PascalCaseName> -p Infrastructure -s Sareed-novels-bac
   not read-modify-write.
 - Schema changes only via EF migrations; name them in PascalCase describing the change.
 - Ranking/search/wallet logic ships with unit tests (create `Tests/` xUnit project on first need).
+- Sard is Arabic-only (no English version planned). Messages the web app shows to users should be Arabic; many API
+  messages are still English, so switch them to Arabic when you touch them.
 - Arabic text: normalize for matching (strip tashkeel/tatweel; أإآ->ا, ة->ه, ى->ي). Slugs are `<5 hex>-<title-dashes>`.
 
 ## Before you say it's done

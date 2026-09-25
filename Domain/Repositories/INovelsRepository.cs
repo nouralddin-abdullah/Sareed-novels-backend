@@ -21,4 +21,22 @@ public interface INovelsRepository
     Task<List<Novel>> GetNovelsBySharedGenresAsync(List<int> genreIds, Guid excludeNovelId, int limit);
     /// <summary>Every published novel with at least one published chapter, and those chapters, for sitemap.xml.</summary>
     Task<List<NovelSitemapEntry>> GetSitemapEntriesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets the cover URL in one UPDATE. With <paramref name="expectedUrl"/>, only while the novel still has that cover
+    /// (so a background conversion never overwrites a cover the author changed meanwhile). True when a row changed.
+    /// </summary>
+    Task<bool> SetCoverUrlAsync(Guid novelId, string coverUrl, string? expectedUrl = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Novels that aren't deleted and whose cover URL doesn't contain <paramref name="standardMarker"/>, ordered by id,
+    /// starting after <paramref name="afterId"/>.
+    /// </summary>
+    Task<List<NovelCoverRef>> GetCoversNotMatchingAsync(string standardMarker, Guid? afterId, int take, CancellationToken cancellationToken = default);
+
+    /// <summary>Novels that aren't deleted, and how many of them have a cover URL without <paramref name="standardMarker"/>.</summary>
+    Task<(int Total, int NotMatching)> CountCoversAsync(string standardMarker, CancellationToken cancellationToken = default);
 }
+
+/// <summary>A novel's cover, for maintenance jobs.</summary>
+public record NovelCoverRef(Guid Id, string Title, string CoverImageUrl);

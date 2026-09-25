@@ -15,4 +15,7 @@ public class CreateNovelCommand : IRequest<CreateNovelResult>
 public class CreateNovelResult : OperationResult
 {
     public Guid? NovelId { get; set; }
+
+    /// <summary>Set when the cover was refused (see <see cref="Application.Covers.CoverErrorCodes"/>).</summary>
+    public string? ErrorCode { get; set; }
 }

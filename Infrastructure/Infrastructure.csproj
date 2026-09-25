@@ -9,6 +9,8 @@
   <ItemGroup>
     <PackageReference Include="AWSSDK.Core" Version="4.0.0.14" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.4.1" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />
   </ItemGroup>
   
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
@@ -38,6 +40,11 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Sareed-novels-backend.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The white "سَرْد" wordmark (same file as the web app's public/logo.png), stamped on share images. -->
+    <EmbeddedResource Include="Services\Covers\Assets\sard-wordmark.png" LogicalName="Sard.Covers.Wordmark.png" />
   </ItemGroup>
 
 </Project>

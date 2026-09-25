@@ -38,7 +38,7 @@ public class NovelGenreAssignmentTests : SqlServerDatabase
         return userContext;
     }
 
-    private readonly IFileUploadService uploads = Substitute.For<IFileUploadService>();
+    private readonly INovelCoverService covers = Substitute.For<INovelCoverService>();
 
     private CreateNovelCommandHandler CreateHandler(ApplicationDbContext db) => new(
         NullLogger<CreateNovelCommandHandler>.Instance,
@@ -46,14 +46,14 @@ public class NovelGenreAssignmentTests : SqlServerDatabase
         AuthorContext(),
         new GenresRepository(db),
         new NovelsRepository(db),
-        uploads);
+        covers);
 
     private CreateNovelCommand NewNovel(string title, List<int> genreIds)
     {
         var cover = Substitute.For<IFormFile>();
         cover.ContentType.Returns("image/png");
         cover.OpenReadStream().Returns(_ => new MemoryStream([1, 2, 3]));
-        uploads.UploadNovelImageAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>())
+        covers.StoreUploadAsync(Arg.Any<Guid>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns("https://example.test/cover.png");
         return new CreateNovelCommand { Title = title, Summary = "summary", CoverImageUrl = cover, GenreIds = genreIds };
     }
@@ -104,7 +104,7 @@ public class NovelGenreAssignmentTests : SqlServerDatabase
         var result = await CreateHandler(db).Handle(NewNovel(title, [genres[0].Id, UnknownGenreId]), CancellationToken.None);
 
         Assert.False(result.Success);
-        await uploads.DidNotReceiveWithAnyArgs().UploadNovelImageAsync(default!, default!, default!); // no orphan cover
+        await covers.DidNotReceiveWithAnyArgs().StoreUploadAsync(default, default!, default); // no orphan cover
         await using var check = CreateContext();
         Assert.False(await check.Novels.AnyAsync(n => n.Title == title)); // used to leave a novel with no genres
     }
