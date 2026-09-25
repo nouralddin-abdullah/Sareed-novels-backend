@@ -21,4 +21,24 @@
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
   </ItemGroup>
 
+  <!-- The API runs on Windows IIS (MonsterASP). SkiaSharp (cover images) ships native libraries for ~20 platforms
+       plus an 80+ MB debug-symbol file per Windows architecture, which made the publish ~470 MB and Web Deploy very
+       slow. Publish only the Windows x64/x86 native files (the app pool may be either) and no debug symbols from
+       packages; the app's own .pdb files stay for readable stack traces. The .NET host skips native assets listed in
+       deps.json that are missing, so trimming them is safe. Pass -p:PublishAllPlatforms=true for the full portable
+       output (e.g. to host on Linux). -->
+  <Target Name="PublishOnlyWindowsNativeAssets" AfterTargets="ComputeResolvedFilesToPublishList"
+          Condition="'$(PublishAllPlatforms)' != 'true'">
+    <ItemGroup>
+      <_SardTrimmedFromPublish Include="@(ResolvedFileToPublish)"
+          Condition="'%(Extension)' == '.pdb' and '%(ResolvedFileToPublish.NuGetPackageId)' != ''" />
+      <_SardTrimmedFromPublish Include="@(ResolvedFileToPublish)"
+          Condition="'%(ResolvedFileToPublish.RuntimeIdentifier)' != ''
+                     and '%(ResolvedFileToPublish.RuntimeIdentifier)' != 'win'
+                     and '%(ResolvedFileToPublish.RuntimeIdentifier)' != 'win-x64'
+                     and '%(ResolvedFileToPublish.RuntimeIdentifier)' != 'win-x86'" />
+      <ResolvedFileToPublish Remove="@(_SardTrimmedFromPublish)" />
+    </ItemGroup>
+  </Target>
+
 </Project>
