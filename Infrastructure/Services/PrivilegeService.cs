@@ -489,9 +489,13 @@ public class PrivilegeService(
             };
         }
         
-        // Check if chapter is actually locked
-        var lockedChapters = await GetLockedChaptersAsync(chapter.NovelId);
-        if (!lockedChapters.Any(c => c.Id == chapterId))
+        // Readers see a chapter as locked when its sequence is at or past PrivilegeStartSequence, so unlocking means
+        // moving the start past it. (This used to only decrement CurrentLockedCount, which readers never check, so
+        // the author got "Chapter unlocked!" while the chapter stayed locked.) Earlier locked chapters are unlocked
+        // with it: the model is a single locked range, it can't leave holes.
+        if (chapter.Status != "Published"
+            || !chapter.PublishedChapterSequence.HasValue
+            || !IsChapterLockedBySequence(chapter.PublishedChapterSequence.Value, privilege))
         {
             return new OperationResult
             {
@@ -499,28 +503,25 @@ public class PrivilegeService(
                 Message = "This chapter is not locked"
             };
         }
-        
-        // Decrease locked count by 1
-        if (privilege.CurrentLockedCount > 0)
-        {
-            privilege.CurrentLockedCount--;
-            await privilegeRepository.UpdateAsync(privilege);
-            
-            logger.LogInformation(
-                "Author {AuthorId} manually unlocked chapter {ChapterId} for novel {NovelId}. Locked count: {Count}",
-                authorId, chapterId, chapter.NovelId, privilege.CurrentLockedCount);
-            
-            return new OperationResult
-            {
-                Success = true,
-                Message = $"Chapter unlocked! {privilege.CurrentLockedCount} chapters remain locked"
-            };
-        }
-        
+
+        var sequence = chapter.PublishedChapterSequence.Value;
+        var oldStart = privilege.PrivilegeStartSequence!.Value;
+        var unlockedCount = sequence - oldStart + 1;
+
+        privilege.PrivilegeStartSequence = sequence + 1;
+        privilege.CurrentLockedCount = Math.Max(0, privilege.CurrentLockedCount - unlockedCount);
+        await privilegeRepository.UpdateAsync(privilege);
+
+        logger.LogInformation(
+            "Author {AuthorId} manually unlocked chapter {ChapterId} (seq {Sequence}) for novel {NovelId}: start {OldStart} -> {NewStart}, {Count} still locked",
+            authorId, chapterId, sequence, chapter.NovelId, oldStart, privilege.PrivilegeStartSequence, privilege.CurrentLockedCount);
+
         return new OperationResult
         {
-            Success = false,
-            Message = "No locked chapters to unlock"
+            Success = true,
+            Message = unlockedCount == 1
+                ? $"Chapter unlocked! {privilege.CurrentLockedCount} chapters remain locked"
+                : $"Chapters {oldStart}-{sequence} unlocked! {privilege.CurrentLockedCount} chapters remain locked"
         };
     }
     
