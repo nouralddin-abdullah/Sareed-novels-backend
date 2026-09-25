@@ -24,12 +24,14 @@ namespace Application.Novels.Commands.ChangeCover
             {
                 if (request.CoverImageUrl != null)
                 {
+                    // A new object and URL every time: the stored URL must change, or readers keep seeing the old cover.
                     using var stream = request.CoverImageUrl.OpenReadStream();
-                    await fileUploadService.UploadNovelImageAsync(
+                    novel.CoverImageUrl = await fileUploadService.UploadNovelImageAsync(
                         stream,
                         request.CoverImageUrl.ContentType,
-                        novel.Title
+                        novel.Id.ToString()
                         );
+                    await novelsRepository.UpdateOne(novel);
                 }
             }
             catch (Exception ex)

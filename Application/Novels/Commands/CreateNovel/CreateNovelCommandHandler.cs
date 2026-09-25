@@ -38,7 +38,7 @@ public class CreateNovelCommandHandler(
             novel.CoverImageUrl = await fileUploadService.UploadNovelImageAsync(
                 stream,
                 request.CoverImageUrl.ContentType,
-                request.Title
+                novel.Id.ToString()
                 );
         }
         var novelResult = await novelsRepository.CreateNovel(novel);
