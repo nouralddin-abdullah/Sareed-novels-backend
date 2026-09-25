@@ -18,10 +18,14 @@ public class GetMyGiftHistoryQueryHandler(
         var currentUser = userContext.GetCurrentUser()
             ?? throw new ForbidException("User not authenticated");
 
+        // Out-of-range paging used to throw (page 0) or divide by zero (size 0).
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+
         var (transactions, totalCount) = await giftTransactionRepository.GetTransactionsBySender(
             currentUser.Id,
-            request.PageNumber,
-            request.PageSize
+            pageNumber,
+            pageSize
         );
 
         var transactionDtos = mapper.Map<List<GiftTransactionDto>>(transactions);
@@ -29,8 +33,8 @@ public class GetMyGiftHistoryQueryHandler(
         return new PagedResult<GiftTransactionDto>(
             transactionDtos,
             totalCount,
-            request.PageNumber,
-            request.PageSize
+            pageSize: pageSize,
+            pageNumber: pageNumber
         );
     }
 }

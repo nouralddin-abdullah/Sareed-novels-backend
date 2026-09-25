@@ -13,8 +13,8 @@ public class GetGlobalLeaderboardQueryHandler(
     {
         var (supporters, totalCount) = await leaderboardRepository.GetLeaderboard(
             request.Period,
-            request.PageNumber,
-            request.PageSize
+            Math.Max(1, request.PageNumber),
+            Math.Clamp(request.PageSize, 1, 100)
         );
 
         var supporterDtos = mapper.Map<List<TopSupporterDto>>(supporters);

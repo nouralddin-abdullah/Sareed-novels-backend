@@ -12,9 +12,13 @@ public class GetAllGiftsQueryHandler(
 {
     public async Task<PagedResult<GiftDto>> Handle(GetAllGiftsQuery request, CancellationToken cancellationToken)
     {
+        // Out-of-range paging used to throw (page 0) or divide by zero (size 0).
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+
         var (gifts, totalCount) = await giftRepository.GetAllGifts(
-            request.PageNumber,
-            request.PageSize,
+            pageNumber,
+            pageSize,
             includeInactive: false
         );
 
@@ -23,8 +27,8 @@ public class GetAllGiftsQueryHandler(
         return new PagedResult<GiftDto>(
             giftDtos,
             totalCount,
-            request.PageNumber,
-            request.PageSize
+            pageSize: pageSize,
+            pageNumber: pageNumber
         );
     }
 }
