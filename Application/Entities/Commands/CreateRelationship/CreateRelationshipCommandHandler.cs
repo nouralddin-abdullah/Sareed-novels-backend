@@ -12,8 +12,7 @@ namespace Application.Entities.Commands.CreateRelationship;
 public class CreateRelationshipCommandHandler(
     ILogger<CreateRelationshipCommandHandler> logger,
     INovelEntityRepository entityRepository,
-    IUserContext userContext,
-    ISearchIndexQueueService searchQueue) : IRequestHandler<CreateRelationshipCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<CreateRelationshipCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(CreateRelationshipCommand request, CancellationToken cancellationToken)
     {
@@ -55,13 +54,7 @@ public class CreateRelationshipCommandHandler(
         };
 
         await entityRepository.CreateRelationshipAsync(relationship);
-        await searchQueue.QueueEntityUpdateAsync(sourceEntity.Id);
         
-        // If reverse label exists, also update target entity in search index
-        if (!string.IsNullOrEmpty(request.ReverseLabel))
-        {
-            await searchQueue.QueueEntityUpdateAsync(targetEntity.Id);
-        }
 
         logger.LogInformation("Relationship created between {Source} and {Target}", sourceEntity.Id, targetEntity.Id);
 

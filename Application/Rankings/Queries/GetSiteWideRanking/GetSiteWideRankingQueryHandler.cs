@@ -1,7 +1,8 @@
-﻿using Application.Common;
+using Application.Common;
 using Application.Novels.DTOS;
 using AutoMapper;
 using Domain.Exceptions;
+using Domain.Ranking;
 using Domain.Repositories;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -9,70 +10,43 @@ using Microsoft.Extensions.Logging;
 namespace Application.Rankings.Queries.GetSiteWideRanking;
 
 public class GetSiteWideRankingQueryHandler(
-    IRankingRepository rankingRepository, 
+    IRankingRepository rankingRepository,
     INovelsRepository novelsRepository,
-    ILogger<GetSiteWideRankingQueryHandler> logger, 
+    ILogger<GetSiteWideRankingQueryHandler> logger,
     IMapper mapper) : IRequestHandler<GetSiteWideRankingQuery, PagedResult<NovelInRankingDto>>
 {
+    private static readonly string[] SiteWideTypes = [RankingTypes.Trending, RankingTypes.AllTime, RankingTypes.NewArrivals];
+
     public async Task<PagedResult<NovelInRankingDto>> Handle(GetSiteWideRankingQuery request, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Getting {RankingType} site-wide ranking", request.RankingType);
+        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var pageNumber = Math.Max(1, request.PageNumber);
 
-        // Handle NewArrivals as real-time query
-        if (request.RankingType.Equals("NewArrivals", StringComparison.OrdinalIgnoreCase))
+        var rankingType = RankingTypes.Normalize(request.RankingType);
+        if (rankingType == null || !SiteWideTypes.Contains(rankingType))
         {
-            return await GetNewArrivalsRealTime(request);
+            throw new NotFoundException(
+                $"Invalid ranking type '{request.RankingType}'. Valid types: {string.Join(", ", SiteWideTypes)}");
         }
 
-        // Handle precalculated rankings (AllTime, Trending)
-        return await GetPrecalculatedRanking(request);
-    }
+        logger.LogInformation("Getting {RankingType} site-wide ranking", rankingType);
 
-    private async Task<PagedResult<NovelInRankingDto>> GetNewArrivalsRealTime(GetSiteWideRankingQuery request)
-    {
-        logger.LogInformation("Getting real-time new arrivals");
-
-        // Get novels directly from database, ordered by creation date
-        var (novels, totalCount) = await novelsRepository.GetLatestNovels(
-            request.PageSize, 
-            request.PageNumber);
-
-        // Map to DTOs
-        var novelDtos = mapper.Map<IEnumerable<NovelInRankingDto>>(novels);
-
-        return new PagedResult<NovelInRankingDto>(
-            novelDtos,
-            totalCount,
-            request.PageSize,
-            request.PageNumber);
-    }
-
-    private async Task<PagedResult<NovelInRankingDto>> GetPrecalculatedRanking(GetSiteWideRankingQuery request)
-    {
-        // Validate ranking type
-        var validTypes = new[] { "AllTime", "Trending" };
-        if (!validTypes.Contains(request.RankingType))
+        if (rankingType == RankingTypes.NewArrivals)
         {
-            throw new NotFoundException($"Invalid ranking type '{request.RankingType}'. Valid types: {string.Join(", ", validTypes)} or NewArrivals");
+            // Real-time: newest published novels that have at least one published chapter.
+            var (novels, totalCount) = await novelsRepository.GetLatestNovels(pageSize, pageNumber);
+            return new PagedResult<NovelInRankingDto>(
+                mapper.Map<IEnumerable<NovelInRankingDto>>(novels), totalCount, pageSize, pageNumber);
         }
 
-        // Get site-wide ranking list (GenreId = null)
-        var rankingList = await rankingRepository.GetSiteWideRankingListByType(request.RankingType)
-            ?? throw new NotFoundException($"No {request.RankingType} site-wide ranking found. Rankings may not be calculated yet.");
+        var rankingList = await rankingRepository.GetSiteWideRankingListByType(rankingType);
+        if (rankingList == null || rankingList.TotalNovels == 0)
+        {
+            return new PagedResult<NovelInRankingDto>([], 0, pageSize, pageNumber);
+        }
 
-        // Get ranking entries with pagination
-        var rankingEntries = await rankingRepository.GetRankingEntriesPaged(
-            rankingList.Id,
-            request.PageSize,
-            request.PageNumber);
-
-        // Map to NovelInRankingDto
-        var novelDtos = mapper.Map<IEnumerable<NovelInRankingDto>>(rankingEntries);
-
+        var rankingEntries = await rankingRepository.GetRankingEntriesPaged(rankingList.Id, pageSize, pageNumber);
         return new PagedResult<NovelInRankingDto>(
-            novelDtos,
-            rankingList.TotalNovels,
-            request.PageSize,
-            request.PageNumber);
+            mapper.Map<IEnumerable<NovelInRankingDto>>(rankingEntries), rankingList.TotalNovels, pageSize, pageNumber);
     }
 }

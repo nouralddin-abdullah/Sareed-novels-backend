@@ -13,8 +13,7 @@ public class AddGalleryImageCommandHandler(
     ILogger<AddGalleryImageCommandHandler> logger,
     INovelEntityRepository entityRepository,
     IUserContext userContext,
-    IFileUploadService fileUploadService,
-    ISearchIndexQueueService searchQueue) : IRequestHandler<AddGalleryImageCommand, OperationResult>
+    IFileUploadService fileUploadService) : IRequestHandler<AddGalleryImageCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(AddGalleryImageCommand request, CancellationToken cancellationToken)
     {
@@ -51,9 +50,6 @@ public class AddGalleryImageCommandHandler(
         };
 
         await entityRepository.AddGalleryImageAsync(galleryImage);
-
-        // Queue entity update for Elasticsearch
-        await searchQueue.QueueEntityUpdateAsync(entity.Id);
 
         logger.LogInformation("Gallery image added to entity {EntityId}", entity.Id);
 

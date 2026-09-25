@@ -11,8 +11,7 @@ namespace Application.Entities.Commands.UpdateRelationship;
 public class UpdateRelationshipCommandHandler(
     ILogger<UpdateRelationshipCommandHandler> logger,
     INovelEntityRepository entityRepository,
-    IUserContext userContext,
-    ISearchIndexQueueService searchQueue) : IRequestHandler<UpdateRelationshipCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<UpdateRelationshipCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UpdateRelationshipCommand request, CancellationToken cancellationToken)
     {
@@ -43,10 +42,6 @@ public class UpdateRelationshipCommandHandler(
         if (request.Description != null) relationship.Description = request.Description;
 
         await entityRepository.UpdateRelationshipAsync(relationship);
-
-        // Queue both entities for update (relationship affects both)
-        await searchQueue.QueueEntityUpdateAsync(relationship.SourceEntityId);
-        await searchQueue.QueueEntityUpdateAsync(relationship.TargetEntityId);
 
         logger.LogInformation("Relationship {RelationshipId} updated", relationship.Id);
 

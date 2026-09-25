@@ -3,17 +3,8 @@ using Application.Search.DTOs;
 
 namespace Application.Services;
 
+/// <summary>User search, served straight from SQL (normalized User.SearchName); there is no index to maintain.</summary>
 public interface IUserSearchService
 {
-    // Search operations
     Task<PagedResult<UserSearchResult>> SearchUsersAsync(SearchUsersRequest request, CancellationToken cancellationToken = default);
-    
-    // Index management (data integrity)
-    Task<bool> IndexUserAsync(string userId);
-    Task<bool> UpdateUserInIndexAsync(string userId);
-    Task<bool> DeleteUserFromIndexAsync(string userId);
-    
-    // Admin operations
-    Task<bool> EnsureIndexExistsAsync();
-    Task<int> ReindexAllUsersAsync();
 }

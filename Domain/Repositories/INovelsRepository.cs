@@ -1,4 +1,5 @@
 ﻿using Domain.Entities;
+using Domain.Seo;
 
 namespace Domain.Repositories;
 
@@ -16,4 +17,6 @@ public interface INovelsRepository
     Task<int> RecalculatePublishedSequencesAsync(Guid novelId);
     Task<List<Novel>> GetNovelsByIdsAsync(List<Guid> novelIds);
     Task<List<Novel>> GetNovelsBySharedGenresAsync(List<int> genreIds, Guid excludeNovelId, int limit);
+    /// <summary>Every published novel with at least one published chapter, and those chapters, for sitemap.xml.</summary>
+    Task<List<NovelSitemapEntry>> GetSitemapEntriesAsync(CancellationToken cancellationToken = default);
 }

@@ -14,7 +14,6 @@ public class UpdateEntityCommandHandler(
     ILogger<UpdateEntityCommandHandler> logger,
     INovelEntityRepository entityRepository,
     IUserContext userContext,
-    ISearchIndexQueueService searchQueue,
     IFileUploadService fileUploadService) : IRequestHandler<UpdateEntityCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UpdateEntityCommand request, CancellationToken cancellationToken)
@@ -91,9 +90,6 @@ public class UpdateEntityCommandHandler(
         entity.UpdatedAt = DateTime.UtcNow;
 
         await entityRepository.UpdateEntityAsync(entity);
-
-        // Queue for Elasticsearch update
-        await searchQueue.QueueEntityUpdateAsync(entity.Id);
 
         logger.LogInformation("Entity {EntityId} updated successfully", entity.Id);
 

@@ -17,7 +17,6 @@ public class DeleteChapterCommandHandler(
     IChaptersRepository chaptersRepository, 
     IUserContext userContext,
     IChapterSequenceService sequenceService,
-    ISearchIndexQueueService searchIndexQueue,
     IServiceProvider serviceProvider) : IRequestHandler<DeleteChapterCommand, bool>
 {
     public async Task<bool> Handle(DeleteChapterCommand request, CancellationToken cancellationToken)
@@ -56,9 +55,6 @@ public class DeleteChapterCommandHandler(
                 }
             }
             
-            // Queue for Elasticsearch update (ChapterCount changed)
-            await searchIndexQueue.QueueUpdateAsync(request.NovelId);
-            logger.LogDebug("Queued novel {NovelId} for search index update (chapter deleted)", request.NovelId);
         }
         
         return deleteResult;

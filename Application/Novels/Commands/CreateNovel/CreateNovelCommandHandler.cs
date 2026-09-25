@@ -17,8 +17,7 @@ public class CreateNovelCommandHandler(
     IUserContext userContext,
     INovelGenresRepository novelGenresRepository, 
     INovelsRepository novelsRepository, 
-    IFileUploadService fileUploadService,
-    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<CreateNovelCommand, CreateNovelResult>
+    IFileUploadService fileUploadService) : IRequestHandler<CreateNovelCommand, CreateNovelResult>
 {
     public async Task<CreateNovelResult> Handle(CreateNovelCommand request, CancellationToken cancellationToken)
     {
@@ -62,12 +61,6 @@ public class CreateNovelCommandHandler(
             };
         }
 
-        // Queue for Elasticsearch indexing if not draft
-        if (!novel.IsDraft)
-        {
-            await searchIndexQueue.QueueIndexAsync(novel.Id);
-            logger.LogInformation("Queued novel {NovelId} for search indexing", novel.Id);
-        }
 
         return new CreateNovelResult
         {

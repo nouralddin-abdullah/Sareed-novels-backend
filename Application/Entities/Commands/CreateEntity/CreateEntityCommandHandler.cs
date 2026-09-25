@@ -16,7 +16,6 @@ public class CreateEntityCommandHandler(
     INovelEntityRepository entityRepository,
     INovelsRepository novelsRepository,
     IUserContext userContext,
-    ISearchIndexQueueService searchQueue,
     IFileUploadService fileUploadService) : IRequestHandler<CreateEntityCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(CreateEntityCommand request, CancellationToken cancellationToken)
@@ -90,9 +89,6 @@ public class CreateEntityCommandHandler(
         };
 
         await entityRepository.CreateEntityAsync(entity);
-
-        // Queue for Elasticsearch indexing
-        await searchQueue.QueueEntityIndexAsync(entity.Id);
 
         logger.LogInformation("Entity {EntityId} created successfully", entity.Id);
 

@@ -1,5 +1,6 @@
 ﻿using Domain.Entities;
 using Domain.Repositories;
+using Domain.Seo;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,6 +8,33 @@ namespace Infrastructure.Repositories;
 
 public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepository
 {
+    public async Task<List<NovelSitemapEntry>> GetSitemapEntriesAsync(CancellationToken cancellationToken = default)
+    {
+        var rows = await dbContext.Novels
+            .AsNoTracking()
+            .Where(n => !n.IsDraft)
+            .Select(n => new
+            {
+                n.Slug,
+                n.LastUpdatedAt,
+                Chapters = n.Chapters
+                    .Where(c => c.Status == "Published")
+                    .OrderBy(c => c.ChapterIndex)
+                    .Select(c => new { c.Id, c.CreatedAt })
+                    .ToList()
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Where(n => n.Chapters.Count > 0)
+            .Select(n => new NovelSitemapEntry(
+                n.Slug,
+                new[] { n.LastUpdatedAt, n.Chapters.Max(c => c.CreatedAt) }.Max(),
+                n.Chapters.Select(c => new ChapterSitemapEntry(c.Id, c.CreatedAt)).ToList()))
+            .OrderByDescending(n => n.LastModified)
+            .ToList();
+    }
+
     public async Task<bool> CreateNovel(Novel novel)
     {
         await dbContext.Novels.AddAsync(novel);
@@ -16,8 +44,10 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
 
     public async Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber)
     {
+        // Only published novels a reader can actually open: not a draft and at least one published chapter.
         var query = dbContext.Novels
-        .Where(n => n.IsEligibleForRanking)
+        .AsNoTracking()
+        .Where(n => n.IsEligibleForRanking && !n.IsDraft && n.Chapters.Any(c => c.Status == "Published"))
         .Include(n => n.NovelGenres)
             .ThenInclude(ng => ng.Genre)
         .Include(n => n.Owner)

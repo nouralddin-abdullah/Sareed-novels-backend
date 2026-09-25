@@ -32,7 +32,7 @@ public enum ChapterCountRange
 
 public enum NovelSortBy
 {
-    Relevance,      // Default (by Elasticsearch score)
+    Relevance,      // Default: best title match first (popularity when there is no query)
     Newest,         // CreatedAt DESC
     LastUpdated,    // LastUpdatedAt DESC
     MostPopular,    // TotalViews DESC

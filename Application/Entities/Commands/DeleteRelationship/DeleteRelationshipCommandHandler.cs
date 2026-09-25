@@ -12,8 +12,7 @@ public class DeleteRelationshipCommandHandler(
     ILogger<DeleteRelationshipCommandHandler> logger,
     INovelEntityRepository entityRepository,
     INovelsRepository novelsRepository,
-    IUserContext userContext,
-    ISearchIndexQueueService searchQueue) : IRequestHandler<DeleteRelationshipCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<DeleteRelationshipCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(DeleteRelationshipCommand request, CancellationToken cancellationToken)
     {
@@ -38,10 +37,6 @@ public class DeleteRelationshipCommandHandler(
         }
 
         await entityRepository.DeleteRelationshipAsync(request.RelationshipId);
-
-        // Queue both entities for update
-        await searchQueue.QueueEntityUpdateAsync(relationship.SourceEntityId);
-        await searchQueue.QueueEntityUpdateAsync(relationship.TargetEntityId);
 
         logger.LogInformation("Relationship {RelationshipId} deleted", request.RelationshipId);
 

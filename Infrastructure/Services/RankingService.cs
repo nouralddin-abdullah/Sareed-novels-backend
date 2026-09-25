@@ -1,365 +1,282 @@
-﻿using Application.Services;
+using System.Diagnostics;
+using Application.Services;
 using Domain.Entities;
+using Domain.Ranking;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Services
+namespace Infrastructure.Services;
+
+/// <summary>
+/// Recomputes every ranking list from reading activity (see <see cref="RankingFormula"/>) and rewrites the stored
+/// RankingLists/RankingEntries in one transaction, so the public ranking endpoints never see a half-written list.
+/// Lists that end up with no qualifying novels are emptied rather than left stale.
+/// </summary>
+public class RankingService(ApplicationDbContext dbContext, TimeProvider timeProvider, ILogger<RankingService> logger) : IRankingService
 {
-    public class RankingService(ApplicationDbContext dbContext, ILogger<RankingService> logger) : IRankingService
+    private const string Published = "Published";
+    private const int SignalWindowDays = 60;
+    private const int SiteWideLimit = 100;
+    private const int GenreLimit = 50;
+    private const double DefaultRatingPrior = 3.5;
+
+    /// <summary>All lists come from one pass over the data, so a single genre is recomputed along with the rest.</summary>
+    public Task CalculateGenreRankings(int genreId, string rankingType = RankingTypes.TopRated) => CalculateAllGenreRankings();
+
+    public async Task CalculateAllGenreRankings()
     {
-        public async Task CalculateAllGenreRankings()
+        var stopwatch = Stopwatch.StartNew();
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+
+        var lists = await ComputeListsAsync(now);
+        await SaveListsAsync(lists, now);
+
+        logger.LogInformation(
+            "Rankings recalculated: {Lists} lists, {Entries} entries in {ElapsedMs} ms",
+            lists.Count, lists.Sum(l => l.Entries.Count), stopwatch.ElapsedMilliseconds);
+    }
+
+    /// <summary>Computes every list without writing anything (the job saves them; diagnostics can just look).</summary>
+    public async Task<IReadOnlyList<ComputedList>> ComputeListsAsync(DateTime now)
+    {
+        var signals = await LoadSignalsAsync(now);
+        var trustedRatings = signals.SelectMany(s => s.TrustedRatings).ToList();
+        var ratingPrior = trustedRatings.Count > 0 ? (double)trustedRatings.Average() : DefaultRatingPrior;
+
+        var genres = await dbContext.Genres.AsNoTracking()
+            .Select(g => new { g.Id, g.Name })
+            .ToListAsync();
+        var novelsByGenre = (await dbContext.NovelGenres.AsNoTracking()
+                .Select(ng => new { ng.GenreId, ng.NovelId })
+                .ToListAsync())
+            .ToLookup(ng => ng.GenreId, ng => ng.NovelId);
+
+        var lists = new List<ComputedList>
         {
-            logger.LogInformation("Starting calculation for all genre rankings");
+            new(null, RankingTypes.Trending, "TrendingNow",
+                Rank(signals, s => RankingFormula.Trending(s, now), now, ratingPrior, SiteWideLimit)),
+            new(null, RankingTypes.AllTime, "AllTimeGreats",
+                Rank(signals.Where(s => RankingFormula.QualifiesForQualityLists(s) && s.ReaderActivity.Count > 0),
+                    s => RankingFormula.AllTime(s, ratingPrior), now, ratingPrior, SiteWideLimit))
+        };
 
-            var genres = await dbContext.Genres.ToListAsync();
+        foreach (var genre in genres)
+        {
+            var ids = novelsByGenre[genre.Id].ToHashSet();
+            var inGenre = signals.Where(s => ids.Contains(s.NovelId)).ToList();
 
-            foreach (var genre in genres)
-            {
-                // Calculate all ranking types for each genre
-                await CalculateGenreRankings(genre.Id, "TopRated");      // Top Genre (All novels)
-                await CalculateGenreRankings(genre.Id, "Trending");      // Trending Genre (All novels)  
-                await CalculateGenreRankings(genre.Id, "New");           // New Genre (Limited to novels < 60 days)
-                
-                // Add small delay to prevent overwhelming the database
-                await Task.Delay(100);
-            }
-            
-            // Calculate site-wide rankings
-            await CalculateSiteWideRankings();
-
-            logger.LogInformation("Completed calculation for all genre rankings");
+            lists.Add(new(genre.Id, RankingTypes.Trending, $"Trending{genre.Name}",
+                Rank(inGenre, s => RankingFormula.Trending(s, now), now, ratingPrior, GenreLimit)));
+            lists.Add(new(genre.Id, RankingTypes.TopRated, $"Top{genre.Name}",
+                Rank(inGenre.Where(RankingFormula.QualifiesForQualityLists),
+                    s => RankingFormula.TopRated(s, ratingPrior), now, ratingPrior, GenreLimit)));
+            lists.Add(new(genre.Id, RankingTypes.New, $"New{genre.Name}",
+                Rank(inGenre.Where(s => RankingFormula.IsNew(s, now)),
+                    s => RankingFormula.New(s, now), now, ratingPrior, GenreLimit)));
         }
 
-        public async Task CalculateGenreRankings(int genreId, string rankingType = "TopRated")
-        {
-            logger.LogInformation("Calculating {RankingType} rankings for genre {GenreId}", rankingType, genreId);
+        return lists;
+    }
 
-            try
+    private async Task<List<NovelSignals>> LoadSignalsAsync(DateTime now)
+    {
+        var since = now.AddDays(-SignalWindowDays);
+
+        var novels = await dbContext.Novels.AsNoTracking()
+            .Where(n => !n.IsDraft && n.IsEligibleForRanking)
+            .Select(n => new
             {
-                // Get novels based on ranking type
-                var novelsInGenre = await GetNovelsForRankingType(genreId, rankingType);
+                n.Id,
+                n.AuthorId,
+                PublishedChapters = n.Chapters.Count(c => c.Status == Published),
+                FirstChapterAt = n.Chapters.Where(c => c.Status == Published).Min(c => (DateTime?)c.CreatedAt),
+                LastChapterAt = n.Chapters.Where(c => c.Status == Published).Max(c => (DateTime?)c.CreatedAt)
+            })
+            .Where(n => n.PublishedChapters > 0)
+            .ToListAsync();
 
-                if (novelsInGenre.Count == 0)
+        var progress = (await dbContext.UserNovelProgress.AsNoTracking()
+                .Select(p => new { p.NovelId, p.UserId, p.LastReadAt, p.LastReadChapterNumber })
+                .ToListAsync())
+            .ToLookup(p => p.NovelId);
+
+        var chapterVisitors = (await dbContext.DailyUniqueViews.AsNoTracking()
+                .Where(v => v.Kind == ViewKind.Chapter && v.Day >= since)
+                .GroupBy(v => new { v.NovelId, v.VisitorKey })
+                .Select(g => new { g.Key.NovelId, g.Key.VisitorKey, LastDay = g.Max(v => v.Day) })
+                .ToListAsync())
+            .ToLookup(v => v.NovelId);
+
+        var dailyViews = (await dbContext.NovelViews.AsNoTracking()
+                .Where(v => v.ViewDate >= since)
+                .Select(v => new { v.NovelId, v.ViewDate, v.ViewCount })
+                .ToListAsync())
+            .ToLookup(v => v.NovelId);
+
+        // Chapter and paragraph comments (post comments aren't about a novel).
+        var comments = (await dbContext.Comments.AsNoTracking()
+                .Where(c => c.CreatedAt >= since && c.PostId == null)
+                .Select(c => new
                 {
-                    logger.LogInformation("No novels found for genre {GenreId} with ranking type {RankingType}", 
-                        genreId, rankingType);
-                    return;
-                }
+                    c.UserId,
+                    c.CreatedAt,
+                    ChapterId = c.ChapterId ?? (c.Paragraph != null ? c.Paragraph.ChapterId : (Guid?)null)
+                })
+                .Join(dbContext.Chapters, c => c.ChapterId, ch => (Guid?)ch.Id,
+                    (c, ch) => new { ch.NovelId, c.UserId, c.CreatedAt })
+                .ToListAsync())
+            .ToLookup(c => c.NovelId);
 
-                var genreAverageRating = await CalculateGenreAverageRating(genreId);
+        var reviews = (await dbContext.Reviews.AsNoTracking()
+                .Select(r => new { r.NovelId, r.ReviewerId, r.TotalAverageScore })
+                .ToListAsync())
+            .ToLookup(r => r.NovelId);
 
-                // Calculate scores for each novel
-                foreach (var novelGenre in novelsInGenre)
-                {
-                    await CalculateScoresForNovel(novelGenre, genreAverageRating, rankingType);
-                }
+        var result = new List<NovelSignals>(novels.Count);
+        foreach (var novel in novels)
+        {
+            var authorKey = $"u:{novel.AuthorId}";
+            var lastActivity = new Dictionary<string, DateTime>();
+            var depths = new List<double>();
+            var chapterReached = new Dictionary<string, int>();
 
-                // Save the updated scores
-                await dbContext.SaveChangesAsync();
-
-                // Create or update ranking list with proper limits
-                await CreateRankingList(genreId, rankingType, novelsInGenre);
-
-                logger.LogInformation("Successfully calculated rankings for genre {GenreId}, type {RankingType}", 
-                    genreId, rankingType);
-            }
-            catch (Exception ex)
+            foreach (var p in progress[novel.Id].Where(p => p.UserId != novel.AuthorId))
             {
-                logger.LogError(ex, "Failed to calculate rankings for genre {GenreId}, type {RankingType}", 
-                    genreId, rankingType);
+                Touch(lastActivity, $"u:{p.UserId}", p.LastReadAt);
+                depths.Add(Math.Min(p.LastReadChapterNumber, novel.PublishedChapters) / (double)novel.PublishedChapters);
+                chapterReached[p.UserId] = p.LastReadChapterNumber;
             }
+
+            foreach (var v in chapterVisitors[novel.Id].Where(v => v.VisitorKey != authorKey))
+            {
+                Touch(lastActivity, v.VisitorKey, v.LastDay);
+            }
+
+            // A review counts only if the reviewer got at least 3 chapters in (or finished a shorter novel).
+            var minChaptersForReview = Math.Min(3, novel.PublishedChapters);
+
+            result.Add(new NovelSignals
+            {
+                NovelId = novel.Id,
+                PublishedChapters = novel.PublishedChapters,
+                FirstChapterAt = novel.FirstChapterAt!.Value,
+                LastChapterAt = novel.LastChapterAt!.Value,
+                ReaderActivity = lastActivity.Values.ToList(),
+                ReaderDepths = depths,
+                DailyViews = dailyViews[novel.Id].Select(v => new DailyViews(v.ViewDate, v.ViewCount)).ToList(),
+                Comments = comments[novel.Id].Where(c => c.UserId != novel.AuthorId).Select(c => c.CreatedAt).ToList(),
+                TrustedRatings = reviews[novel.Id]
+                    .Where(r => r.ReviewerId != novel.AuthorId
+                                && chapterReached.TryGetValue(r.ReviewerId, out var reached)
+                                && reached >= minChaptersForReview)
+                    .Select(r => r.TotalAverageScore)
+                    .ToList()
+            });
         }
 
-        private async Task<List<NovelGenre>> GetNovelsForRankingType(int genreId, string rankingType)
+        return result;
+    }
+
+    private static void Touch(Dictionary<string, DateTime> lastActivity, string key, DateTime at)
+    {
+        if (!lastActivity.TryGetValue(key, out var existing) || at > existing)
         {
-            var baseQuery = dbContext.NovelGenres
-                .Include(ng => ng.Novel)
-                .Where(ng => ng.GenreId == genreId && ng.Novel.IsEligibleForRanking);
-
-            return rankingType switch
-            {
-                "New" => await baseQuery
-                    .Where(ng => ng.Novel.CreatedAt >= DateTime.UtcNow.AddDays(-60)) // Only novels < 60 days old
-                    .ToListAsync(),
-                    
-                "Trending" => await baseQuery
-                    .Where(ng => ng.Novel.LastViewUpdate >= DateTime.UtcNow.AddDays(-30)) // Active in last 30 days
-                    .ToListAsync(),
-                    
-                _ => await baseQuery.ToListAsync() // TopRated gets all novels
-            };
-        }
-
-        private async Task CalculateSiteWideRankings()
-        {
-            logger.LogInformation("Calculating site-wide rankings");
-
-            try
-            {
-                // TrendingNow (site-wide trending - limit to top 50)
-                await CalculateTrendingNow();
-                
-                // AllTimeGreats (site-wide best - limit to top 100)
-                await CalculateAllTimeGreats();
-                
-                logger.LogInformation("Successfully calculated site-wide rankings");
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to calculate site-wide rankings");
-            }
-        }
-
-        private async Task CalculateTrendingNow()
-        {
-            // Get novels with recent activity across all genres
-            var trendingNovels = await dbContext.NovelGenres
-                .Include(ng => ng.Novel)
-                .Where(ng => ng.Novel.IsEligibleForRanking && 
-                            ng.Novel.LastViewUpdate >= DateTime.UtcNow.AddDays(-14)) // Active in last 14 days
-                .GroupBy(ng => ng.NovelId)
-                .Select(g => g.First()) // One entry per novel (in case novel has multiple genres)
-                .ToListAsync();
-
-            if (trendingNovels.Count == 0) return;
-
-            // Calculate trending scores
-            foreach (var novelGenre in trendingNovels)
-            {
-                // Trending focuses more on recent activity
-                novelGenre.TrendingScore = 
-                    (novelGenre.Novel.ViewsToday * 2) +           // Today's views are very important
-                    (novelGenre.Novel.TotalViews * 0.05m) +      // Total views matter less
-                    (novelGenre.Novel.ReviewCount * 15) +        // Recent reviews boost
-                    (novelGenre.Novel.TotalAverageScore * 10);   // Quality still matters
-            }
-
-            await CreateSiteWideRankingList("TrendingNow", "Trending", trendingNovels, 50); // Limit to 50
-        }
-
-        private async Task CalculateAllTimeGreats()
-        {
-            // Get all novels with sufficient reviews for "all-time" consideration
-            var allTimeNovels = await dbContext.NovelGenres
-                .Include(ng => ng.Novel)
-                .Where(ng => ng.Novel.IsEligibleForRanking && 
-                            ng.Novel.ReviewCount >= 3) // Minimum 3 reviews for "all-time" status
-                .GroupBy(ng => ng.NovelId)
-                .Select(g => g.First()) // One entry per novel
-                .ToListAsync();
-
-            if (allTimeNovels.Count == 0) return;
-
-            // Calculate all-time scores (focus on quality and proven popularity)
-            foreach (var novelGenre in allTimeNovels)
-            {
-                novelGenre.QualityScore = novelGenre.Novel.TotalAverageScore; // No Bayesian needed (enough reviews)
-                novelGenre.PopularityScore = 
-                    (novelGenre.Novel.ReviewCount * 20) +        // Review count is very important
-                    (novelGenre.Novel.TotalViews * 0.02m);       // Views matter but less than reviews
-                    
-                // All-time score balances quality and proven popularity
-                var allTimeScore = (novelGenre.QualityScore * 0.6m) + (novelGenre.PopularityScore * 0.4m);
-                novelGenre.GenreScore = allTimeScore;
-            }
-
-            await CreateSiteWideRankingList("AllTimeGreats", "AllTime", allTimeNovels, 100); // Limit to 100
-        }
-
-        private static Task CalculateScoresForNovel(NovelGenre novelGenre, decimal genreAverageRating, string rankingType)
-        {
-            var novel = novelGenre.Novel;
-            var minimumReviews = 10;
-
-            // Calculate Quality Score (Bayesian Average)
-            if (novel.ReviewCount >= minimumReviews)
-            {
-                novelGenre.QualityScore = novel.TotalAverageScore;
-            }
-            else
-            {
-                novelGenre.QualityScore = ((novel.ReviewCount * novel.TotalAverageScore) + (minimumReviews * genreAverageRating))
-                                         / (novel.ReviewCount + minimumReviews);
-            }
-
-            // Calculate scores based on ranking type
-            switch (rankingType)
-            {
-                case "Trending":
-                    // Trending emphasizes recent activity
-                    novelGenre.PopularityScore = (novel.ViewsToday * 5) + (novel.TotalViews * 0.02m) + (novel.ReviewCount * 8);
-                    novelGenre.TrendingScore = (novelGenre.QualityScore * 0.4m) + (novelGenre.PopularityScore * 0.6m);
-                    novelGenre.GenreScore = novelGenre.TrendingScore;
-                    break;
-                    
-                case "New":
-                    // New novels get a boost but still need some quality
-                    var daysSinceCreated = (DateTime.UtcNow - novel.CreatedAt).Days;
-                    var newBonus = Math.Max(0, (60 - daysSinceCreated) * 0.05m); // Bonus decreases with age
-                    novelGenre.PopularityScore = novel.TotalViews * 0.1m + novel.ReviewCount * 12;
-                    novelGenre.GenreScore = novelGenre.QualityScore + newBonus + (novelGenre.PopularityScore * 0.2m);
-                    break;
-                    
-                default: // TopRated
-                    novelGenre.PopularityScore = novel.TotalViews * 0.1m + novel.ReviewCount * 10;
-                    novelGenre.TrendingScore = novelGenre.QualityScore * 0.7m + novelGenre.PopularityScore * 0.3m;
-                    novelGenre.GenreScore = novelGenre.QualityScore; // Top rated focuses on quality
-                    break;
-            }
-
-            novelGenre.LastRankUpdate = DateTime.UtcNow;
-            return Task.CompletedTask;
-        }
-
-        private async Task CreateRankingList(int genreId, string rankingType, List<NovelGenre> novelsInGenre)
-        {
-            // Get the appropriate limit for this ranking type
-            var limit = GetLimitForRankingType(rankingType);
-
-            // Find or create ranking list
-            var rankingList = await dbContext.RankingLists
-                .Include(rl => rl.Entries)
-                .FirstOrDefaultAsync(rl => rl.GenreId == genreId && rl.RankingType == rankingType);
-
-            if (rankingList == null)
-            {
-                var genre = await dbContext.Genres.FindAsync(genreId);
-                rankingList = new RankingList
-                {
-                    Name = GetRankingListName(genre?.Name ?? "Unknown", rankingType),
-                    GenreId = genreId,
-                    RankingType = rankingType
-                };
-                await dbContext.RankingLists.AddAsync(rankingList);
-                await dbContext.SaveChangesAsync();
-            }
-
-            // Clear existing entries
-            if (rankingList.Entries.Any())
-            {
-                dbContext.RankingEntries.RemoveRange(rankingList.Entries);
-            }
-
-            // Sort and limit novels
-            var sortedNovels = novelsInGenre
-                .OrderByDescending(ng => ng.GenreScore ?? 0)
-                .Take(limit) // Apply appropriate limit
-                .ToList();
-
-            var rank = 1;
-            foreach (var novelGenre in sortedNovels)
-            {
-                var entry = new RankingEntry
-                {
-                    RankingListId = rankingList.Id,
-                    NovelId = novelGenre.NovelId,
-                    Rank = rank++,
-                    Score = novelGenre.GenreScore ?? 0,
-                    QualityScore = novelGenre.QualityScore,
-                    PopularityScore = novelGenre.PopularityScore,
-                    TrendingScore = novelGenre.TrendingScore
-                };
-
-                await dbContext.RankingEntries.AddAsync(entry);
-            }
-
-            rankingList.LastUpdated = DateTime.UtcNow;
-            rankingList.TotalNovels = sortedNovels.Count;
-            await dbContext.SaveChangesAsync();
-        }
-
-        private async Task CreateSiteWideRankingList(string name, string rankingType, List<NovelGenre> novels, int limit)
-        {
-            var rankingList = await dbContext.RankingLists
-                .Include(rl => rl.Entries)
-                .FirstOrDefaultAsync(rl => rl.GenreId == null && rl.RankingType == rankingType);
-
-            if (rankingList == null)
-            {
-                rankingList = new RankingList
-                {
-                    Name = name,
-                    GenreId = null, // Site-wide
-                    RankingType = rankingType
-                };
-                await dbContext.RankingLists.AddAsync(rankingList);
-                await dbContext.SaveChangesAsync();
-            }
-
-            if (rankingList.Entries.Any())
-            {
-                dbContext.RankingEntries.RemoveRange(rankingList.Entries);
-            }
-
-            var sortedNovels = novels
-                .OrderByDescending(ng => ng.GenreScore ?? 0)
-                .Take(limit)
-                .ToList();
-
-            var rank = 1;
-            foreach (var novelGenre in sortedNovels)
-            {
-                var entry = new RankingEntry
-                {
-                    RankingListId = rankingList.Id,
-                    NovelId = novelGenre.NovelId,
-                    Rank = rank++,
-                    Score = novelGenre.GenreScore ?? 0,
-                    QualityScore = novelGenre.QualityScore,
-                    PopularityScore = novelGenre.PopularityScore,
-                    TrendingScore = novelGenre.TrendingScore
-                };
-
-                await dbContext.RankingEntries.AddAsync(entry);
-            }
-
-            rankingList.LastUpdated = DateTime.UtcNow;
-            rankingList.TotalNovels = sortedNovels.Count;
-            await dbContext.SaveChangesAsync();
-        }
-
-        private static int GetLimitForRankingType(string rankingType)
-        {
-            return rankingType switch
-            {
-                "New" => 30,        // Limit New novels to top 30 per genre
-                "Trending" => 50,   // Limit Trending to top 50 per genre  
-                _ => int.MaxValue   // TopRated shows all novels
-            };
-        }
-
-        private static string GetRankingListName(string genreName, string rankingType)
-        {
-            return rankingType switch
-            {
-                "Trending" => $"Trending{genreName}",
-                "New" => $"New{genreName}",
-                _ => $"Top{genreName}"
-            };
-        }
-
-        private async Task<decimal> CalculateGenreAverageRating(int genreId)
-        {
-            var genreNovels = await dbContext.NovelGenres
-                .Include(ng => ng.Novel)
-                .Where(ng => ng.GenreId == genreId &&
-                       ng.Novel.ReviewCount > 0 &&
-                       ng.Novel.IsEligibleForRanking)
-                .Select(ng => ng.Novel.TotalAverageScore)
-                .ToListAsync();
-
-            if (genreNovels.Count == 0)
-            {
-                logger.LogWarning("No novels with reviews found for genre {GenreId}, using default average", genreId);
-                return 3.5m;
-            }
-
-            var average = genreNovels.Average();
-            logger.LogInformation("Genre {GenreId} average rating: {Average:F2} (from {Count} novels)",
-                genreId, average, genreNovels.Count);
-
-            return average;
+            lastActivity[key] = at;
         }
     }
+
+    private static List<ComputedEntry> Rank(
+        IEnumerable<NovelSignals> candidates, Func<NovelSignals, double> score, DateTime now, double ratingPrior, int limit) =>
+        candidates
+            .Select(s => new { Signals = s, Score = score(s) })
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.Signals.ReaderActivity.Count)
+            .ThenByDescending(x => x.Signals.LastChapterAt)
+            .ThenBy(x => x.Signals.NovelId)
+            .Take(limit)
+            .Select(x => new ComputedEntry(
+                x.Signals.NovelId,
+                x.Score,
+                RankingFormula.BayesRating(x.Signals, ratingPrior),
+                x.Signals.ReaderActivity.Count,
+                RankingFormula.Trending(x.Signals, now)))
+            .ToList();
+
+    private async Task SaveListsAsync(IReadOnlyList<ComputedList> lists, DateTime now)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+
+        // During an IIS app-pool recycle two processes can run this at once; only one may write.
+        var lockResult = await dbContext.Database
+            .SqlQueryRaw<int>("""
+                DECLARE @result int;
+                EXEC @result = sp_getapplock @Resource = 'sard-ranking-recalculation', @LockMode = 'Exclusive',
+                                             @LockOwner = 'Transaction', @LockTimeout = 0;
+                SELECT @result AS Value;
+                """)
+            .ToListAsync();
+        if (lockResult.FirstOrDefault() < 0)
+        {
+            logger.LogInformation("Another ranking recalculation is writing; skipping this run");
+            return;
+        }
+
+        var existing = await dbContext.RankingLists.ToListAsync();
+        var byKey = new Dictionary<(int?, string), RankingList>();
+        foreach (var list in lists)
+        {
+            var rankingList = existing.FirstOrDefault(l => l.GenreId == list.GenreId && l.RankingType == list.Type);
+            if (rankingList == null)
+            {
+                rankingList = new RankingList { GenreId = list.GenreId, RankingType = list.Type, Name = list.Name };
+                dbContext.RankingLists.Add(rankingList);
+            }
+
+            rankingList.Name = list.Name;
+            rankingList.LastUpdated = now;
+            rankingList.TotalNovels = list.Entries.Count;
+            byKey[(list.GenreId, list.Type)] = rankingList;
+        }
+
+        // Lists we no longer produce (e.g. a removed genre) are emptied, never left showing stale entries.
+        foreach (var stale in existing.Where(l => !byKey.ContainsKey((l.GenreId, l.RankingType))))
+        {
+            stale.TotalNovels = 0;
+            stale.LastUpdated = now;
+        }
+
+        await dbContext.SaveChangesAsync();
+        await dbContext.RankingEntries.ExecuteDeleteAsync();
+
+        foreach (var list in lists)
+        {
+            var rankingListId = byKey[(list.GenreId, list.Type)].Id;
+            var rank = 1;
+            foreach (var entry in list.Entries)
+            {
+                dbContext.RankingEntries.Add(new RankingEntry
+                {
+                    RankingListId = rankingListId,
+                    NovelId = entry.NovelId,
+                    Rank = rank++,
+                    Score = ToDecimal(entry.Score, 99_999_999m),
+                    QualityScore = ToDecimal(entry.Quality, 999m),
+                    PopularityScore = ToDecimal(entry.Readers, 99_999_999m),
+                    TrendingScore = ToDecimal(entry.Trending, 99_999_999m),
+                    CreatedAt = now
+                });
+            }
+        }
+
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+    }
+
+    private static decimal ToDecimal(double value, decimal max) =>
+        double.IsFinite(value) ? Math.Clamp(Math.Round((decimal)value, 2), -max, max) : 0m;
+
+    public sealed record ComputedList(int? GenreId, string Type, string Name, List<ComputedEntry> Entries);
+
+    public sealed record ComputedEntry(Guid NovelId, double Score, double Quality, double Readers, double Trending);
 }

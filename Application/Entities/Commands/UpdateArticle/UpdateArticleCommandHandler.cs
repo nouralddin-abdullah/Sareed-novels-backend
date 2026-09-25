@@ -11,8 +11,7 @@ namespace Application.Entities.Commands.UpdateArticle;
 public class UpdateArticleCommandHandler(
     ILogger<UpdateArticleCommandHandler> logger,
     INovelEntityRepository entityRepository,
-    IUserContext userContext,
-    ISearchIndexQueueService searchQueue) : IRequestHandler<UpdateArticleCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<UpdateArticleCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UpdateArticleCommand request, CancellationToken cancellationToken)
     {
@@ -44,9 +43,6 @@ public class UpdateArticleCommandHandler(
         article.UpdatedAt = DateTime.UtcNow;
 
         await entityRepository.UpdateArticleAsync(article);
-
-        // Queue entity update for Elasticsearch
-        await searchQueue.QueueEntityUpdateAsync(entity.Id);
 
         logger.LogInformation("Article {ArticleId} updated", article.Id);
 

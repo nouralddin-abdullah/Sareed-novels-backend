@@ -18,7 +18,6 @@ public class CreateReviewCommandHandler(
     IUserContext userContext, 
     IMapper mapper, 
     IReviewsRepository reviewsRepository,
-    ISearchIndexQueueService searchIndexQueue,
     IServiceProvider serviceProvider) : IRequestHandler<CreateReviewCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(CreateReviewCommand request, CancellationToken cancellationToken)
@@ -66,10 +65,6 @@ public class CreateReviewCommandHandler(
         // Fire-and-forget: Increment user's reviews count
         _ = IncrementUserReviewsCountInBackground(currentUser.Id);
 
-        // Queue for Elasticsearch update (review stats changed)
-        await searchIndexQueue.QueueUpdateAsync(novel.Id);
-        logger.LogDebug("Queued novel {NovelId} for search index update (review added)", novel.Id);
-        
         return new OperationResult
         {
             Success = true,

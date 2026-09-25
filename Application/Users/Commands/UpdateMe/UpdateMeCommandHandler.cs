@@ -14,8 +14,7 @@ public class UpdateMeCommandHandler(
     IFileUploadService fileUploadService, 
     IUserContext userContext, 
     UserManager<User> userManager, 
-    IMapper mapper,
-    ISearchIndexQueueService searchIndexQueue) : IRequestHandler<UpdateMeCommand, OperationResult>
+    IMapper mapper) : IRequestHandler<UpdateMeCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UpdateMeCommand request, CancellationToken cancellationToken)
     {
@@ -108,10 +107,6 @@ public class UpdateMeCommandHandler(
                 Message = $"Failed to update user: {errors}"
             };
         }
-
-        // Queue for Elasticsearch update
-        await searchIndexQueue.QueueUserUpdateAsync(user.Id);
-        logger.LogDebug("Queued user {UserId} for search index update", user.Id);
 
         return new OperationResult
         {

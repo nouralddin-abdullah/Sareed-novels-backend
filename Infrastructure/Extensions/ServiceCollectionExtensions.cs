@@ -12,20 +12,27 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
-using OpenSearch.Client; // ✅ Changed from Nest
-using OpenSearch.Net; // ✅ Changed from Elasticsearch.Net
+using Infrastructure.BackgroundJobs;
+using Infrastructure.Services.Search;
 
 namespace Infrastructure.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static void AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static void AddInfrastructure(this IServiceCollection services, IConfiguration configuration, bool isDevelopment = false)
     {
         var ConnectionString = configuration.GetConnectionString("SardDb");
-        services.AddDbContext<ApplicationDbContext>(Options => Options
-            .UseSqlServer(ConnectionString)
-            .EnableSensitiveDataLogging());
+        services.AddDbContext<ApplicationDbContext>(options =>
+        {
+            options.UseSqlServer(ConnectionString);
+            // Logs SQL parameter values (user data); never in production.
+            if (isDevelopment)
+            {
+                options.EnableSensitiveDataLogging();
+            }
+        });
 
         services.AddIdentity<User, IdentityRole>(options =>
         {
@@ -61,7 +68,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IReadingListFollowersRepository, ReadingListFollowersRepository>();
         services.AddScoped<ILibraryRepository, LibraryRepository>();
         services.AddScoped<IChapterSequenceService, ChapterSequenceService>();
-        services.AddScoped<ISearchIndexOutboxRepository, SearchIndexOutboxRepository>();
         services.AddScoped<IPostsRepository, PostsRepository>();
         services.AddScoped<IPostLikesRepository, PostLikesRepository>();
         services.AddScoped<INovelEntityRepository, NovelEntityRepository>();
@@ -96,45 +102,16 @@ public static class ServiceCollectionExtensions
         services.Configure<CloudflareR2Settings>(
             configuration.GetSection(CloudflareR2Settings.SectionName));
 
-        // OpenSearch configuration
-        services.Configure<OpenSearchSettings>(
-            configuration.GetSection(OpenSearchSettings.SectionName));
-
-        // Register OpenSearch client (using official OpenSearch.Client)
-        services.AddSingleton<IOpenSearchClient>(provider =>
-        {
-            var settings = configuration.GetSection(OpenSearchSettings.SectionName)
-                .Get<OpenSearchSettings>();
-
-            if (settings == null || string.IsNullOrEmpty(settings.Url))
-            {
-                throw new InvalidOperationException(
-                    "OpenSearch settings are not configured properly in appsettings.json");
-            }
-
-            // Create connection settings for AWS OpenSearch
-            var uri = new Uri($"https://{settings.Url}");
-            
-            var connectionSettings = new ConnectionSettings(uri)
-                .DefaultIndex(settings.NovelIndexName)
-                .BasicAuthentication(settings.Username, settings.Password)
-                .EnableDebugMode()
-                .PrettyJson()
-                .ServerCertificateValidationCallback((o, cert, chain, errors) => true)
-                .RequestTimeout(TimeSpan.FromMinutes(2));
-
-            return new OpenSearchClient(connectionSettings);
-        });
-
-        // Register search services
+        // Search runs on SQL Server (normalized search columns); there is no index to keep in sync.
         services.AddScoped<INovelSearchService, NovelSearchService>();
         services.AddScoped<IUserSearchService, UserSearchService>();
         services.AddScoped<IEntitySearchService, EntitySearchService>();
-        services.AddScoped<ISearchIndexQueueService, SearchIndexQueueService>();
         services.AddScoped<INovelRecommendationService, NovelRecommendationService>();
 
-        // Register background service for outbox processing
-        services.AddHostedService<SearchIndexSyncService>();
+        // Scheduled work runs inside the API (replaces the retired Azure Functions app).
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddHostedService<RankingRecalculationService>();
+        services.AddHostedService<DailyPrivilegeUnlockService>();
 
         // Configure memory cache for recommendations
         services.AddMemoryCache(options =>

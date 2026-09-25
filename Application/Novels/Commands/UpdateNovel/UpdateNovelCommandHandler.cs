@@ -15,7 +15,6 @@ public class UpdateNovelCommandHandler(
     INovelGenresRepository novelGenresRepository,
     INovelsRepository novelsRepository, 
     IMapper mapper,
-    ISearchIndexQueueService searchIndexQueue,
     INovelRecommendationService recommendationService) : IRequestHandler<UpdateNovelCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UpdateNovelCommand request, CancellationToken cancellationToken)
@@ -63,10 +62,6 @@ public class UpdateNovelCommandHandler(
                 };
             }
         }
-
-        // Queue for Elasticsearch update (handles index/delete based on eligibility)
-        await searchIndexQueue.QueueUpdateAsync(request.NovelId);
-        logger.LogInformation("Queued novel {NovelId} for search index update", request.NovelId);
 
         // Invalidate recommendation cache (summary or genres may have changed)
         await recommendationService.InvalidateRecommendationCacheAsync(request.NovelId);

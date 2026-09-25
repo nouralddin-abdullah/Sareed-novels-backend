@@ -11,8 +11,7 @@ namespace Application.Entities.Commands.UpdateGalleryImage;
 public class UpdateGalleryImageCommandHandler(
     ILogger<UpdateGalleryImageCommandHandler> logger,
     INovelEntityRepository entityRepository,
-    IUserContext userContext,
-    ISearchIndexQueueService searchQueue) : IRequestHandler<UpdateGalleryImageCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<UpdateGalleryImageCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UpdateGalleryImageCommand request, CancellationToken cancellationToken)
     {
@@ -43,9 +42,6 @@ public class UpdateGalleryImageCommandHandler(
         }
 
         await entityRepository.UpdateGalleryImageAsync(image);
-
-        // Queue entity update for Elasticsearch
-        await searchQueue.QueueEntityUpdateAsync(entity.Id);
 
         logger.LogInformation("Gallery image {ImageId} caption updated", image.Id);
 

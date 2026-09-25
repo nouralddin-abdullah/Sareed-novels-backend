@@ -6,6 +6,8 @@ public class Novel
     public string AuthorId { get; set; } = default!;
     public User Owner { get; set; } = default!;
     public string Title { get; set; } = default!;
+    /// <summary>Normalized <see cref="Title"/> for search; maintained by ApplicationDbContext on save.</summary>
+    public string SearchTitle { get; set; } = string.Empty;
     public string Slug { get; set; } = default!;
     public string Summary { get; set; } = default!;
     public string CoverImageUrl { get; set; } = default!;
