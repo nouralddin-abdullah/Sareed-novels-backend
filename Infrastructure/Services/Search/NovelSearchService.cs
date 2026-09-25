@@ -36,7 +36,7 @@ public class NovelSearchService(ApplicationDbContext dbContext) : INovelSearchSe
         var wordStart = " " + phrase;
 
         var query = dbContext.Novels.AsNoTracking()
-            .Where(n => !n.IsDraft && n.Chapters.Any(c => c.Status == Published));
+            .Where(n => !n.IsDraft);
 
         foreach (var token in tokens)
         {

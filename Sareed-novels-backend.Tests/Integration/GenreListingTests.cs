@@ -57,15 +57,19 @@ public class GenreWorld : SqlServerDatabase
         Ineligible.IsEligibleForRanking = false;
         Deleted = Seed.Novel(author, "deleted");
         Deleted.IsDeleted = true;
-        foreach (var hidden in new[] { Draft, NoPublishedChapters, Ineligible, Deleted })
+        foreach (var hidden in new[] { Draft, Ineligible, Deleted })
         {
             hidden.TotalViews = 1000; // would top "popular" if it leaked through
         }
 
-        var all = Visible.Concat([Draft, NoPublishedChapters, Ineligible, Deleted]).ToList();
+        var all = Visible.Concat([Draft, Ineligible, Deleted]).ToList();
         db.Novels.AddRange(all);
         db.NovelGenres.AddRange(all.Select(n => new NovelGenre { NovelId = n.Id, Genre = Genre }));
         db.NovelGenres.Add(new NovelGenre { NovelId = Ongoing.Id, Genre = OtherGenre });
+
+        // Only in OtherGenre, so the counts above stay about Genre.
+        db.Novels.Add(NoPublishedChapters);
+        db.NovelGenres.Add(new NovelGenre { NovelId = NoPublishedChapters.Id, Genre = OtherGenre });
 
         foreach (var novel in all.Where(n => n != NoPublishedChapters))
         {
@@ -138,6 +142,19 @@ public class GenreListingTests(GenreWorld world) : IClassFixture<GenreWorld>
         Assert.Equal(
             new[] { world.Genre.Slug, world.OtherGenre.Slug }.Order(),
             ongoing.GenresList.Select(g => g.Slug).Order());
+    }
+
+    [Fact]
+    public async Task A_novel_without_published_chapters_is_listed_but_not_ranked()
+    {
+        var listed = await List("popular", slug: world.OtherGenre.Slug);
+        Assert.Equal(
+            new[] { world.Ongoing.Id, world.NoPublishedChapters.Id }.Order(),
+            listed.Items.Select(n => n.Id).Order());
+
+        // Rankings need something to read, so the ranked sortings still skip it.
+        var ranked = await List("trending", slug: world.OtherGenre.Slug);
+        Assert.Equal(new[] { world.Ongoing.Id }, ranked.Items.Select(n => n.Id));
     }
 
     [Fact]

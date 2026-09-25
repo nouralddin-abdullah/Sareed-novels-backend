@@ -158,37 +158,25 @@ public class SearchServiceTests(SqlServerDatabase database) : IClassFixture<SqlS
     }
 
     [Fact]
-    public async Task Novels_a_reader_cannot_open_are_not_listed_until_a_chapter_is_published()
+    public async Task Drafts_are_hidden_but_novels_without_published_chapters_are_listed()
     {
         var m = Seed.Marker();
         var (author, genre) = await SeedAuthorAndGenre();
         var published = await AddNovel(author, $"{m} منشورة", genre: genre);
         var empty = await AddNovel(author, $"{m} فارغة", chapters: 0, genre: genre);
-        await AddNovel(author, $"{m} مسودات", chapters: 0, draftChapters: 2, genre: genre);
+        var draftChaptersOnly = await AddNovel(author, $"{m} مسودات", chapters: 0, draftChapters: 2, genre: genre);
         await AddNovel(author, $"{m} مخفية", isDraft: true, genre: genre);
+        var expected = new[] { published.Id, empty.Id, draftChaptersOnly.Id }.Order();
 
-        await using (var db = database.CreateContext())
-        {
-            var service = new NovelSearchService(db);
-            var byQuery = await service.SearchNovelsAsync(new SearchNovelsRequest { Query = m });
-            Assert.Equal(published.Id, Assert.Single(byQuery.Items).Id);
-            Assert.Equal(1, byQuery.TotalItemsCount);
+        await using var db = database.CreateContext();
+        var service = new NovelSearchService(db);
+        var byQuery = await service.SearchNovelsAsync(new SearchNovelsRequest { Query = m });
+        Assert.Equal(expected, byQuery.Items.Select(n => n.Id).Order());
+        Assert.Equal(3, byQuery.TotalItemsCount);
 
-            // Browsing without a query (the search page before anything is typed) follows the same rule.
-            var browse = await service.SearchNovelsAsync(new SearchNovelsRequest { Genres = [genre.Name] });
-            Assert.Equal(published.Id, Assert.Single(browse.Items).Id);
-        }
-
-        // Publishing the first chapter makes the novel findable at once; nothing has to be re-indexed.
-        await using (var db = database.CreateContext())
-        {
-            db.Chapters.AddRange(Seed.Chapters(empty, 1, LongAgo));
-            await db.SaveChangesAsync();
-        }
-
-        await using var check = database.CreateContext();
-        var after = await new NovelSearchService(check).SearchNovelsAsync(new SearchNovelsRequest { Query = $"{m} فارغه" });
-        Assert.Equal(empty.Id, Assert.Single(after.Items).Id);
+        // Browsing without a query (the search page before anything is typed) follows the same rule.
+        var browse = await service.SearchNovelsAsync(new SearchNovelsRequest { Genres = [genre.Name] });
+        Assert.Equal(expected, browse.Items.Select(n => n.Id).Order());
     }
 
     [Theory]

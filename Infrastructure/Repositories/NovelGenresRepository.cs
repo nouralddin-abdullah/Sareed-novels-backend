@@ -8,8 +8,6 @@ namespace Infrastructure.Repositories;
 
 public class NovelGenresRepository(ApplicationDbContext dbContext) : INovelGenresRepository
 {
-    private const string PublishedChapter = "Published";
-
     public async Task<bool> AddGenresToNovel(Guid novelId, IEnumerable<int> genreIds)
     {
         try
@@ -53,13 +51,12 @@ public class NovelGenresRepository(ApplicationDbContext dbContext) : INovelGenre
         string? sorting,
         bool? isCompleted)
     {
-        // Same visibility as NewArrivals and the rankings: a reader must be able to open the novel and read something.
+        // Novels without a published chapter yet are listed (the owner's call); drafts are not.
         var query = dbContext.Novels
             .AsNoTracking()
             .Where(n => n.NovelGenres.Any(ng => ng.GenreId == genreId)
                         && n.IsEligibleForRanking
-                        && !n.IsDraft
-                        && n.Chapters.Any(c => c.Status == PublishedChapter));
+                        && !n.IsDraft);
 
         if (isCompleted.HasValue)
         {
