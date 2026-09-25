@@ -14,6 +14,7 @@ public class UpdateNovelCommandHandler(
     ILogger<UpdateNovelCommandHandler> logger, 
     IUserContext userContext, 
     INovelGenresRepository novelGenresRepository,
+    IGenresRepository genresRepository,
     INovelsRepository novelsRepository, 
     IMapper mapper,
     INovelRecommendationService recommendationService) : IRequestHandler<UpdateNovelCommand, OperationResult>
@@ -27,6 +28,23 @@ public class UpdateNovelCommandHandler(
         {
             throw new ForbidException("Forbidden");
         }
+
+        // Validate the genres before changing anything, so a bad genre list can't leave a half-applied update.
+        if (request.GenreIds != null)
+        {
+            var knownGenreIds = (await genresRepository.GetAllGenres()).Select(g => g.Id).ToHashSet();
+            if (request.GenreIds.Count == 0 || request.GenreIds.Count > 4
+                || request.GenreIds.Distinct().Count() != request.GenreIds.Count
+                || !request.GenreIds.All(knownGenreIds.Contains))
+            {
+                return new OperationResult
+                {
+                    Message = "A novel must have between 1 and 4 different, existing genres",
+                    Success = false
+                };
+            }
+        }
+
         if (request.Title != null)
         {
             // The edit form resends the unchanged title on every save; only a real rename may move the novel's URL.
@@ -48,16 +66,6 @@ public class UpdateNovelCommandHandler(
         }
         if (request.GenreIds != null)
         {
-            //Validation
-
-            if (request.GenreIds.Count == 0 || request.GenreIds.Count > 4)
-            {
-                return new OperationResult
-                {
-                    Message = "A novel must have between 1 and 4 genres",
-                    Success = false
-                };
-            }
             bool genresUpdateResult = await novelGenresRepository.UpdateNovelGenres(request.NovelId, request.GenreIds);
             if (!genresUpdateResult)
             {

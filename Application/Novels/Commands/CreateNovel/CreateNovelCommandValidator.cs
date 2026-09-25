@@ -30,7 +30,9 @@ namespace Application.Novels.Commands.CreateNovel
             .NotEmpty()
             .WithMessage("At least one genre is required")
             .Must(genres => genres.Count >= 1 && genres.Count <= 4)
-            .WithMessage("A novel must have between 1 and 4 genres");
+            .WithMessage("A novel must have between 1 and 4 genres")
+            .Must(genres => genres.Distinct().Count() == genres.Count)
+            .WithMessage("A genre can only be selected once");
 
         }
     }
