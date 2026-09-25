@@ -45,13 +45,14 @@ public class RejectWithdrawalCommandHandler(
             };
         }
 
-        // Update request status
-        withdrawalRequest.Status = RequestStatus.Rejected;
-        withdrawalRequest.ProcessedAt = DateTime.UtcNow;
-        withdrawalRequest.ProcessedBy = currentUser.Id;
-        withdrawalRequest.RejectionReason = request.RejectionReason;
-
-        await withdrawalRepository.UpdateAsync(withdrawalRequest);
+        if (!await withdrawalRepository.TryMarkProcessedAsync(withdrawalRequest.Id, RequestStatus.Rejected, currentUser.Id, request.RejectionReason))
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Message = "Request was already processed"
+            };
+        }
 
         logger.LogInformation(
             "Admin {AdminId} rejected withdrawal {RequestId} for user {UserId}. Reason: {Reason}",

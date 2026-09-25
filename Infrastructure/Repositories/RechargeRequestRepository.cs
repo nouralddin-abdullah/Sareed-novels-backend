@@ -65,4 +65,16 @@ public class RechargeRequestRepository(ApplicationDbContext dbContext) : IRechar
         dbContext.RechargeRequests.Update(request);
         return await dbContext.SaveChangesAsync() > 0;
     }
+
+    public async Task<bool> TryMarkProcessedAsync(Guid id, string newStatus, string processedBy, string? rejectionReason = null)
+    {
+        var updated = await dbContext.RechargeRequests
+            .Where(r => r.Id == id && r.Status == Domain.Constants.RequestStatus.Pending)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.Status, newStatus)
+                .SetProperty(r => r.ProcessedAt, DateTime.UtcNow)
+                .SetProperty(r => r.ProcessedBy, processedBy)
+                .SetProperty(r => r.RejectionReason, rejectionReason));
+        return updated == 1;
+    }
 }

@@ -27,6 +27,9 @@ public class DeleteChapterCommandHandler(
         var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new  NotFoundException("Chapter wasn't found");
         
         if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel");
+
+        // The chapter must belong to the novel the caller owns; otherwise any author could delete any chapter.
+        if (chapter.NovelId != novel.Id) throw new NotFoundException("Chapter wasn't found");
         
         var wasPublished = chapter.Status == "Published";
         var publishedSequence = chapter.PublishedChapterSequence;
@@ -34,8 +37,7 @@ public class DeleteChapterCommandHandler(
         var deleteResult = await chaptersRepository.DeleteChapter(chapter);
         if (deleteResult)
         {
-            novel.ChapterCount--;
-            await novelsRepository.UpdateOne(novel);
+            await novelsRepository.RefreshChapterCountAsync(novel.Id);
             
             // If deleted chapter was Published, recalculate sequences
             if (wasPublished)

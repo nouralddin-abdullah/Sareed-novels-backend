@@ -45,6 +45,11 @@ public static class ServiceCollectionExtensions
             options.Password.RequireNonAlphanumeric = false;    // Don't require special characters
             options.Password.RequiredLength = 6;                // Minimum 6 characters
             options.Password.RequiredUniqueChars = 0;           // At least 0 unique character
+
+            // Sign-in lockout (UserLoginCommandHandler): 5 wrong passwords lock the account for 5 minutes.
+            options.Lockout.AllowedForNewUsers = true;
+            options.Lockout.MaxFailedAccessAttempts = 5;
+            options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
         })
         .AddEntityFrameworkStores<ApplicationDbContext>()
         .AddClaimsPrincipalFactory<SardUserClaimsPrincipalFactory>()
@@ -112,6 +117,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.AddHostedService<RankingRecalculationService>();
         services.AddHostedService<DailyPrivilegeUnlockService>();
+        services.AddHostedService<GiftLeaderboardRecalculationService>();
 
         // Configure memory cache for recommendations
         services.AddMemoryCache(options =>
@@ -127,12 +133,12 @@ public static class ServiceCollectionExtensions
         {
             var settings = configuration.GetSection(CloudflareR2Settings.SectionName).Get<CloudflareR2Settings>();
 
-            var config = new AmazonS3Config
-            {
-                ServiceURL = $"https://1700ebc57525e0a0f6a5ff6f27d93218.r2.cloudflarestorage.com"
-            };
+            // ServiceUrl is only set to point at an S3-compatible stand-in (local runs, tests); production uses R2.
+            var config = string.IsNullOrWhiteSpace(settings!.ServiceUrl)
+                ? new AmazonS3Config { ServiceURL = "https://1700ebc57525e0a0f6a5ff6f27d93218.r2.cloudflarestorage.com" }
+                : new AmazonS3Config { ServiceURL = settings.ServiceUrl, ForcePathStyle = true };
 
-            var credentials = new BasicAWSCredentials(settings!.AccessKey, settings.SecretKey);
+            var credentials = new BasicAWSCredentials(settings.AccessKey, settings.SecretKey);
             return new AmazonS3Client(credentials, config);
         });
 

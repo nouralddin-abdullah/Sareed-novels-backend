@@ -34,9 +34,6 @@ namespace Application.Users.Commands.GoogleCallback
                     ["redirect_uri"] = redirectUri!
                 };
 
-                logger.LogInformation("Token request parameters: {parameters}",
-                    string.Join(", ", tokenRequest.Select(kvp => $"{kvp.Key}={kvp.Value.Substring(0, Math.Min(kvp.Value.Length, 20))}...")));
-
                 var tokenResponse = await httpClient.PostAsync("https://oauth2.googleapis.com/token",
                     new FormUrlEncodedContent(tokenRequest), cancellationToken);
 
@@ -64,7 +61,7 @@ namespace Application.Users.Commands.GoogleCallback
             }
             catch (Exception ex) when (ex is not ForbidException)
             {
-                logger.LogError(ex, "Google callback failed for code: {code}", request.Code);
+                logger.LogError(ex, "Google callback failed");
                 throw new InvalidOperationException("Google authentication failed");
             }
         }

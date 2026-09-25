@@ -30,8 +30,8 @@ public class LikePostCommandHandler(
             };
         }
 
-        var existingLike = await postLikesRepository.GetUserLikeForPost(currentUser.Id, request.PostId);
-        if (existingLike != null)
+        // Inserts the like and bumps LikesCount in one transaction; a concurrent duplicate is a no-op here.
+        if (!await postLikesRepository.LikePost(currentUser.Id, request.PostId))
         {
             return new OperationResult
             {
@@ -40,20 +40,8 @@ public class LikePostCommandHandler(
             };
         }
 
-        var postLike = new PostLike
-        {
-            UserId = currentUser.Id,
-            PostId = request.PostId,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await postLikesRepository.LikePost(postLike);
-        
-        post.IncrementLikeCount();
-        await postsRepository.UpdatePost(post);
-        
         // Fire-and-forget: Send notification
-        _ = SendLikeOnPostNotificationInBackground(post.UserId, currentUser.Id);
+        _ = SendLikeOnPostNotificationInBackground(post.UserId, currentUser.Id, request.PostId);
         
         logger.LogInformation("User {UserId} liked post {PostId}", currentUser.Id, request.PostId);
 
@@ -64,7 +52,7 @@ public class LikePostCommandHandler(
         };
     }
     
-    private async Task SendLikeOnPostNotificationInBackground(string postAuthorId, string likerUserId)
+    private async Task SendLikeOnPostNotificationInBackground(string postAuthorId, string likerUserId, Guid postId)
     {
         try
         {
@@ -77,7 +65,7 @@ public class LikePostCommandHandler(
             
             if (liker != null && postAuthor != null)
             {
-                await backgroundNotificationService.SendLikeOnPostNotification(postAuthorId, liker, postAuthor.UserName!);
+                await backgroundNotificationService.SendLikeOnPostNotification(postAuthorId, liker, postId, postAuthor.UserName!);
                 logger.LogDebug("Sent LikeOnPost notification to user {UserId}", postAuthorId);
             }
         }

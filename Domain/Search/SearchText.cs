@@ -61,13 +61,24 @@ public static class SearchText
         return builder.ToString();
     }
 
-    /// <summary>Distinct normalized words of a user query (at most 6), in the order typed.</summary>
+    /// <summary>
+    /// Distinct normalized words of a user query (at most 6), in the order typed. Words without a letter or digit
+    /// (emoji) are dropped: SQL Server's collation gives them no weight, so they would match every row.
+    /// </summary>
     public static IReadOnlyList<string> Tokens(string? query) =>
         Normalize(query)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(token => token.Any(char.IsLetterOrDigit))
             .Distinct()
             .Take(MaxQueryTokens)
             .ToList();
+
+    /// <summary>
+    /// True when the user typed something but none of it is searchable (only punctuation, symbols or emoji).
+    /// Such a query must find nothing rather than fall back to listing everything.
+    /// </summary>
+    public static bool HasNothingSearchable(string? query, IReadOnlyList<string> tokens) =>
+        tokens.Count == 0 && !string.IsNullOrWhiteSpace(query);
 
     /// <summary>What we store for a user: display name plus user name, so either finds them.</summary>
     public static string ForUser(string? displayName, string? userName) =>

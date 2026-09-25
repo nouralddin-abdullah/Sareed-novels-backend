@@ -12,8 +12,15 @@ public class ForgotPasswordCommandHandler(ILogger<ForgotPasswordCommandHandler> 
 {
     public async Task<OperationResult> Handle(ForgotPasswordCommand request, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Generating reset token for email {email}", request.Email);
-        var user = await userManager.FindByEmailAsync(request.Email) ?? throw new NotFoundException("No user with this email was found");
+        logger.LogInformation("Password reset requested");
+        var user = await userManager.FindByEmailAsync(request.Email);
+        if (user == null)
+        {
+            // Same answer as for a registered email, so the endpoint can't be used to find out who has an account.
+            logger.LogInformation("Password reset requested for an email with no account");
+            return Sent;
+        }
+
         var token = await userManager.GeneratePasswordResetTokenAsync(user);
         var resetPasswordLink = $"https://www.sardnovels.com/change-password?UserId={user.Id}&token={Uri.EscapeDataString(token)}";
 
@@ -25,10 +32,13 @@ public class ForgotPasswordCommandHandler(ILogger<ForgotPasswordCommandHandler> 
             templateId,
             templateData
         );
-        return new OperationResult
-        {
-            Success = true,
-            Message = "Reset password token was sent please check your mail!"
-        };
+        logger.LogInformation("Password reset email sent to user {UserId}", user.Id);
+        return Sent;
     }
+
+    private static OperationResult Sent => new()
+    {
+        Success = true,
+        Message = "If an account uses this email, a password reset link has been sent to it."
+    };
 }

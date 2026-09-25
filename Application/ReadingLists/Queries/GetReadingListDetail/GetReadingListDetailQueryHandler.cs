@@ -33,7 +33,7 @@ public class GetReadingListDetailQueryHandler(
             Description = readingList.Description,
             CoverImageUrl = readingList.CoverImageUrl,
             IsPublic = readingList.IsPublic,
-            NovelsCount = readingList.NovelsCount,
+            // Set below from the novels readers can see (drafts and deleted novels are left out).
             FollowersCount = readingList.FollowersCount,
             CreatedAt = readingList.CreatedAt,
             UpdatedAt = readingList.UpdatedAt,
@@ -63,6 +63,8 @@ public class GetReadingListDetailQueryHandler(
             IsOwner = currentUser != null && readingList.UserId == currentUser.Id,
             IsFollowing = currentUser != null && await followersRepository.IsFollowingAsync(request.ReadingListId, currentUser.Id)
         };
+
+        dto.NovelsCount = dto.Novels.Count;
 
         logger.LogInformation("Returned reading list {ListId} with {NovelCount} novels", readingList.Id, dto.Novels.Count);
 

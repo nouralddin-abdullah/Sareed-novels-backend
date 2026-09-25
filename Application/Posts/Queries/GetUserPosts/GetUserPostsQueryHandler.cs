@@ -17,7 +17,8 @@ public class GetUserPostsQueryHandler(
 {
     public async Task<PagedResult<PostDTO>> Handle(GetUserPostsQuery request, CancellationToken cancellationToken)
     {
-        var (posts, totalCount) = await postsRepository.GetUserPosts(request.UserId, request.PageNumber, request.PageSize);
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
+        var (posts, totalCount) = await postsRepository.GetUserPosts(request.UserId, pageNumber, pageSize);
         
         var postDtos = mapper.Map<IEnumerable<PostDTO>>(posts).ToList();
         
@@ -35,6 +36,6 @@ public class GetUserPostsQueryHandler(
         
         logger.LogInformation("Retrieved {Count} posts for user {UserId}", postDtos.Count, request.UserId);
         
-        return new PagedResult<PostDTO>(postDtos, totalCount, request.PageSize, request.PageNumber);
+        return new PagedResult<PostDTO>(postDtos, totalCount, pageSize, pageNumber);
     }
 }

@@ -5,7 +5,6 @@ using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -18,7 +17,8 @@ public class SendGiftCommandHandler(
     INovelsRepository novelsRepository,
     IUserContext userContext,
     IWalletService walletService,
-    IServiceProvider serviceProvider) : IRequestHandler<SendGiftCommand, OperationResult>
+    ITransactionManager transactionManager,
+    IServiceScopeFactory scopeFactory) : IRequestHandler<SendGiftCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(SendGiftCommand request, CancellationToken cancellationToken)
     {
@@ -76,69 +76,48 @@ public class SendGiftCommandHandler(
             };
         }
 
-        // ✅ START TRANSACTION: Ensures all-or-nothing for payment + gift record
-        using var scope = serviceProvider.CreateScope();
-        var transactionManager = scope.ServiceProvider.GetRequiredService<ITransactionManager>();
-        
-        await using var transaction = await transactionManager.BeginTransactionAsync(cancellationToken);
-
+        GiftTransaction giftTransaction;
         try
         {
-            // Step 1: Transfer points atomically (sender -> author)
-            await walletService.TransferPointsAsync(
-                fromUserId: currentUser.Id,
-                toUserId: novel.AuthorId,
-                amount: totalCost,
-                fromTransactionType: TransactionType.GiftSent,
-                toTransactionType: TransactionType.GiftReceived,
-                fromDescription: $"Sent {request.Count}x {gift.Name} to {novel.Title}",
-                toDescription: $"Received {request.Count}x {gift.Name} from {currentUser.UserName} on {novel.Title}"
-            );
-
-            // Step 2: Create gift transaction record
-            var giftTransaction = new GiftTransaction
+            // Payment and gift record commit together on this request's DbContext. (The transaction used to be opened
+            // on a DbContext from a new scope, so it covered none of these writes.)
+            giftTransaction = await transactionManager.InTransactionAsync(async () =>
             {
-                Id = Guid.NewGuid(),
-                GiftId = request.GiftId,
-                NovelId = request.NovelId,
-                SenderId = currentUser.Id,
-                Count = request.Count,
-                TotalCost = totalCost,
-                CreatedAt = DateTime.UtcNow
-            };
+                await walletService.TransferPointsAsync(
+                    fromUserId: currentUser.Id,
+                    toUserId: novel.AuthorId,
+                    amount: totalCost,
+                    fromTransactionType: TransactionType.GiftSent,
+                    toTransactionType: TransactionType.GiftReceived,
+                    fromDescription: $"Sent {request.Count}x {gift.Name} to {novel.Title}",
+                    toDescription: $"Received {request.Count}x {gift.Name} from {currentUser.UserName} on {novel.Title}"
+                );
 
-            await giftTransactionRepository.CreateTransaction(giftTransaction);
-
-            // ✅ COMMIT TRANSACTION: Make all changes permanent
-            await transaction.CommitAsync(cancellationToken);
-
-            logger.LogInformation(
-                "Gift sent successfully: TransactionId={TransactionId}, From={SenderId}, To={AuthorId}, Amount={Amount}",
-                giftTransaction.Id, currentUser.Id, novel.AuthorId, totalCost);
-
-            // Step 3: Send notification AFTER transaction commits (best effort)
-            _ = Task.Run(async () =>
-            {
-                try
+                var record = new GiftTransaction
                 {
-                    await SendGiftNotificationInBackground(novel.AuthorId, currentUser.Id, novel, gift, request.Count);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to send gift notification (non-critical)");
-                }
+                    Id = Guid.NewGuid(),
+                    GiftId = request.GiftId,
+                    NovelId = request.NovelId,
+                    SenderId = currentUser.Id,
+                    Count = request.Count,
+                    TotalCost = totalCost,
+                    CreatedAt = DateTime.UtcNow
+                };
+                await giftTransactionRepository.CreateTransaction(record);
+                return record;
             }, cancellationToken);
-
+        }
+        catch (InsufficientBalanceException)
+        {
+            // Another request spent the balance between the pre-check and the debit.
             return new OperationResult
             {
-                Success = true,
-                Message = $"Successfully sent {request.Count}x {gift.Name} to {novel.Title}!"
+                Success = false,
+                Message = "Insufficient points balance"
             };
         }
         catch (Exception ex)
         {
-            // ❌ ROLLBACK: Undo everything if any step fails
-            await transaction.RollbackAsync(cancellationToken);
             logger.LogError(ex, "Failed to send gift: {Message}", ex.Message);
 
             return new OperationResult
@@ -147,6 +126,30 @@ public class SendGiftCommandHandler(
                 Message = "Failed to send gift. No points were deducted. Please try again."
             };
         }
+
+        logger.LogInformation(
+            "Gift sent successfully: TransactionId={TransactionId}, From={SenderId}, To={AuthorId}, Amount={Amount}",
+            giftTransaction.Id, currentUser.Id, novel.AuthorId, totalCost);
+
+        // Notify AFTER the commit (best effort). The task outlives the request, so it gets its own scope from the
+        // root scope factory rather than from the request's (soon disposed) provider.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await SendGiftNotificationInBackground(novel.AuthorId, currentUser.Id, novel, gift, request.Count);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send gift notification (non-critical)");
+            }
+        }, CancellationToken.None);
+
+        return new OperationResult
+        {
+            Success = true,
+            Message = $"Successfully sent {request.Count}x {gift.Name} to {novel.Title}!"
+        };
     }
 
     private async Task SendGiftNotificationInBackground(
@@ -158,7 +161,7 @@ public class SendGiftCommandHandler(
     {
         try
         {
-            using var scope = serviceProvider.CreateScope();
+            using var scope = scopeFactory.CreateScope();
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
             var usersRepository = scope.ServiceProvider.GetRequiredService<IUsersRepository>();
 

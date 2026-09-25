@@ -5,6 +5,7 @@ using AutoMapper;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
+using Domain.Seo;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -26,13 +27,16 @@ public class UpdateChapterCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateChapterCommand request, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Updating chapter {@chapter}", request);
+        logger.LogInformation("Updating chapter {ChapterId} of novel {NovelId}", request.ChapterId, request.NovelId);
         
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
         var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found");
         var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("Chapter wasn't found");
         
         if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel");
+
+        // The chapter must belong to the novel the caller owns; otherwise any author could edit any chapter.
+        if (chapter.NovelId != novel.Id) throw new NotFoundException("Chapter wasn't found");
         
         // Track if status is changing to/from Published
         var oldStatus = chapter.Status;
@@ -42,7 +46,12 @@ public class UpdateChapterCommandHandler(
         
         if (request.Title != null)
         {
-            chapter.Slug = $"{chapter.Id.ToString()[..5]}-{request.Title.Replace(" ", "-").ToLower()}";
+            // The editor resends the unchanged title on every save; only a real rename may change the slug.
+            var newSlug = Slugs.For(chapter.Id, request.Title);
+            if (newSlug != Slugs.For(chapter.Id, chapter.Title))
+            {
+                chapter.Slug = newSlug;
+            }
         }
         
         // Update basic fields

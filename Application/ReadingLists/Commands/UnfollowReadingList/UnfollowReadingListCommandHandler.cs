@@ -3,7 +3,6 @@ using Application.Users.Commands.FollowUser;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Application.ReadingLists.Commands.UnfollowReadingList;
@@ -12,8 +11,7 @@ public class UnfollowReadingListCommandHandler(
     ILogger<UnfollowReadingListCommandHandler> logger,
     IReadingListsRepository readingListsRepository,
     IReadingListFollowersRepository followersRepository,
-    IUserContext userContext,
-    IServiceProvider serviceProvider) : IRequestHandler<UnfollowReadingListCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<UnfollowReadingListCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UnfollowReadingListCommand request, CancellationToken cancellationToken)
     {
@@ -47,8 +45,7 @@ public class UnfollowReadingListCommandHandler(
 
         if (result)
         {
-            // Fire-and-forget count update
-            _ = UpdateFollowersCountInBackground(request.ReadingListId);
+            await readingListsRepository.AdjustFollowersCountAsync(request.ReadingListId, -1);
 
             logger.LogInformation("User {UserId} successfully unfollowed reading list {ListId}", currentUser.Id, request.ReadingListId);
 
@@ -64,27 +61,5 @@ public class UnfollowReadingListCommandHandler(
             Success = false,
             Message = "Failed to unfollow reading list"
         };
-    }
-
-    private async Task UpdateFollowersCountInBackground(Guid readingListId)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundRepository = scope.ServiceProvider.GetRequiredService<IReadingListsRepository>();
-
-            var list = await backgroundRepository.GetByIdAsync(readingListId);
-            if (list != null)
-            {
-                list.DecrementFollowersCount();
-                await backgroundRepository.UpdateAsync(list);
-            }
-
-            logger.LogDebug("Updated followers count for reading list {ListId}", readingListId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to update followers count for reading list {ListId}", readingListId);
-        }
     }
 }

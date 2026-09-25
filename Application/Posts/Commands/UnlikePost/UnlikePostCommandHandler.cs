@@ -27,8 +27,7 @@ public class UnlikePostCommandHandler(
             };
         }
 
-        var existingLike = await postLikesRepository.GetUserLikeForPost(currentUser.Id, request.PostId);
-        if (existingLike == null)
+        if (!await postLikesRepository.UnLikePost(currentUser.Id, request.PostId))
         {
             return new OperationResult
             {
@@ -37,11 +36,6 @@ public class UnlikePostCommandHandler(
             };
         }
 
-        await postLikesRepository.UnLikePost(currentUser.Id, request.PostId);
-        
-        post.DecrementLikeCount();
-        await postsRepository.UpdatePost(post);
-        
         logger.LogInformation("User {UserId} unliked post {PostId}", currentUser.Id, request.PostId);
 
         return new OperationResult

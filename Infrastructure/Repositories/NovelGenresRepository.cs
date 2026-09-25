@@ -1,4 +1,5 @@
-﻿using Domain.Entities;
+﻿using Domain.Constants;
+using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -44,49 +45,46 @@ public class NovelGenresRepository(ApplicationDbContext dbContext) : INovelGenre
     }
 
     public async Task<(IEnumerable<Novel>, int)> GetNovelsByGenre(
-    string genreSlug,
-    int pageSize,
-    int pageNumber,
-    string? sorting = null,
-    bool? isCompleted = null) // Add completion filter
+        int genreId,
+        int pageSize,
+        int pageNumber,
+        string? sorting,
+        bool? isCompleted)
     {
-        var query = dbContext.NovelGenres
-            .Where(ng => ng.Genre.Slug == genreSlug && ng.Novel.IsEligibleForRanking)
-            .Include(ng => ng.Novel)
-                .ThenInclude(n => n.Owner) // Include author info
-            .Select(ng => ng.Novel)
-            .Distinct();
+        // Novels without a published chapter yet are listed (the owner's call); drafts are not.
+        var query = dbContext.Novels
+            .AsNoTracking()
+            .Where(n => n.NovelGenres.Any(ng => ng.GenreId == genreId)
+                        && n.IsEligibleForRanking
+                        && !n.IsDraft);
 
-        // Apply completion filter if specified
         if (isCompleted.HasValue)
         {
-            if (isCompleted.Value)
-            {
-                query = query.Where(n => n.Status == "Completed");
-            }
-            else
-            {
-                query = query.Where(n => n.Status != "Completed");
-            }
+            var completed = NovelStatus.Completed.ToString();
+            query = isCompleted.Value
+                ? query.Where(n => n.Status == completed)
+                : query.Where(n => n.Status != completed);
         }
 
         var totalCount = await query.CountAsync();
 
-        if (pageNumber > 0 && pageSize > 0)
+        // Every order ends on Id so pages never repeat or skip novels that tie (most have 0 reviews / equal scores).
+        var ordered = sorting switch
         {
-            query = sorting switch
-            {
-                "newest" => query.OrderByDescending(n => n.CreatedAt),
-                "rating" => query.OrderByDescending(n => n.TotalAverageScore),
-                "popular" => query.OrderByDescending(n => n.TotalViews),
-                "most_reviewed" => query.OrderByDescending(n => n.ReviewCount),
-                _ => query.OrderByDescending(n => n.TotalViews)
-            };
+            "newest" => query.OrderByDescending(n => n.CreatedAt),
+            "rating" => query.OrderByDescending(n => n.TotalAverageScore).ThenByDescending(n => n.ReviewCount),
+            "most_reviewed" => query.OrderByDescending(n => n.ReviewCount).ThenByDescending(n => n.TotalAverageScore),
+            _ => query.OrderByDescending(n => n.TotalViews) // "popular" = most viewed
+        };
 
-            query = query.Skip(pageSize * (pageNumber - 1)).Take(pageSize);
-        }
+        var novels = await ordered
+            .ThenBy(n => n.Id)
+            .Skip(pageSize * (pageNumber - 1))
+            .Take(pageSize)
+            .Include(n => n.NovelGenres)
+                .ThenInclude(ng => ng.Genre)
+            .ToListAsync();
 
-        var novels = await query.ToListAsync();
         return (novels, totalCount);
     }
 

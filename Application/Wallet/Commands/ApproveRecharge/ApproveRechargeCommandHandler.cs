@@ -13,14 +13,12 @@ public class ApproveRechargeCommandHandler(
     ILogger<ApproveRechargeCommandHandler> logger,
     IUserContext userContext,
     IRechargeRequestRepository rechargeRepository,
-    IWalletService walletService) : IRequestHandler<ApproveRechargeCommand, OperationResult>
+    IWalletService walletService,
+    ITransactionManager transactionManager) : IRequestHandler<ApproveRechargeCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(ApproveRechargeCommand request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-
-        // TODO: Add role check for Admin
-        // For now, assuming authentication is handled by [Authorize(Roles = "Admin")] on controller
 
         var rechargeRequest = await rechargeRepository.GetByIdAsync(request.RequestId);
         if (rechargeRequest == null)
@@ -41,21 +39,33 @@ public class ApproveRechargeCommandHandler(
             };
         }
 
-        // Update request status
-        rechargeRequest.Status = RequestStatus.Approved;
-        rechargeRequest.ProcessedAt = DateTime.UtcNow;
-        rechargeRequest.ProcessedBy = currentUser.Id;
+        // The status change and the credit commit together, and the status only changes if the request is still
+        // Pending, so a second approval (double click, two admins) can't credit the points twice.
+        var approved = await transactionManager.InTransactionAsync(async () =>
+        {
+            if (!await rechargeRepository.TryMarkProcessedAsync(rechargeRequest.Id, RequestStatus.Approved, currentUser.Id))
+            {
+                return false;
+            }
 
-        await rechargeRepository.UpdateAsync(rechargeRequest);
+            await walletService.AddPointsAsync(
+                rechargeRequest.UserId,
+                rechargeRequest.PointsRequested,
+                TransactionType.RechargeApproved,
+                $"Recharge approved: {rechargeRequest.PointsRequested} points ({rechargeRequest.TotalAmountEGP} EGP via {rechargeRequest.PaymentMethod})",
+                rechargeRequest.Id
+            );
+            return true;
+        }, cancellationToken);
 
-        // Add points to user wallet
-        await walletService.AddPointsAsync(
-            rechargeRequest.UserId,
-            rechargeRequest.PointsRequested,
-            TransactionType.RechargeApproved,
-            $"Recharge approved: {rechargeRequest.PointsRequested} points ({rechargeRequest.TotalAmountEGP} EGP via {rechargeRequest.PaymentMethod})",
-            rechargeRequest.Id
-        );
+        if (!approved)
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Message = "Request was already processed"
+            };
+        }
 
         logger.LogInformation(
             "Admin {AdminId} approved recharge {RequestId} for user {UserId}: {Points} points",

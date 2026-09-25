@@ -1,11 +1,8 @@
 using Application.Users;
 using Application.Users.Commands.FollowUser;
-using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Library.Commands.TrackProgress;
@@ -14,8 +11,8 @@ public class TrackReadingProgressCommandHandler(
     ILogger<TrackReadingProgressCommandHandler> logger,
     ILibraryRepository libraryRepository,
     IChaptersRepository chaptersRepository,
-    IUserContext userContext,
-    IServiceProvider serviceProvider) : IRequestHandler<TrackReadingProgressCommand, OperationResult>
+    INovelsRepository novelsRepository,
+    IUserContext userContext) : IRequestHandler<TrackReadingProgressCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(TrackReadingProgressCommand request, CancellationToken cancellationToken)
     {
@@ -30,6 +27,18 @@ public class TrackReadingProgressCommandHandler(
             {
                 Success = false,
                 Message = "Cannot track progress for unpublished chapters"
+            };
+        }
+
+        // Readers can't open chapters of draft or deleted novels (GetOne applies the soft-delete filter), and the
+        // library doesn't list them, so don't record progress in them either.
+        var novel = await novelsRepository.GetOne(chapter.NovelId);
+        if (novel == null || !novel.IsPubliclyVisible)
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Message = "Cannot track progress for unpublished novels"
             };
         }
 
@@ -60,62 +69,20 @@ public class TrackReadingProgressCommandHandler(
         logger.LogInformation("User {UserId} tracking progress for novel {NovelId}, chapter {ChapterIndex} (cached sequence: {SequenceNumber})",
             currentUser.Id, chapter.NovelId, chapter.ChapterIndex, publishedSequenceNumber);
 
-        var existingProgress = await libraryRepository.GetProgressAsync(currentUser.Id, chapter.NovelId);
+        // "Stopped at" is the chapter the reader opened most recently, so re-reading an earlier chapter moves it back.
+        var addedToLibrary = await libraryRepository.SaveProgressAsync(
+            currentUser.Id, chapter.NovelId, chapter.Id, publishedSequenceNumber.Value, DateTime.UtcNow);
 
-        if (existingProgress == null)
-        {
-            var newProgress = new UserNovelProgress
-            {
-                UserId = currentUser.Id,
-                NovelId = chapter.NovelId,
-                LastReadChapterId = chapter.Id,
-                LastReadChapterNumber = publishedSequenceNumber.Value,
-                LastReadAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await libraryRepository.TrackProgressAsync(newProgress);
-            
-            // Fire-and-forget: Increment user's library novels count
-            _ = IncrementUserLibraryNovelsCountInBackground(currentUser.Id);
-            
-            logger.LogInformation("Created new reading progress for user {UserId}, novel {NovelId}", currentUser.Id, chapter.NovelId);
-        }
-        else
-        {
-            existingProgress.LastReadChapterId = chapter.Id;
-            existingProgress.LastReadChapterNumber = publishedSequenceNumber.Value;
-            existingProgress.LastReadAt = DateTime.UtcNow;
-
-            await libraryRepository.UpdateProgressAsync(existingProgress);
-            logger.LogInformation("Updated reading progress for user {UserId}, novel {NovelId}", currentUser.Id, chapter.NovelId);
-        }
+        logger.LogInformation(
+            addedToLibrary
+                ? "Created new reading progress for user {UserId}, novel {NovelId}"
+                : "Updated reading progress for user {UserId}, novel {NovelId}",
+            currentUser.Id, chapter.NovelId);
 
         return new OperationResult
         {
             Success = true,
             Message = "Reading progress tracked successfully"
         };
-    }
-    
-    private async Task IncrementUserLibraryNovelsCountInBackground(string userId)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundUserManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
-            
-            var user = await backgroundUserManager.FindByIdAsync(userId);
-            if (user != null)
-            {
-                user.IncrementLibraryNovelsCount();
-                await backgroundUserManager.UpdateAsync(user);
-            }
-            logger.LogDebug("Successfully incremented library novels count for user {UserId}", userId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to increment library novels count for user {UserId}", userId);
-        }
     }
 }

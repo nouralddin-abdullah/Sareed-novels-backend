@@ -4,7 +4,6 @@ using Application.Users.Commands.FollowUser;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Application.ReadingLists.Commands.RemoveNovelFromList;
@@ -13,8 +12,7 @@ public class RemoveNovelFromListCommandHandler(
     ILogger<RemoveNovelFromListCommandHandler> logger,
     IReadingListsRepository readingListsRepository,
     IReadingListNovelsRepository readingListNovelsRepository,
-    IUserContext userContext,
-    IServiceProvider serviceProvider) : IRequestHandler<RemoveNovelFromListCommand, OperationResult>
+    IUserContext userContext) : IRequestHandler<RemoveNovelFromListCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(RemoveNovelFromListCommand request, CancellationToken cancellationToken)
     {
@@ -39,8 +37,7 @@ public class RemoveNovelFromListCommandHandler(
         var result = await readingListNovelsRepository.RemoveNovelAsync(request.ReadingListId, request.NovelId);
         if (result)
         {
-            // Fire-and-forget count update
-            _ = UpdateNovelsCountInBackground(request.ReadingListId);
+            await readingListsRepository.AdjustNovelsCountAsync(request.ReadingListId, -1);
 
             logger.LogInformation("Novel {NovelId} removed from reading list {ListId}", request.NovelId, request.ReadingListId);
 
@@ -56,28 +53,5 @@ public class RemoveNovelFromListCommandHandler(
             Success = false,
             Message = "Failed to remove novel from reading list"
         };
-    }
-
-
-    private async Task UpdateNovelsCountInBackground(Guid readingListId)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundRepository = scope.ServiceProvider.GetRequiredService<IReadingListsRepository>();
-
-            var list = await backgroundRepository.GetByIdAsync(readingListId);
-            if (list != null)
-            {
-                list.DecrementNovelsCount();
-                await backgroundRepository.UpdateAsync(list);
-            }
-
-            logger.LogDebug("Updated novels count for reading list {ListId}", readingListId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to update novels count for reading list {ListId}", readingListId);
-        }
     }
 }

@@ -2,6 +2,7 @@ using Application.Common;
 using Application.Library.DTOs;
 using Application.Users;
 using Domain.Exceptions;
+using Domain.Library;
 using Domain.Repositories;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -13,79 +14,50 @@ public class GetMyLibraryQueryHandler(
     ILibraryRepository libraryRepository,
     IUserContext userContext) : IRequestHandler<GetMyLibraryQuery, PagedResult<ReadingProgressDTO>>
 {
+    public const int MaxPageSize = 100;
+
     public async Task<PagedResult<ReadingProgressDTO>> Handle(GetMyLibraryQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-        logger.LogInformation("Getting library for user {UserId}, page {Page}", currentUser.Id, request.PageNumber);
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, MaxPageSize);
+        logger.LogInformation("Getting library for user {UserId}, page {Page}", currentUser.Id, pageNumber);
 
-        var (progressList, totalCount) = await libraryRepository.GetUserReadingProgressAsync(
-            currentUser.Id,
-            request.PageNumber,
-            request.PageSize
-        );
+        var (entries, totalCount) = await libraryRepository.GetUserLibraryAsync(currentUser.Id, pageNumber, pageSize);
 
-        var dtos = progressList.Select(progress =>
+        var dtos = entries.Select(entry =>
         {
-            var publishedChapters = progress.Novel.Chapters
-                .Where(c => c.Status == "Published")
-                .OrderBy(c => c.ChapterIndex)
-                .ToList();
-            
-            var publishedCount = publishedChapters.Count;
-            
-            // Use the cached PublishedChapterSequence from LastReadChapter
-            var currentSequence = progress.LastReadChapter.PublishedChapterSequence ?? 0;
-            
-            // Fallback: If chapter has no cached sequence (shouldn't happen), recalculate
-            if (currentSequence == 0)
+            var resume = ReadingPosition.Resolve(entry.LastReadChapter, entry.PublishedChapters);
+            if (resume.ChapterId != entry.LastReadChapter.Id)
             {
-                logger.LogWarning(
-                    "LastReadChapter {ChapterId} for user {UserId} has no PublishedChapterSequence, falling back to calculation", 
-                    progress.LastReadChapterId, currentUser.Id);
-                
-                currentSequence = publishedChapters.FindIndex(c => c.Id == progress.LastReadChapterId) + 1;
-                
-                // If chapter was deleted or unpublished
-                if (currentSequence == 0)
-                {
-                    logger.LogWarning(
-                        "User {UserId} has progress for deleted/unpublished chapter {ChapterId} in novel {NovelId}", 
-                        currentUser.Id, progress.LastReadChapterId, progress.NovelId);
-                    
-                    currentSequence = progress.LastReadChapterNumber;
-                }
+                logger.LogInformation(
+                    "Chapter {ChapterId} that user {UserId} last read in novel {NovelId} is no longer published; resuming at {ResumeChapterId}",
+                    entry.LastReadChapter.Id, currentUser.Id, entry.NovelId, resume.ChapterId);
             }
-            
+
             return new ReadingProgressDTO
             {
-                NovelId = progress.NovelId,
-                Title = progress.Novel.Title,
-                Slug = progress.Novel.Slug,
-                CoverImageUrl = progress.Novel.CoverImageUrl,
-                TotalChapters = publishedCount,
-                TotalAverageScore = progress.Novel.TotalAverageScore,
-                TotalViews = progress.Novel.TotalViews,
-                LastReadChapterId = progress.LastReadChapterId,
-                LastReadChapterNumber = currentSequence,
-                LastReadChapterTitle = progress.LastReadChapter.Title,
-                ProgressPercentage = publishedCount > 0
-                    ? Math.Round((decimal)currentSequence / publishedCount * 100, 1)
-                    : 0,
-                LastReadAt = progress.LastReadAt,
+                NovelId = entry.NovelId,
+                Title = entry.Title,
+                Slug = entry.Slug,
+                CoverImageUrl = entry.CoverImageUrl,
+                TotalChapters = resume.PublishedChapters,
+                TotalAverageScore = entry.TotalAverageScore,
+                TotalViews = entry.TotalViews,
+                LastReadChapterId = resume.ChapterId,
+                LastReadChapterNumber = resume.ChapterNumber,
+                LastReadChapterTitle = resume.ChapterTitle,
+                ProgressPercentage = resume.ProgressPercentage,
+                LastReadAt = entry.LastReadAt,
                 Author = new NovelAuthorDTO
                 {
-                    UserName = progress.Novel.Owner.UserName!,
-                    DisplayName = progress.Novel.Owner.DisplayName,
-                    ProfilePhoto = progress.Novel.Owner.ProfilePhoto
+                    UserName = entry.AuthorUserName,
+                    DisplayName = entry.AuthorDisplayName,
+                    ProfilePhoto = entry.AuthorProfilePhoto
                 }
             };
         }).ToList();
 
-        return new PagedResult<ReadingProgressDTO>(
-            dtos,
-            totalCount,
-            request.PageSize,
-            request.PageNumber
-        );
+        return new PagedResult<ReadingProgressDTO>(dtos, totalCount, pageSize, pageNumber);
     }
 }

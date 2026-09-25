@@ -78,4 +78,12 @@ public class CompetitionRepository(ApplicationDbContext dbContext) : ICompetitio
     {
         return await dbContext.Competitions.AnyAsync(c => c.Slug == slug);
     }
+
+    public async Task<bool> LockForUpdateAsync(Guid id)
+    {
+        var updated = await dbContext.Competitions
+            .Where(c => c.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.UpdatedAt, DateTime.UtcNow));
+        return updated == 1;
+    }
 }

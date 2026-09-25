@@ -9,10 +9,13 @@ namespace Infrastructure.Services.Search;
 
 /// <summary>
 /// Novel wiki search straight from SQL. Query words must appear in NovelEntity.SearchText (name + descriptions);
-/// name matches rank first.
+/// name matches rank first. The "_section_" rows that only hold an empty section's name and icon are not entities
+/// and are never returned (same rule as the wiki listing in NovelEntityRepository).
 /// </summary>
 public class EntitySearchService(ApplicationDbContext dbContext) : IEntitySearchService
 {
+    private const string SectionPlaceholderPrefix = "_section_";
+
     public async Task<PagedResult<EntityListDTO>> SearchEntitiesAsync(
         Guid novelId,
         string? query = null,
@@ -21,12 +24,18 @@ public class EntitySearchService(ApplicationDbContext dbContext) : IEntitySearch
         int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        pageNumber = Math.Max(1, pageNumber);
+        pageNumber = Math.Clamp(pageNumber, 1, NovelSearchService.MaxPageNumber);
         pageSize = Math.Clamp(pageSize, 1, NovelSearchService.MaxPageSize);
         var tokens = SearchText.Tokens(query);
+        if (SearchText.HasNothingSearchable(query, tokens))
+        {
+            return new PagedResult<EntityListDTO>([], 0, pageSize, pageNumber);
+        }
+
         var phrase = string.Join(' ', tokens);
 
-        var entities = dbContext.NovelEntities.AsNoTracking().Where(e => e.NovelId == novelId);
+        var entities = dbContext.NovelEntities.AsNoTracking()
+            .Where(e => e.NovelId == novelId && !e.Name.StartsWith(SectionPlaceholderPrefix));
 
         if (!string.IsNullOrWhiteSpace(section))
         {

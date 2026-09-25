@@ -2,7 +2,9 @@
 using Application.Users.Commands.FollowUser;
 using Domain.Constants;
 using Domain.Entities;
+using Domain.Exceptions;
 using Domain.Repositories;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Services;
@@ -14,9 +16,8 @@ public class PrivilegeService(
     INovelsRepository novelsRepository,
     IChaptersRepository chaptersRepository,
     IWalletService walletService,
-    INotificationService notificationService,
-    IUsersRepository usersRepository,
-    ITransactionManager transactionManager) : IPrivilegeService
+    ITransactionManager transactionManager,
+    IServiceScopeFactory scopeFactory) : IPrivilegeService
 {
     // ===== QUERY OPERATIONS =====
     
@@ -488,9 +489,13 @@ public class PrivilegeService(
             };
         }
         
-        // Check if chapter is actually locked
-        var lockedChapters = await GetLockedChaptersAsync(chapter.NovelId);
-        if (!lockedChapters.Any(c => c.Id == chapterId))
+        // Readers see a chapter as locked when its sequence is at or past PrivilegeStartSequence, so unlocking means
+        // moving the start past it. (This used to only decrement CurrentLockedCount, which readers never check, so
+        // the author got "Chapter unlocked!" while the chapter stayed locked.) Earlier locked chapters are unlocked
+        // with it: the model is a single locked range, it can't leave holes.
+        if (chapter.Status != "Published"
+            || !chapter.PublishedChapterSequence.HasValue
+            || !IsChapterLockedBySequence(chapter.PublishedChapterSequence.Value, privilege))
         {
             return new OperationResult
             {
@@ -498,28 +503,25 @@ public class PrivilegeService(
                 Message = "This chapter is not locked"
             };
         }
-        
-        // Decrease locked count by 1
-        if (privilege.CurrentLockedCount > 0)
-        {
-            privilege.CurrentLockedCount--;
-            await privilegeRepository.UpdateAsync(privilege);
-            
-            logger.LogInformation(
-                "Author {AuthorId} manually unlocked chapter {ChapterId} for novel {NovelId}. Locked count: {Count}",
-                authorId, chapterId, chapter.NovelId, privilege.CurrentLockedCount);
-            
-            return new OperationResult
-            {
-                Success = true,
-                Message = $"Chapter unlocked! {privilege.CurrentLockedCount} chapters remain locked"
-            };
-        }
-        
+
+        var sequence = chapter.PublishedChapterSequence.Value;
+        var oldStart = privilege.PrivilegeStartSequence!.Value;
+        var unlockedCount = sequence - oldStart + 1;
+
+        privilege.PrivilegeStartSequence = sequence + 1;
+        privilege.CurrentLockedCount = Math.Max(0, privilege.CurrentLockedCount - unlockedCount);
+        await privilegeRepository.UpdateAsync(privilege);
+
+        logger.LogInformation(
+            "Author {AuthorId} manually unlocked chapter {ChapterId} (seq {Sequence}) for novel {NovelId}: start {OldStart} -> {NewStart}, {Count} still locked",
+            authorId, chapterId, sequence, chapter.NovelId, oldStart, privilege.PrivilegeStartSequence, privilege.CurrentLockedCount);
+
         return new OperationResult
         {
-            Success = false,
-            Message = "No locked chapters to unlock"
+            Success = true,
+            Message = unlockedCount == 1
+                ? $"Chapter unlocked! {privilege.CurrentLockedCount} chapters remain locked"
+                : $"Chapters {oldStart}-{sequence} unlocked! {privilege.CurrentLockedCount} chapters remain locked"
         };
     }
     
@@ -537,9 +539,18 @@ public class PrivilegeService(
             };
         }
         
-        // Prevent authors from subscribing to their own novel
         var novel = await novelsRepository.GetOne(novelId);
-        if (novel != null && novel.AuthorId == userId)
+        if (novel == null)
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Message = "Novel not found"
+            };
+        }
+
+        // Prevent authors from subscribing to their own novel
+        if (novel.AuthorId == userId)
         {
             return new OperationResult
             {
@@ -571,82 +582,103 @@ public class PrivilegeService(
             };
         }
         
-        // ✅ START TRANSACTION: Ensures all-or-nothing for payment + subscription
-        await using var transaction = await transactionManager.BeginTransactionAsync();
-        
+        // Payment and subscription commit together or not at all.
         try
         {
-            // Step 1: Transfer points atomically (subscriber -> author)
-            await walletService.TransferPointsAsync(
-                fromUserId: userId,
-                toUserId: novel.AuthorId,
-                amount: cost,
-                fromTransactionType: TransactionType.PrivilegeSubscription,
-                toTransactionType: TransactionType.PrivilegeRevenue,
-                fromDescription: $"Subscribed to privilege for novel: {novel.Title}",
-                toDescription: $"Privilege subscription revenue from novel: {novel.Title}"
-            );
-            
-            // Step 2: Create subscription record (PERMANENT)
-            var subscription = new NovelPrivilegeSubscription
+            await transactionManager.InTransactionAsync(async () =>
             {
-                Id = Guid.NewGuid(),
-                NovelId = novelId,
-                UserId = userId,
-                SubscribedAt = DateTime.UtcNow,
-                IsActive = true,
-                AmountPaid = cost
-            };
-            
-            await subscriptionRepository.CreateAsync(subscription);
-            
-            // ✅ COMMIT TRANSACTION: Make all changes permanent
-            await transaction.CommitAsync();
-            
-            logger.LogInformation(
-                "User {UserId} subscribed to privilege for novel {NovelId}: {Cost} points (PERMANENT)",
-                userId, novelId, cost);
-            
-            // Step 3: Send notification AFTER transaction commits (best effort)
-            _ = Task.Run(async () =>
-            {
-                try
+                // Step 1: Transfer points atomically (subscriber -> author)
+                await walletService.TransferPointsAsync(
+                    fromUserId: userId,
+                    toUserId: novel.AuthorId,
+                    amount: cost,
+                    fromTransactionType: TransactionType.PrivilegeSubscription,
+                    toTransactionType: TransactionType.PrivilegeRevenue,
+                    fromDescription: $"Subscribed to privilege for novel: {novel.Title}",
+                    toDescription: $"Privilege subscription revenue from novel: {novel.Title}"
+                );
+
+                // The transfer holds both wallet rows locked until commit, so a concurrent subscribe by the same user
+                // waits here and then sees this subscription; re-checking now stops a double-click from paying twice.
+                if (await subscriptionRepository.HasActiveSubscriptionAsync(novelId, userId))
                 {
-                    var subscriber = await usersRepository.GetUserById(userId);
-                    if (subscriber != null)
-                    {
-                        await notificationService.SendPrivilegeSubscribedNotification(
-                            novel.AuthorId,
-                            subscriber,
-                            novel,
-                            cost
-                        );
-                    }
+                    throw new AlreadySubscribedException(); // rolls the payment back
                 }
-                catch (Exception ex)
+
+                // Step 2: Create subscription record (PERMANENT)
+                await subscriptionRepository.CreateAsync(new NovelPrivilegeSubscription
                 {
-                    logger.LogWarning(ex, "Failed to send privilege subscription notification (non-critical)");
-                }
+                    Id = Guid.NewGuid(),
+                    NovelId = novelId,
+                    UserId = userId,
+                    SubscribedAt = DateTime.UtcNow,
+                    IsActive = true,
+                    AmountPaid = cost
+                });
             });
-            
+        }
+        catch (AlreadySubscribedException)
+        {
             return new OperationResult
             {
-                Success = true,
-                Message = $"Subscribed successfully! All privilege chapters are now unlocked. (Cost: {cost} points, PERMANENT)"
+                Success = false,
+                Message = "You are already subscribed to this novel's privilege"
+            };
+        }
+        catch (InsufficientBalanceException)
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Message = $"Insufficient balance. Required: {cost} points"
             };
         }
         catch (Exception ex)
         {
-            // ❌ ROLLBACK: Undo everything if any step fails
-            await transaction.RollbackAsync();
             logger.LogError(ex, "Failed to subscribe to privilege: {Message}", ex.Message);
-            
+
             return new OperationResult
             {
                 Success = false,
                 Message = "Subscription failed. No points were deducted. Please try again."
             };
         }
+
+        logger.LogInformation(
+            "User {UserId} subscribed to privilege for novel {NovelId}: {Cost} points (PERMANENT)",
+            userId, novelId, cost);
+
+        // Notify AFTER the commit (best effort), in a scope of its own: the task outlives the request, whose DbContext
+        // (which this used to share) is disposed when the request ends.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var usersRepository = scope.ServiceProvider.GetRequiredService<IUsersRepository>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                var subscriber = await usersRepository.GetUserById(userId);
+                if (subscriber != null)
+                {
+                    await notificationService.SendPrivilegeSubscribedNotification(
+                        novel.AuthorId,
+                        subscriber,
+                        novel,
+                        cost
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send privilege subscription notification (non-critical)");
+            }
+        });
+
+        return new OperationResult
+        {
+            Success = true,
+            Message = $"Subscribed successfully! All privilege chapters are now unlocked. (Cost: {cost} points, PERMANENT)"
+        };
     }
     
     public async Task<OperationResult> CancelSubscriptionAsync(Guid novelId, string userId)
@@ -828,4 +860,6 @@ public class PrivilegeService(
             "Daily unlock completed: {UnlockedCount} novels processed",
             unlockedCount);
     }
+
+    private sealed class AlreadySubscribedException : Exception;
 }

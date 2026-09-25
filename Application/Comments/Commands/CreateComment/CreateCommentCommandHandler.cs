@@ -16,6 +16,7 @@ public class CreateCommentCommandHandler(
     ICommentsRepository commentsRepository, 
     IChaptersRepository chaptersRepository, 
     IChapterParagraphsRepository paragraphsRepository, 
+    IPostsRepository postsRepository,
     IUserContext userContext, 
     IFileUploadService fileUploadService, 
     IServiceProvider serviceProvider) : IRequestHandler<CreateCommentCommand, OperationResult>
@@ -42,7 +43,9 @@ public class CreateCommentCommandHandler(
         else if (request.PostId.HasValue)
         {
             logger.LogInformation("Creating comment for post {PostId}", request.PostId);
-            postId = request.PostId.Value;
+            // The query filter hides deleted posts, so they are "not found" too.
+            var post = await postsRepository.GetPostById(request.PostId.Value) ?? throw new NotFoundException("Post not found");
+            postId = post.Id;
         }
         else
         {
@@ -56,6 +59,21 @@ public class CreateCommentCommandHandler(
         if (request.ParentCommentId.HasValue)
         {
             var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId.Value) ?? throw new NotFoundException("Parent comment not found!");
+
+            // Threads are one level deep (the web app only shows replies under top-level comments), and a reply lives
+            // where its parent does.
+            if (parentComment.ParentCommentId.HasValue)
+            {
+                return new OperationResult { Success = false, Message = "Replies can only be added to top-level comments" };
+            }
+
+            var sameLocation = request.PostId.HasValue ? parentComment.PostId == request.PostId
+                : request.ParagraphId.HasValue ? parentComment.ParagraphId == request.ParagraphId
+                : parentComment.ChapterId == request.ChapterId && parentComment.ParagraphId == null;
+            if (!sameLocation)
+            {
+                return new OperationResult { Success = false, Message = "The parent comment belongs to a different chapter, paragraph or post" };
+            }
         }
         
         var comment = new Domain.Entities.Comments
@@ -82,28 +100,11 @@ public class CreateCommentCommandHandler(
             );
         }
         
+        // Saves the comment and bumps the user's and the post/chapter/paragraph's counters in one transaction.
         var createdComment = await commentsRepository.CreateComment(comment);
         
         // Fire-and-forget: Send notifications
         _ = SendCommentNotificationsInBackground(createdComment.Id, currentUser.Id, chapterId, postId, request.ParentCommentId);
-        
-        _ = IncrementUserCommentsCountInBackground(currentUser.Id);
-
-        if (!request.ParentCommentId.HasValue)
-        {
-            if (request.ParagraphId.HasValue)
-            {
-                _ = UpdateParagraphCommentsCountInBackground(request.ParagraphId.Value, chapterId!.Value);
-            }
-            else if (request.ChapterId.HasValue)
-            {
-                _ = UpdateChapterCommentsCountInBackground(request.ChapterId.Value);
-            }
-            else if (request.PostId.HasValue)
-            {
-                _ = UpdatePostCommentsCountInBackground(request.PostId.Value);
-            }
-        }
         
         logger.LogInformation("Comment {CommentId} created successfully", createdComment.Id);
 
@@ -223,101 +224,6 @@ public class CreateCommentCommandHandler(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to send comment notifications");
-        }
-    }
-
-    private async Task IncrementUserCommentsCountInBackground(string userId)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundUserManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
-            
-            var user = await backgroundUserManager.FindByIdAsync(userId);
-            if (user != null)
-            {
-                user.IncrementCommentsCount();
-                await backgroundUserManager.UpdateAsync(user);
-            }
-            logger.LogDebug("Successfully incremented comments count for user {UserId}", userId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to increment comments count for user {UserId}", userId);
-        }
-    }
-
-    private async Task UpdateChapterCommentsCountInBackground(Guid chapterId)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundChaptersRepository = scope.ServiceProvider.GetRequiredService<IChaptersRepository>();
-
-            var chapter = await backgroundChaptersRepository.GetChapterById(chapterId);
-            if (chapter != null)
-            {
-                chapter.IncrementCommentsCount();
-                await backgroundChaptersRepository.UpdateChapter(chapter);
-            }
-
-            logger.LogDebug("Successfully updated comments count for chapter {ChapterId}", chapterId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to update comments count for chapter {ChapterId} in background", chapterId);
-        }
-    }
-    
-    private async Task UpdateParagraphCommentsCountInBackground(Guid paragraphId, Guid chapterId)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundParagraphsRepository = scope.ServiceProvider.GetRequiredService<IChapterParagraphsRepository>();
-            var backgroundChaptersRepository = scope.ServiceProvider.GetRequiredService<IChaptersRepository>();
-
-            var paragraph = await backgroundParagraphsRepository.GetParagraphById(paragraphId);
-            if (paragraph != null)
-            {
-                paragraph.IncrementCommentsCount();
-                await backgroundParagraphsRepository.UpdateParagraph(paragraph);
-            }
-            
-            var chapter = await backgroundChaptersRepository.GetChapterById(chapterId);
-            if (chapter != null)
-            {
-                chapter.IncrementTotalCommentsCount();
-                await backgroundChaptersRepository.UpdateChapter(chapter);
-            }
-
-            logger.LogDebug("Successfully updated comments count for paragraph {ParagraphId}", paragraphId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to update comments count for paragraph {ParagraphId} in background", paragraphId);
-        }
-    }
-
-    private async Task UpdatePostCommentsCountInBackground(Guid postId)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundPostsRepository = scope.ServiceProvider.GetRequiredService<IPostsRepository>();
-
-            var post = await backgroundPostsRepository.GetPostById(postId);
-            if (post != null)
-            {
-                post.IncrementCommentsCount();
-                await backgroundPostsRepository.UpdatePost(post);
-            }
-
-            logger.LogDebug("Successfully updated comments count for post {PostId}", postId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to update comments count for post {PostId} in background", postId);
         }
     }
 }

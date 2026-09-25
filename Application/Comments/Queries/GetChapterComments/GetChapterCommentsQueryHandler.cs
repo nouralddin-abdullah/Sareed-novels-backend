@@ -13,14 +13,10 @@ public class GetChapterCommentsQueryHandler(ILogger<GetChapterCommentsQueryHandl
     public async Task<PagedResult<CommentsDTO>> Handle(GetChapterCommentsQuery request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Getting comments for chapter {ChapterId}", request.ChapterId);
-        var (comments, totalCount) = await commentsRepository.GetChapterComments(request.ChapterId, request.PageNumber, request.PageSize, request.Sorting);
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
+        var (comments, totalCount) = await commentsRepository.GetChapterComments(request.ChapterId, pageNumber, pageSize, request.Sorting);
         var commentDtos = mapper.Map<List<CommentsDTO>>(comments);
-        foreach (var commentDto in commentDtos)
-        {
-            var repliesCount = await commentsRepository.GetRepliesCountForComment(commentDto.Id);
-            commentDto.TotalRepliesCount = repliesCount;
-            commentDto.HasMoreReplies = repliesCount > 0;
-        }
+        await CommentReplyCounts.Fill(commentsRepository, commentDtos);
         var currentUser = userContext.GetCurrentUser();
         if (currentUser != null && commentDtos.Any())
         {
@@ -31,6 +27,6 @@ public class GetChapterCommentsQueryHandler(ILogger<GetChapterCommentsQueryHandl
                 commentDto.IsLikedByCurrentUser = likedCommentIds.Contains(commentDto.Id);
             }
         }
-        return new PagedResult<CommentsDTO>(commentDtos, totalCount, request.PageSize, request.PageNumber);
+        return new PagedResult<CommentsDTO>(commentDtos, totalCount, pageSize, pageNumber);
     }
 }

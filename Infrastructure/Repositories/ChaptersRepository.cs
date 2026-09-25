@@ -16,9 +16,54 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
 
     public async Task<bool> DeleteChapter(Chapter chapter)
     {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await MoveReadersOffChapter(chapter);
+        // Comment likes, replies and paragraph comments reference the chapter's comments without a cascade.
+        await SocialCounters.DeleteChapterComments(dbContext, chapter.Id);
         dbContext.Chapters.Remove(chapter);
         var result = await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
         return result > 0;
+    }
+
+    /// <summary>
+    /// Reading progress points at its chapter with a no-cascade foreign key, so a chapter someone stopped at can't be
+    /// deleted as is. Those readers move to the nearest other chapter, preferring a published one before it; if the
+    /// novel has no other chapter, their progress row (and its count in their library) goes.
+    /// </summary>
+    private async Task MoveReadersOffChapter(Chapter chapter)
+    {
+        var readers = dbContext.UserNovelProgress.Where(p => p.LastReadChapterId == chapter.Id);
+        if (!await readers.AnyAsync())
+        {
+            return;
+        }
+
+        var replacement = await dbContext.Chapters
+            .Where(c => c.NovelId == chapter.NovelId && c.Id != chapter.Id)
+            .OrderByDescending(c => c.Status == "Published")
+            .ThenBy(c => c.ChapterIndex <= chapter.ChapterIndex ? 0 : 1)
+            .ThenBy(c => c.ChapterIndex <= chapter.ChapterIndex ? chapter.ChapterIndex - c.ChapterIndex : c.ChapterIndex - chapter.ChapterIndex)
+            .Select(c => new { c.Id, c.ChapterIndex })
+            .FirstOrDefaultAsync();
+
+        if (replacement == null)
+        {
+            var userIds = await readers.Select(p => p.UserId).ToListAsync();
+            await readers.ExecuteDeleteAsync();
+            await dbContext.Users
+                .Where(u => userIds.Contains(u.Id) && u.LibraryNovelsCount > 0)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.LibraryNovelsCount, u => u.LibraryNovelsCount - 1));
+            return;
+        }
+
+        // The replacement's position among published chapters once this chapter is gone.
+        var chapterNumber = await dbContext.Chapters.CountAsync(c =>
+            c.NovelId == chapter.NovelId && c.Id != chapter.Id && c.Status == "Published" && c.ChapterIndex <= replacement.ChapterIndex);
+
+        await readers.ExecuteUpdateAsync(s => s
+            .SetProperty(p => p.LastReadChapterId, replacement.Id)
+            .SetProperty(p => p.LastReadChapterNumber, chapterNumber));
     }
 
     public async Task<Chapter?> GetChapterById(Guid chapterId)

@@ -15,7 +15,8 @@ public class SearchEntitiesQueryHandler(IEntitySearchService entitySearchService
             request.Query,
             request.Section,
             request.PageNumber,
-            request.PageSize);
+            request.PageSize,
+            cancellationToken);
 
         return searchResults;
     }

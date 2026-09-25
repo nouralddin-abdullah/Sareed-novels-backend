@@ -11,4 +11,6 @@ public interface IReadingListNovelsRepository
     Task<bool> IsNovelInListAsync(Guid readingListId, Guid novelId);
     Task<int> GetNovelsCountAsync(Guid readingListId);
     Task<int> RemoveDeletedNovelsAsync(Guid readingListId);
+    /// <summary>The OrderIndex that puts a newly added novel at the end of the list.</summary>
+    Task<int> GetNextOrderIndexAsync(Guid readingListId);
 }

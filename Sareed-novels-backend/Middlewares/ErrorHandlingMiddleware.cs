@@ -19,6 +19,11 @@ public class ErrorHandlingMiddleware(ILogger<ErrorHandlingMiddleware> logger) : 
         {
             context.Response.StatusCode = 403;
             await context.Response.WriteAsync(ex.Message);
+        }
+        catch(TooManyRequestsException ex)
+        {
+            context.Response.StatusCode = 429;
+            await context.Response.WriteAsync(ex.Message);
         }catch(ArgumentException ex)
         {
             context.Response.StatusCode = 403;
