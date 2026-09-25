@@ -13,7 +13,8 @@ public class ApproveWithdrawalCommandHandler(
     ILogger<ApproveWithdrawalCommandHandler> logger,
     IUserContext userContext,
     IWithdrawalRequestRepository withdrawalRepository,
-    IWalletService walletService) : IRequestHandler<ApproveWithdrawalCommand, OperationResult>
+    IWalletService walletService,
+    ITransactionManager transactionManager) : IRequestHandler<ApproveWithdrawalCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(ApproveWithdrawalCommand request, CancellationToken cancellationToken)
     {
@@ -48,31 +49,44 @@ public class ApproveWithdrawalCommandHandler(
             };
         }
 
-        // Update request status
-        withdrawalRequest.Status = RequestStatus.Approved;
-        withdrawalRequest.ProcessedAt = DateTime.UtcNow;
-        withdrawalRequest.ProcessedBy = currentUser.Id;
-
-        await withdrawalRepository.UpdateAsync(withdrawalRequest);
-
-        // Deduct points from user wallet
+        // The status change and the debit commit together: if the debit fails the request stays Pending (it used to
+        // be left Approved with nothing deducted), and a second approval can't deduct twice.
+        bool approved;
         try
         {
-            await walletService.DeductPointsAsync(
-                withdrawalRequest.UserId,
-                withdrawalRequest.PointsRequested,
-                TransactionType.WithdrawalApproved,
-                $"Withdrawal approved: {withdrawalRequest.PointsRequested} points ({withdrawalRequest.NetAmountEGP} EGP via {withdrawalRequest.WithdrawalMethod})",
-                withdrawalRequest.Id
-            );
+            approved = await transactionManager.InTransactionAsync(async () =>
+            {
+                if (!await withdrawalRepository.TryMarkProcessedAsync(withdrawalRequest.Id, RequestStatus.Approved, currentUser.Id))
+                {
+                    return false;
+                }
+
+                await walletService.DeductPointsAsync(
+                    withdrawalRequest.UserId,
+                    withdrawalRequest.PointsRequested,
+                    TransactionType.WithdrawalApproved,
+                    $"Withdrawal approved: {withdrawalRequest.PointsRequested} points ({withdrawalRequest.NetAmountEGP} EGP via {withdrawalRequest.WithdrawalMethod})",
+                    withdrawalRequest.Id
+                );
+                return true;
+            }, cancellationToken);
         }
-        catch (InvalidOperationException ex)
+        catch (InsufficientBalanceException ex)
         {
-            logger.LogError(ex, "Failed to deduct points for withdrawal {RequestId}", request.RequestId);
+            logger.LogWarning(ex, "Withdrawal {RequestId} not approved: balance too low", request.RequestId);
             return new OperationResult
             {
                 Success = false,
-                Message = ex.Message
+                Message = "User no longer has sufficient balance for this withdrawal"
+            };
+        }
+
+        if (!approved)
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Message = "Request was already processed"
             };
         }
 
