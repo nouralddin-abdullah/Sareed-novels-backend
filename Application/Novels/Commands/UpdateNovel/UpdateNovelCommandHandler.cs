@@ -4,6 +4,7 @@ using Application.Users.Commands.FollowUser;
 using AutoMapper;
 using Domain.Exceptions;
 using Domain.Repositories;
+using Domain.Seo;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -21,14 +22,19 @@ public class UpdateNovelCommandHandler(
     {
         var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel was not found");
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("This user not signed in");
-        logger.LogInformation("Updating data for novel {@novel}", novel);
+        logger.LogInformation("Updating data for novel {NovelId}", novel.Id);
         if (novel.AuthorId != currentUser.Id)
         {
             throw new ForbidException("Forbidden");
         }
         if (request.Title != null)
         {
-            novel.Slug = $"{novel.Id.ToString().Substring(0, 5)}-{request.Title.Replace(" ", "-").ToLower()}";
+            // The edit form resends the unchanged title on every save; only a real rename may move the novel's URL.
+            var newSlug = Slugs.For(novel.Id, request.Title);
+            if (newSlug != Slugs.For(novel.Id, novel.Title))
+            {
+                novel.Slug = newSlug;
+            }
         }
         mapper.Map(request, novel);
         bool novelUpdateResult = await novelsRepository.UpdateOne(novel);

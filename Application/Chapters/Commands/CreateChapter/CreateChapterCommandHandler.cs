@@ -6,6 +6,7 @@ using AutoMapper;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
+using Domain.Seo;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -36,7 +37,7 @@ public class CreateChapterCommandHandler(
         var chapter = mapper.Map<Chapter>(request);
         chapter.ChapterIndex = await chaptersRepository.GetNextChapterIndex(novel.Id);
         chapter.Id = Guid.NewGuid();
-        chapter.Slug = $"{chapter.Id.ToString()[..5]}-{request.Title.Replace(" ", "-").ToLower()}";
+        chapter.Slug = Slugs.For(chapter.Id, request.Title);
         
         // Split content into paragraphs
         var paragraphTexts = SplitIntoParagraphs(request.Content);
@@ -62,9 +63,7 @@ public class CreateChapterCommandHandler(
             throw new InvalidOperationException("Failed to create the chapter");
         }
 
-        novel.ChapterCount++;
-        novel.LastUpdatedAt = DateTime.UtcNow;
-        await novelsRepository.UpdateOne(novel);
+        await novelsRepository.RefreshChapterCountAsync(novel.Id, lastUpdatedAt: DateTime.UtcNow);
         
         // If chapter is Published, recalculate sequences
         if (chapter.Status == "Published")

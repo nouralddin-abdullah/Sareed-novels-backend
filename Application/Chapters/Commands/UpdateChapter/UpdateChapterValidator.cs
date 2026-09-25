@@ -1,4 +1,5 @@
-﻿using FluentValidation;
+﻿using Domain.Constants;
+using FluentValidation;
 
 namespace Application.Chapters.Commands.UpdateChapter
 {
@@ -14,6 +15,11 @@ namespace Application.Chapters.Commands.UpdateChapter
             RuleFor(c => c.Content)
                 .NotNull()
                 .MaximumLength(100000);
+
+            RuleFor(c => c.Status)
+                .Must(status => ChapterStatuses.All.Contains(status))
+                .When(c => c.Status != null)
+                .WithMessage("Chapter status must be 'Draft' or 'Published'");
         }
     }
 }

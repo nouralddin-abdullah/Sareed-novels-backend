@@ -6,6 +6,7 @@ using Domain.Constants;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
+using Domain.Seo;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -21,12 +22,12 @@ public class CreateNovelCommandHandler(
 {
     public async Task<CreateNovelResult> Handle(CreateNovelCommand request, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Creating new novel {@novel}", request);
+        logger.LogInformation("Creating new novel {Title}", request.Title);
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
         var novel = mapper.Map<Novel>(request);
         novel.Id = Guid.NewGuid();
         novel.Status = NovelStatus.Ongoing.ToString();
-        novel.Slug = $"{novel.Id.ToString()[..5]}-{CreateUrlSafeSlug(request.Title)}";
+        novel.Slug = Slugs.For(novel.Id, request.Title);
         novel.CreatedAt = DateTime.UtcNow;
         novel.LastUpdatedAt = DateTime.UtcNow;
         novel.TotalViews = 0;
@@ -68,20 +69,5 @@ public class CreateNovelCommandHandler(
             Success = true,
             NovelId = novel.Id
         };
-    }
-    
-    private static string CreateUrlSafeSlug(string title)
-    {
-        return title
-            .Replace(" ", "-")
-            .Replace("/", "-")
-            .Replace("\\", "-")
-            .Replace("?", "")
-            .Replace("#", "")
-            .Replace("&", "-and-")
-            .Replace("%", "")
-            .Replace(":", "")
-            .Replace(";", "")
-            .ToLower();
     }
 }
