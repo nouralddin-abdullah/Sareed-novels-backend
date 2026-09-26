@@ -18,6 +18,9 @@ public class EntityDTO
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public bool IsOwner { get; set; }
+
+    /// <summary>Whether the entry's page is worth a search result (<see cref="Domain.Seo.WikiPages"/>); thin entries get noindex.</summary>
+    public bool IsIndexable { get; set; }
 }
 
 public class EntityArticleDTO
@@ -61,6 +64,12 @@ public class EntityListDTO
     public DateTime CreatedAt { get; set; }
     public int ArticlesCount { get; set; }
     public int RelationshipsCount { get; set; }
+
+    /// <summary>
+    /// Whether the entry's page is worth a search result (<see cref="Domain.Seo.WikiPages"/>). Null where it isn't
+    /// worked out (search results).
+    /// </summary>
+    public bool? IsIndexable { get; set; }
 }
 
 public class EntityTypeStatsDTO

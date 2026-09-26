@@ -2,6 +2,7 @@ using Application.Entities.DTOs;
 using Application.Users;
 using Domain.Entities;
 using Domain.Repositories;
+using Domain.Seo;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -72,7 +73,8 @@ public class GetEntityByIdQueryHandler(
             Relationships = GetBidirectionalRelationships(entity),
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
-            IsOwner = isOwner
+            IsOwner = isOwner,
+            IsIndexable = WikiPages.IsIndexable(entity)
         };
     }
 
