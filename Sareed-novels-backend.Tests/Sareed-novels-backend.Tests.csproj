@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- build/SkiaSharpCdecl.cs is compiled here without its MSBuild task class. -->
+    <DefineConstants>$(DefineConstants);SARD_TESTS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,6 +21,10 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\build\SkiaSharpCdecl.cs" Link="Build\SkiaSharpCdecl.cs" />
   </ItemGroup>
 
   <ItemGroup>

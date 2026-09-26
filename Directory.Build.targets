@@ -1,0 +1,43 @@
+<Project>
+  <!--
+    SkiaSharp on 32-bit Windows (production runs in a 32-bit IIS app pool).
+
+    SkiaSharp 3 and 4 declare their libSkiaSharp P/Invokes without a calling convention, which means stdcall on
+    32-bit Windows, but libSkiaSharp.dll exports cdecl functions: https://github.com/mono/SkiaSharp/issues/5168 (open,
+    no fixed release as of SkiaSharp 4.152.1). Every Skia call then leaves its arguments on the stack. A Skia call made
+    while the arguments of another call are being pushed shifts those arguments, and the other call reads garbage:
+    that is how every cover with solid bars failed with "Image has no pixels" in production (reproduced with win-x86
+    .NET under Wine).
+
+    Until SkiaSharp ships the fix, the SkiaSharp.dll copied to bin and to the publish output is a copy whose default
+    convention P/Invokes into libSkiaSharp are marked cdecl, which is what the upstream fix does
+    (build/SkiaSharpCdecl.cs); its few P/Invokes into Windows DLLs are stdcall and stay so. It changes nothing on
+    64-bit, where there is one calling convention, and nothing once SkiaSharp declares cdecl itself.
+    SkiaSharpCallingConventionTests fails if the SkiaSharp the app runs with isn't patched.
+  -->
+  <UsingTask TaskName="SetCdeclCallingConvention" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)build/SkiaSharpCdecl.cs" />
+    </Task>
+  </UsingTask>
+
+  <Target Name="UseCdeclSkiaSharp" AfterTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <_SkiaSharpAssembly Include="@(RuntimeCopyLocalItems)"
+                          Condition="'%(RuntimeCopyLocalItems.NuGetPackageId)' == 'SkiaSharp' and '%(Filename)%(Extension)' == 'SkiaSharp.dll'" />
+    </ItemGroup>
+    <PropertyGroup Condition="'@(_SkiaSharpAssembly)' != ''">
+      <_CdeclSkiaSharpAssembly>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'skiasharp-cdecl', 'SkiaSharp.dll'))</_CdeclSkiaSharpAssembly>
+    </PropertyGroup>
+
+    <SetCdeclCallingConvention Condition="'@(_SkiaSharpAssembly)' != ''" Library="libSkiaSharp"
+                               Source="@(_SkiaSharpAssembly)" Destination="$(_CdeclSkiaSharpAssembly)" />
+
+    <!-- Same item metadata (package id, version, destination path), so deps.json and publish treat it as the package's file. -->
+    <ItemGroup Condition="'@(_SkiaSharpAssembly)' != ''">
+      <RuntimeCopyLocalItems Remove="@(_SkiaSharpAssembly)" />
+      <RuntimeCopyLocalItems Include="@(_SkiaSharpAssembly->'$(_CdeclSkiaSharpAssembly)')" />
+    </ItemGroup>
+  </Target>
+</Project>

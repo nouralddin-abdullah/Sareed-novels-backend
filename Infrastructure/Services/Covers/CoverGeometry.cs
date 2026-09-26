@@ -63,7 +63,7 @@ public static class CoverGeometry
     /// </summary>
     public static CoverPlan Plan(int width, int height, int maxWidth = NovelCovers.MaxWidth, CropAllowance? allowance = null)
     {
-        if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width), "Image has no pixels.");
+        if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(width <= 0 ? nameof(width) : nameof(height), $"Image has no pixels ({width}x{height}).");
         var allowed = allowance ?? CropAllowance.Default;
 
         var ratio = (double)width / height;
@@ -123,27 +123,6 @@ public static class CoverGeometry
         SKEncodedOrigin.LeftBottom => new SKMatrix(0, 1, 0, -1, 0, width, 0, 0, 1),       // rotate 90 counter-clockwise
         _ => SKMatrix.Identity,
     };
-
-    /// <summary>
-    /// The bounding box of <paramref name="rect"/> under the affine <paramref name="matrix"/>, computed in managed code.
-    /// SKMatrix.MapRect calls native Skia, and on the production host (Windows, 32-bit IIS app pool) it gave an empty
-    /// or invalid rect: every cover with trimmed bars then failed with "Image has no pixels".
-    /// </summary>
-    public static SKRect MapRect(SKMatrix matrix, SKRect rect)
-    {
-        float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
-        foreach (var (x, y) in new[] { (rect.Left, rect.Top), (rect.Right, rect.Top), (rect.Right, rect.Bottom), (rect.Left, rect.Bottom) })
-        {
-            var mappedX = matrix.ScaleX * x + matrix.SkewX * y + matrix.TransX;
-            var mappedY = matrix.SkewY * x + matrix.ScaleY * y + matrix.TransY;
-            minX = Math.Min(minX, mappedX);
-            maxX = Math.Max(maxX, mappedX);
-            minY = Math.Min(minY, mappedY);
-            maxY = Math.Max(maxY, mappedY);
-        }
-
-        return new SKRect(minX, minY, maxX, maxY);
-    }
 
     private static int EvenWidth(int width) => Math.Max(2, width - width % 2);
 }
