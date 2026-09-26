@@ -15,8 +15,11 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
             .Where(n => !n.IsDraft)
             .Select(n => new
             {
+                n.Id,
                 n.Slug,
                 n.LastUpdatedAt,
+                AuthorUserName = n.Owner.UserName,
+                Genres = n.NovelGenres.OrderBy(ng => ng.GenreId).Select(ng => ng.Genre.Slug).ToList(),
                 Chapters = n.Chapters
                     .Where(c => c.Status == "Published")
                     .OrderBy(c => c.ChapterIndex)
@@ -25,14 +28,59 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
             })
             .ToListAsync(cancellationToken);
 
+        var wiki = await GetIndexableWikiEntriesAsync(cancellationToken);
+
         return rows
             .Where(n => n.Chapters.Count > 0)
             .Select(n => new NovelSitemapEntry(
                 n.Slug,
                 new[] { n.LastUpdatedAt, n.Chapters.Max(c => c.CreatedAt) }.Max(),
-                n.Chapters.Select(c => new ChapterSitemapEntry(c.Id, c.CreatedAt)).ToList()))
+                n.Chapters.Select(c => new ChapterSitemapEntry(c.Id, c.CreatedAt)).ToList(),
+                n.Id,
+                n.AuthorUserName,
+                n.Genres,
+                wiki.TryGetValue(n.Id, out var entries) ? entries : []))
             .OrderByDescending(n => n.LastModified)
             .ToList();
+    }
+
+    /// <summary>
+    /// The wiki entries of public novels that are worth indexing (<see cref="WikiPages"/>), by novel. Deleted entries,
+    /// articles and novels are hidden by the query filters.
+    /// </summary>
+    private async Task<Dictionary<Guid, List<WikiSitemapEntry>>> GetIndexableWikiEntriesAsync(CancellationToken cancellationToken)
+    {
+        var entities = await dbContext.NovelEntities
+            .AsNoTracking()
+            .Where(e => !e.Novel.IsDraft)
+            .Select(e => new
+            {
+                e.Id,
+                e.NovelId,
+                e.Name,
+                e.ShortDescription,
+                e.Description,
+                e.Role,
+                e.AttributesJson,
+                e.CreatedAt,
+                e.UpdatedAt,
+                Articles = e.Articles.Select(a => new { a.Title, a.Content, a.UpdatedAt }).ToList()
+            })
+            .ToListAsync(cancellationToken);
+
+        return entities
+            .Where(e => WikiPages.IsIndexable(
+                e.Name, e.ShortDescription, e.Description, e.Role, e.AttributesJson,
+                e.Articles.Select(a => ((string?)a.Title, (string?)a.Content))))
+            .GroupBy(e => e.NovelId)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .OrderBy(e => e.CreatedAt)
+                    .Select(e => new WikiSitemapEntry(
+                        e.Id,
+                        e.Articles.Select(a => a.UpdatedAt).Append(e.UpdatedAt).Max()))
+                    .ToList());
     }
 
     public async Task<bool> CreateNovel(Novel novel)

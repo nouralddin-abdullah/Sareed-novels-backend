@@ -1,6 +1,7 @@
 using Application.Common;
 using Application.Entities.DTOs;
 using Domain.Repositories;
+using Domain.Seo;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -30,7 +31,8 @@ public class GetNovelEntitiesQueryHandler(
             ImageUrl = e.ImageUrl,
             CreatedAt = e.CreatedAt,
             ArticlesCount = e.Articles.Count,
-            RelationshipsCount = e.SourceRelationships.Count + e.TargetRelationships.Count
+            RelationshipsCount = e.SourceRelationships.Count + e.TargetRelationships.Count,
+            IsIndexable = WikiPages.IsIndexable(e)
         }).ToList();
 
         return new PagedResult<EntityListDTO>(dtos, totalCount, request.PageSize, request.PageNumber);

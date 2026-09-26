@@ -9,8 +9,8 @@ namespace Sareed_novels_backend.Controllers;
 public class SeoController(IMediator mediator) : ControllerBase
 {
     /// <summary>
-    /// Every public novel with its published chapters, so the Cloudflare worker can build sitemap.xml in one request
-    /// (one call per novel would exceed the worker's subrequest limit).
+    /// Every public novel with its published chapters, author, genres and indexable wiki entries, so the Cloudflare
+    /// worker can build sitemap.xml in one request (one call per novel would exceed the worker's subrequest limit).
     /// </summary>
     [HttpGet("sitemap")]
     [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)]
