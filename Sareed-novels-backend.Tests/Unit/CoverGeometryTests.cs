@@ -187,4 +187,29 @@ public class NovelCoversTests
     {
         Assert.Equal(widths, NovelCovers.WidthsFor(full));
     }
+
+    // CoverGeometry.MapRect replaces SKMatrix.MapRect, whose native call returned an empty rect on the production host
+    // (Windows, 32-bit app pool). Native Skia works here, so it is the reference for every EXIF orientation.
+    [Theory]
+    [InlineData(SKEncodedOrigin.TopLeft)]
+    [InlineData(SKEncodedOrigin.TopRight)]
+    [InlineData(SKEncodedOrigin.BottomRight)]
+    [InlineData(SKEncodedOrigin.BottomLeft)]
+    [InlineData(SKEncodedOrigin.LeftTop)]
+    [InlineData(SKEncodedOrigin.RightTop)]
+    [InlineData(SKEncodedOrigin.RightBottom)]
+    [InlineData(SKEncodedOrigin.LeftBottom)]
+    public void Managed_rect_mapping_matches_skia_for_every_orientation(SKEncodedOrigin origin)
+    {
+        var matrix = CoverGeometry.OrientationMatrix(origin, 800, 973);
+        foreach (var rect in new[] { new SKRect(0, 0, 800, 973), new SKRect(62.5f, 40, 737.25f, 930), new SKRect(10, 20, 11, 21) })
+        {
+            var expected = matrix.MapRect(rect);
+            var actual = CoverGeometry.MapRect(matrix, rect);
+            Assert.Equal(expected.Left, actual.Left, 3);
+            Assert.Equal(expected.Top, actual.Top, 3);
+            Assert.Equal(expected.Right, actual.Right, 3);
+            Assert.Equal(expected.Bottom, actual.Bottom, 3);
+        }
+    }
 }
