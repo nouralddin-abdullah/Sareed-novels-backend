@@ -2,11 +2,13 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Application.Services;
 using Infrastructure.Persistence;
 using Infrastructure.Push;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -108,6 +110,32 @@ public class PushNotificationHttpTests(PushApiFactory push) : IClassFixture<Push
         var response = await Client().SendAsync(As(null, new HttpMethod(method), url, new { token = "t", platform = "android" }));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Device_and_preference_endpoints_refuse_a_token_revoked_by_sign_out_everywhere()
+    {
+        var account = await SignUp();
+        // Issued a minute ago: a revocation refuses the tokens issued before its second.
+        var jwtKey = push.Factory.Services.GetRequiredService<IConfiguration>()["Jwt:Key"]!;
+        var earlier = account with { Token = TokenFactory.Write(account.Id, DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddDays(59), jwtKey) };
+        var client = Client();
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(As(earlier, HttpMethod.Get, "/api/notifications/preferences"))).StatusCode);
+
+        using (var scope = push.Factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<ITokenRevocationService>().RevokeAllTokensAsync(account.Id);
+        }
+
+        foreach (var (method, url) in new[]
+                 {
+                     (HttpMethod.Post, "/api/notifications/devices"), (HttpMethod.Delete, "/api/notifications/devices/some-token"),
+                     (HttpMethod.Get, "/api/notifications/preferences"), (HttpMethod.Patch, "/api/notifications/preferences")
+                 })
+        {
+            var response = await client.SendAsync(As(earlier, method, url, new { token = FcmToken(), platform = "android", social = false }));
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
     }
 
     [Fact]

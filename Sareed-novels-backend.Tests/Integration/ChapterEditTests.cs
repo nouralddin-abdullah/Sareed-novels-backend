@@ -95,6 +95,39 @@ public class ChapterEditTests(SqlServerDatabase database) : IClassFixture<SqlSer
     }
 
     [Fact]
+    public async Task Deleting_a_paragraph_also_deletes_the_pushes_queued_for_its_comments_notifications()
+    {
+        var world = await SeedChapter();
+        Guid gone, kept;
+        await using (var db = database.CreateContext())
+        {
+            // The author has the app: each notification about a comment queues a push to their phone.
+            var device = new UserDevice
+            {
+                Id = Guid.NewGuid(), UserId = world.Author.Id, Token = "token-" + Guid.NewGuid().ToString("N"),
+                Platform = DevicePlatforms.Android, CreatedAt = DateTime.UtcNow, LastSeenAt = DateTime.UtcNow
+            };
+            db.UserDevices.Add(device);
+            await db.SaveChangesAsync();
+            var notifications = new NotificationsRepository(db);
+            gone = (await notifications.CreateNotification(
+                Notification(world.Author, world.Readers[0], NotificationType.LikeOnComment, world.CommentsOn[1][0]))).Id;
+            kept = (await notifications.CreateNotification(
+                Notification(world.Author, world.Readers[0], NotificationType.LikeOnComment, world.CommentsOn[6][0]))).Id;
+            Assert.Equal(2, await db.PushOutbox.CountAsync(o => o.DeviceId == device.Id && (o.NotificationId == gone || o.NotificationId == kept)));
+        }
+
+        await world.Save(ProductionChapter.Paragraphs.Where((_, i) => i != 1));
+
+        await using var check = database.CreateContext();
+        Assert.False(await check.Notifications.AnyAsync(n => n.Id == gone));
+        Assert.False(await check.PushOutbox.AnyAsync(o => o.NotificationId == gone));
+        Assert.True(await check.Notifications.AnyAsync(n => n.Id == kept));
+        Assert.True(await check.PushOutbox.AnyAsync(o => o.NotificationId == kept));
+        await AssertCountersMatchRecount(check, world);
+    }
+
+    [Fact]
     public async Task Inserting_paragraphs_keeps_every_id_and_comment()
     {
         var world = await SeedChapter();
