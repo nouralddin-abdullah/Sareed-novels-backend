@@ -555,6 +555,45 @@ public class PushDeliveryTests(SqlServerDatabase database) : IClassFixture<SqlSe
     }
 
     [Fact]
+    public async Task A_notification_deleted_while_its_push_is_out_does_not_fail_the_rest_of_the_batch()
+    {
+        // Deleting a notification deletes its pushes, also one being sent: a chapter edit that removes a paragraph
+        // deletes the notifications about its comments.
+        var world = await SeedWorld();
+        var secondFollower = Seed.User();
+        await using (var db = database.CreateContext())
+        {
+            db.Users.Add(secondFollower);
+            await db.SaveChangesAsync();
+        }
+        await Followed(world);
+        await Notify(s => s.SendNewFollowerNotification(world.Recipient.Id, secondFollower));
+        Guid deleted;
+        await using (var db = database.CreateContext())
+        {
+            deleted = await db.Notifications.Where(n => n.ActorId == world.Actor.Id).Select(n => n.Id).SingleAsync();
+        }
+        var deletions = 0;
+        fcm.Respond = _ =>
+        {
+            if (Interlocked.Exchange(ref deletions, 1) == 0)
+            {
+                using var db = database.CreateContext();
+                db.Notifications.Where(n => n.Id == deleted).ExecuteDelete();
+            }
+            return FakeFcm.Ok();
+        };
+
+        Assert.Equal(2, await ProcessOnce(clock: ClockAfterQueueing()));
+
+        // The other push is recorded as sent, rather than claimed again (and sent twice) when its lease ends.
+        Assert.Equal(2, fcm.Requests.Count);
+        var row = Assert.Single(await Outbox());
+        Assert.NotEqual(deleted, row.NotificationId);
+        Assert.Equal(PushOutboxStatus.Sent, row.Status);
+    }
+
+    [Fact]
     public async Task The_retry_delay_doubles_per_attempt_up_to_the_cap_and_never_undercuts_retry_after()
     {
         await using var db = database.CreateContext();

@@ -74,10 +74,38 @@ public sealed class PushOutboxProcessor(
             var results = await SendAllAsync(sends, cancellationToken);
             await RecordAsync(sends, results, report, cancellationToken);
         }
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveAsync(rows, cancellationToken);
 
         report.Log(logger);
         return rows.Count;
+    }
+
+    /// <summary>
+    /// Saves what happened to each claimed row. A row can be gone by then: deleting a notification deletes its pushes
+    /// (a chapter edit that removes a paragraph deletes the notifications about its comments), and an update to a
+    /// missing row fails the whole save. The rows are then saved one by one, the missing ones changing nothing, so the
+    /// others aren't claimed and sent again when their lease ends.
+    /// </summary>
+    private async Task SaveAsync(List<PushOutboxMessage> rows, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            foreach (var row in rows)
+            {
+                await dbContext.PushOutbox
+                    .Where(o => o.Id == row.Id)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(o => o.Status, row.Status)
+                        .SetProperty(o => o.CompletedAt, row.CompletedAt)
+                        .SetProperty(o => o.LastError, row.LastError)
+                        .SetProperty(o => o.NextAttemptAt, row.NextAttemptAt), cancellationToken);
+            }
+            dbContext.ChangeTracker.Clear();
+        }
     }
 
     /// <summary>With push disabled (no FCM credentials), marks everything waiting as skipped, with the reason.</summary>
