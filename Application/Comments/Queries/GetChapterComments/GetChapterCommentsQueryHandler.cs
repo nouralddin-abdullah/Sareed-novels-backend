@@ -14,8 +14,10 @@ public class GetChapterCommentsQueryHandler(ILogger<GetChapterCommentsQueryHandl
     {
         logger.LogInformation("Getting comments for chapter {ChapterId}", request.ChapterId);
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
-        var (comments, totalCount) = await commentsRepository.GetChapterComments(request.ChapterId, pageNumber, pageSize, request.Sorting);
-        var commentDtos = await CommentListDtos.Build(comments, mapper, commentsRepository, commentLikesRepository, userContext.GetCurrentUser());
+        // Comments by users the viewer blocked are left out.
+        var currentUser = userContext.GetCurrentUser();
+        var (comments, totalCount) = await commentsRepository.GetChapterComments(request.ChapterId, pageNumber, pageSize, request.Sorting, currentUser?.Id);
+        var commentDtos = await CommentListDtos.Build(comments, mapper, commentsRepository, commentLikesRepository, currentUser);
         return new PagedResult<CommentsDTO>(commentDtos, totalCount, pageSize, pageNumber);
     }
 }

@@ -1,7 +1,10 @@
-﻿using Application.Users.Commands.ChangePassword;
+﻿using Application.Users.Commands.BlockUser;
+using Application.Users.Commands.ChangePassword;
 using Application.Users.Commands.FollowUser;
+using Application.Users.Commands.UnblockUser;
 using Application.Users.Commands.UnFollowUser;
 using Application.Users.Commands.UpdateMe;
+using Application.Users.Queries.GetBlockedUsers;
 using Application.Users.Queries.GetFollowersList;
 using Application.Users.Queries.GetFollowingList;
 using Application.Users.Queries.GetMyProfile;
@@ -70,6 +73,27 @@ namespace Sareed_novels_backend.Controllers
 
             return Ok(result);
         }
+
+        /// <summary>
+        /// Blocks a user (idempotent): their comments, replies, reviews and posts leave the caller's lists, follows
+        /// between the two are removed, and they can't follow, answer, notify or open the caller.
+        /// </summary>
+        [HttpPost("block")]
+        public async Task<IActionResult> BlockUser(BlockUserCommand command) => Ok(await mediator.Send(command));
+
+        /// <summary>Unblocks a user (idempotent).</summary>
+        [HttpDelete("unblock")]
+        public async Task<IActionResult> UnblockUser(UnblockUserCommand command) => Ok(await mediator.Send(command));
+
+        /// <summary>The same as DELETE unblock, for clients that can't send a body with DELETE.</summary>
+        [HttpDelete("block/{userId}")]
+        public async Task<IActionResult> UnblockUserById([FromRoute] string userId) =>
+            Ok(await mediator.Send(new UnblockUserCommand { UserId = userId }));
+
+        /// <summary>The users the caller blocked, most recent first, with their current names.</summary>
+        [HttpGet("blocked")]
+        public async Task<IActionResult> GetBlockedUsers([FromQuery] int? pageNumber, [FromQuery] int? pageSize) =>
+            Ok(await mediator.Send(new GetBlockedUsersQuery(pageNumber ?? 1, pageSize ?? 20)));
 
         [HttpGet("followers-list/{userId}")]
         [AllowAnonymous]

@@ -85,6 +85,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationService, NotificationService>();
         services.AddPushNotifications(configuration);
         services.AddScoped<ITransactionManager, TransactionManager>();
+
+        // Moderation: reports, blocks, suspensions.
+        services.AddScoped<IUserBlocksRepository, UserBlocksRepository>();
         
         // Wallet System
         services.AddScoped<IUserWalletRepository, UserWalletRepository>();

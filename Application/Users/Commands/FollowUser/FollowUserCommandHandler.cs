@@ -14,6 +14,7 @@ public class FollowUserCommandHandler(
     IUserContext userContext, 
     UserManager<User> userManager, 
     IUsersRepository usersRepository,
+    IUserBlocksRepository blocksRepository,
     IServiceProvider serviceProvider) : IRequestHandler<FollowUserCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(FollowUserCommand request, CancellationToken cancellationToken)
@@ -30,6 +31,17 @@ public class FollowUserCommandHandler(
                 Message = "You cannot follow yourself",
             };
         }
+        // Blocking removed any follow between the two, and neither can follow the other while it lasts.
+        var blocks = await blocksRepository.GetRelationAsync(currentUser.Id, userToFollow.Id, cancellationToken);
+        if (blocks.OtherBlockedViewer)
+        {
+            throw new ForbidException("لا يمكنك متابعة هذا المستخدم", "Blocked");
+        }
+        if (blocks.ViewerBlockedOther)
+        {
+            throw new ForbidException("ألغِ حظر هذا المستخدم أولاً لتتمكن من متابعته", "Blocked");
+        }
+
         var isFollowing = await usersRepository.IsFollowingAsync(currentUser.Id, userToFollow.Id);
 
         if (isFollowing)

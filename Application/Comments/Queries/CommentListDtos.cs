@@ -19,7 +19,7 @@ internal static class CommentListDtos
         CurrentUser? currentUser)
     {
         var commentDtos = mapper.Map<List<CommentsDTO>>(comments);
-        await CommentReplyCounts.Fill(commentsRepository, commentDtos);
+        await CommentReplyCounts.Fill(commentsRepository, commentDtos, currentUser?.Id);
 
         if (currentUser != null && commentDtos.Count > 0)
         {

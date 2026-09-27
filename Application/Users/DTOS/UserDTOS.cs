@@ -20,7 +20,8 @@ public class UserDTOS : Profile
         CreateMap<User, UserProfile>()
             .ForMember(dest => dest.TotalFollowers, opt => opt.Ignore())
             .ForMember(dest => dest.TotalFollowing, opt => opt.Ignore())
-            .ForMember(dest => dest.IsFollowing, opt => opt.Ignore());
+            .ForMember(dest => dest.IsFollowing, opt => opt.Ignore())
+            .ForMember(dest => dest.IsBlockedByMe, opt => opt.Ignore());
 
         CreateMap<Follow, FollowerDto>()
             .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.Follower.Id))
