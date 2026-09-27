@@ -32,13 +32,13 @@ public class MarkNotificationAsReadCommandHandler(
             return true; // Already read
         }
 
-        var result = await notificationsRepository.MarkAsRead(request.NotificationId);
-        
-        if (result)
+        // Deleted in the meantime: as missing as if it never existed.
+        if (!await notificationsRepository.MarkAsRead(request.NotificationId))
         {
-            logger.LogDebug("Notification {NotificationId} marked as read", request.NotificationId);
+            throw new NotFoundException("Notification not found");
         }
 
-        return result;
+        logger.LogDebug("Notification {NotificationId} marked as read", request.NotificationId);
+        return true;
     }
 }
