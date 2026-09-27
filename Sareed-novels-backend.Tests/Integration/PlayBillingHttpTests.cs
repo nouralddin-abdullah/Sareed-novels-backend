@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Application.Services;
 using Application.Wallet.DTOs;
 using Infrastructure.BackgroundJobs;
 using Infrastructure.Persistence;
@@ -10,6 +11,7 @@ using Infrastructure.PlayBilling;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sareed_novels_backend.Controllers;
@@ -100,6 +102,50 @@ public class PlayBillingHttpTests(SardApiFactory api) : IClassFixture<SardApiFac
 
         Assert.Equal(HttpStatusCode.Unauthorized, catalog.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, purchase.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_suspension_refuses_the_play_endpoints_and_the_purchase_waits_until_it_is_lifted()
+    {
+        // Moderation (#10) meets Play Billing: a suspension refuses every token while it lasts, here as everywhere.
+        await using var factory = WithBilling();
+        var client = Client(factory);
+        var (token, userId) = await Register(client);
+        var bought = google.Buy(userId, "points_1000");
+        var body = new { productId = "points_1000", purchaseToken = bought.Token, orderId = bought.OrderId };
+        Assert.Equal(HttpStatusCode.OK, (await Send(client, HttpMethod.Get, "/api/wallet/play-products", token)).StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            Assert.NotNull(await scope.ServiceProvider.GetRequiredService<IAccountSuspensionService>().SuspendAsync(userId, DateTime.UtcNow.AddDays(7)));
+        }
+
+        // The session from before, and a token issued after the suspension's cut-off, which only the suspension refuses.
+        var later = TokenFactory.Write(userId, DateTime.UtcNow.AddMinutes(1), DateTime.UtcNow.AddDays(59),
+            factory.Services.GetRequiredService<IConfiguration>()["Jwt:Key"]!);
+        foreach (var session in new[] { token, later })
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, (await Send(client, HttpMethod.Get, "/api/wallet/play-products", session)).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await Purchase(client, session, body)).StatusCode);
+        }
+
+        // Nothing reached Google or the database, so the purchase is still unconsumed on Google Play.
+        Assert.Empty(google.Requests);
+        await using (var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlServer(api.ConnectionString).Options))
+        {
+            Assert.False(await db.PlayPurchases.AnyAsync(p => p.PurchaseToken == bought.Token));
+            Assert.False(await db.UserWallets.AnyAsync(w => w.UserId == userId && w.CurrentBalance != 0));
+        }
+
+        // Lifted, the same token works again and the app's retry credits the purchase.
+        using (var scope = factory.Services.CreateScope())
+        {
+            Assert.True(await scope.ServiceProvider.GetRequiredService<IAccountSuspensionService>().LiftAsync(userId));
+        }
+        var response = await Purchase(client, later, body);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var credited = await Json(response);
+        Assert.Equal((1000, 1000m), (credited.GetProperty("pointsAdded").GetInt32(), credited.GetProperty("currentBalance").GetDecimal()));
     }
 
     [Fact]
