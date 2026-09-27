@@ -180,6 +180,7 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped<IJWTService, JwtService>();
+        services.AddScoped<IGoogleIdTokenValidator, GoogleIdTokenValidator>();
 
         // Sign-out everywhere: checked on every authenticated request (AccessTokens.RejectRevokedAsync).
         services.AddSingleton<TokenCutoffCache>();

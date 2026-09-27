@@ -31,6 +31,9 @@ public sealed class SardApiFactory : WebApplicationFactory<Program>, IAsyncLifet
 
     public FakeEmailSender Emails { get; } = new();
 
+    /// <summary>Stands in for Google's ID token validation (<see cref="GoogleSignInTests"/>).</summary>
+    public FakeGoogleIdTokens GoogleTokens { get; } = new();
+
     /// <summary>The file bucket behind novel covers (other uploads go to <see cref="FakeFileUploadService"/>).</summary>
     public InMemoryObjectStorage Storage { get; } = new("https://files.test");
 
@@ -51,6 +54,8 @@ public sealed class SardApiFactory : WebApplicationFactory<Program>, IAsyncLifet
         {
             services.RemoveAll<IEmailSender>();
             services.AddSingleton<IEmailSender>(Emails);
+            services.RemoveAll<IGoogleIdTokenValidator>();
+            services.AddSingleton<IGoogleIdTokenValidator>(GoogleTokens);
             services.RemoveAll<IFileUploadService>();
             services.AddSingleton<IFileUploadService, FakeFileUploadService>();
             services.RemoveAll<IObjectStorage>();
