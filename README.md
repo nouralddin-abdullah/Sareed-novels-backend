@@ -64,3 +64,135 @@ How delivery works: creating a notification also queues a push for each of the r
 exponential backoff (honoring `Retry-After`) up to 8 attempts, removes device tokens FCM reports as unregistered or
 invalid, and skips groups the user switched off (`/api/notifications/preferences`). Finished rows are deleted after
 3 days.
+
+### Google Play point packs (Play Billing)
+
+The Android app (`com.sardnovels.app`) sells point packs as Google Play consumable in-app products. The server
+verifies every purchase with the Google Play Developer API, credits it once, consumes it on Google Play, and takes
+the points back if Google later voids it (refund, chargeback). The website's manual recharge is unchanged.
+
+| Environment variable | Required | Value |
+|---|---|---|
+| `PlayBilling__ServiceAccountJson` | yes | The whole content of the Google Cloud service account's JSON key file, as is or base64-encoded. A secret. |
+| `PlayBilling__PackageName` | no | The app's package name. Default `com.sardnovels.app`. |
+| `PlayBilling__Products__<productId>` | no | Points a product credits, e.g. `PlayBilling__Products__points_1000=1000`. `0` takes a product out. |
+| `PlayBilling__AllowTestPurchases` | no | `true` credits purchases made by Play Console license testers (not charged). Default `false`. |
+
+- The default catalog is in `Sareed-novels-backend/appsettings.json`: `points_500`→500, `points_1000`→1000,
+  `points_2500`→2500, `points_5000`→5000. The app reads it from the API, so point amounts change without an app
+  release (restart the site after changing them). Prices are never on the server: the app shows Google Play's.
+- Only change the points of a product that is live in Play Console knowingly (they apply to purchases verified from
+  then on), and never remove one that is still active there: a purchase of an unknown product is refused and Google
+  refunds it after three days. Deactivate it in Play Console first, wait a few days, then remove it here.
+- `AllowTestPurchases=true` gives license testers real points for free. Turn it on only while testing, then off.
+- Setting them on MonsterASP: Control panel → Websites → Manage website → Scripting → Environment Variables, then
+  restart the site. Base64 avoids trouble with the quotes and `\n` sequences in the key:
+
+  ```bash
+  base64 -w0 play-service-account.json                                             # Linux
+  [Convert]::ToBase64String([IO.File]::ReadAllBytes("play-service-account.json"))   # PowerShell
+  ```
+
+- At startup the API logs either `Google Play billing is on for com.sardnovels.app: points_500=500, ...` or
+  `Google Play billing is disabled: <reason>`. While it is disabled, `GET /api/wallet/play-products` answers
+  `"enabled": false` with no products, and purchases answer 503 `BillingUnavailable`.
+
+#### Setting it up (owner)
+
+1. **Products.** Play Console → the Sard app → Monetize with Play → Products → One-time products (called "In-app
+   products" in older consoles) → Create one for each pack: product id `points_500`, `points_1000`, `points_2500`,
+   `points_5000` (the ids must match the catalog exactly), an Arabic name and description, a price per country, then
+   activate it. Leave the default (backwards-compatible) purchase option, and leave multi-quantity purchases off: the
+   server refuses a purchase of more than one pack. Google keeps 15% of the first $1M a year, so price the packs with
+   that in mind. Products can only be created once a build with Play Billing has been uploaded (internal testing is
+   enough).
+2. **Service account.** In the [Google Cloud console](https://console.cloud.google.com/), in any project you own:
+   APIs & Services → Library → "Google Play Android Developer API" → Enable. Then IAM & Admin → Service Accounts →
+   Create service account (e.g. `sard-play-billing`; it needs no Cloud roles) → open it → Keys → Add key → Create new
+   key → JSON. Keep the downloaded file secret; delete it once it is in the environment variable.
+3. **Access to the app.** Play Console → Users and permissions → Invite new users → the service account's email
+   (`...@...iam.gserviceaccount.com`) → App permissions → Add app → Sard, with **View app information (read-only)**,
+   **View financial data, orders, and cancellation survey responses** (to verify purchases and read voided ones) and
+   **Manage orders and subscriptions** (to consume them) → Apply → Invite user (a service account doesn't have to
+   accept). New permissions can take up to a day or two to reach the API; until then Google answers 401/403 and
+   purchases answer `BillingUnavailable` (logged as an error).
+4. **Environment variables** as above, restart, and check the startup log line.
+5. **Test** with a license tester (Play Console → Settings → License testing) and `AllowTestPurchases=true`, then set
+   it back to `false`.
+
+#### The mobile app's side
+
+Everything needs the user's `Authorization: Bearer <token>`. The user always comes from the token, never the body.
+
+`GET /api/wallet/play-products`
+
+```json
+{
+  "enabled": true,
+  "message": null,
+  "obfuscatedAccountId": "5f1c...64 lowercase hex characters",
+  "products": [ { "productId": "points_500", "points": 500 }, { "productId": "points_1000", "points": 1000 } ]
+}
+```
+
+With `"enabled": false` (and an Arabic `message`) the app must not offer any pack. Prices come from Google Play
+(`ProductDetails.price`), never from the API.
+
+Buying (Flutter `in_app_purchase`, Android):
+
+1. Query the product ids from the catalog with `InAppPurchase.instance.queryProductDetails`.
+2. Buy with `buyConsumable(purchaseParam: PurchaseParam(productDetails: p, applicationUserName: obfuscatedAccountId),
+   autoConsume: false)`. `applicationUserName` is what Play records as the purchase's `obfuscatedAccountId`; the
+   server refuses a purchase whose account id isn't the caller's. The value is the catalog's `obfuscatedAccountId`:
+   the lowercase hex SHA-256 of the UTF-8 bytes of the user's id (the token's `nameidentifier` claim), 64 characters.
+3. When the purchase stream reports `PurchaseStatus.purchased` (or `restored`), send
+
+   `POST /api/wallet/play-purchase` with `{ "productId": "points_1000", "purchaseToken": "<purchase.verificationData.serverVerificationData>", "orderId": "<purchase.purchaseID>" }`
+
+   and on 200 show `{ "pointsAdded": 1000, "currentBalance": 1450 }`.
+4. **Never consume or acknowledge in the app**: no `autoConsume`, no `consumePurchase`, and no `completePurchase` on
+   Android (it acknowledges). The server consumes right after crediting. If the app acknowledged or consumed a
+   purchase that then never reached the server, Google would keep the money while the user has no points; left
+   alone, a purchase the server never credited is refunded by Google after three days.
+5. Sending the same purchase again is always safe: the same user gets the same `pointsAdded` (and the current
+   balance), and it is never credited twice. So retry on network errors and 503, and on every app start call
+   `restorePurchases()` and send any point pack it reports: those are purchases the server hasn't consumed yet.
+
+Errors are `{ "code": "...", "message": "<Arabic, for the user>" }`. Act on `code`, show `message`:
+
+| HTTP | `code` | Meaning | The app |
+|---|---|---|---|
+| 400 | `InvalidRequest` | `productId` or `purchaseToken` missing or malformed | bug: report it |
+| 400 | `UnknownProduct` | not a pack in the catalog | refresh the catalog |
+| 400 | `PurchaseNotFound` | Google doesn't know this token for this app and product | stop retrying |
+| 400 | `ProductMismatch` | the token is for another product | stop retrying |
+| 400 | `UnsupportedQuantity` | more than one pack in one purchase | stop; Google refunds it |
+| 403 | `AccountMismatch` | the purchase's `obfuscatedAccountId` isn't this user's (or is missing) | stop retrying |
+| 403 | `TestPurchaseNotAllowed` | a license-tester purchase while those are off | stop retrying |
+| 409 | `PurchasePending` | payment not complete yet (Play's pending state) | send again once it is `purchased` |
+| 409 | `PurchaseCanceled` | canceled | stop retrying |
+| 409 | `PurchaseVoided` | refunded or voided by Google | stop retrying |
+| 409 | `AlreadyUsedByAnotherUser` | this purchase was credited to another account | stop retrying |
+| 503 | `BillingUnavailable` | the server isn't set up for Play Billing (or Google refuses its key) | keep the purchase, retry later |
+| 503 | `VerificationUnavailable` | Google Play couldn't be reached | keep the purchase, retry later |
+
+#### Refunds and voided purchases
+
+When Google voids a purchase (refund, chargeback, revocation), its points are taken back even if that takes the
+balance below zero (ledger type `PlayRefund`). A negative balance blocks all spending (gifts, early-access
+subscriptions, withdrawals) until purchases or recharges bring it back up; points the user already gave away (a
+gift's author) are not clawed back. A purchase Google voids before anyone claims it is recorded so it can never be
+credited.
+
+#### How it works
+
+- `PlayPurchases` has one row per purchase token (unique index). The row, the wallet credit (one SQL `UPDATE`) and the
+  `PlayPurchase` ledger entry commit together, so concurrent or repeated requests credit a token once.
+- Consuming: right after crediting. If that fails, the purchase stays credited and the background worker
+  (`PlayBillingWorker`, every 5 minutes) retries with backoff (5 minutes, doubling, at most hourly), from a row that
+  survives restarts. A failure it can explain is settled: already consumed counts as done, canceled takes the points
+  back. From two days on every failure is logged as an error, since Google refunds an unconsumed purchase after three.
+- Voids: the worker reads Google's Voided Purchases API every hour from a cursor stored in `PlaySyncCursors` (with a
+  day of overlap; Google keeps 30 days) and applies each once. Real-time developer notifications (Pub/Sub) aren't
+  needed; if they are added later, their voided-purchase notification calls the same `ApplyVoidAsync`.
+- The app pool can idle or recycle on shared hosting: the worker picks up where it left off at the next start.

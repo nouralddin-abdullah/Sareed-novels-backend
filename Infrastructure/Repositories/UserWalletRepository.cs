@@ -92,6 +92,22 @@ public class UserWalletRepository(ApplicationDbContext dbContext) : IUserWalletR
         return updated == 0 ? null : await CurrentBalanceAsync(userId);
     }
 
+    public async Task<decimal> DebitAllowingNegativeAsync(string userId, decimal amount)
+    {
+        var updated = await dbContext.UserWallets
+            .Where(w => w.UserId == userId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(w => w.CurrentBalance, w => w.CurrentBalance - amount)
+                .SetProperty(w => w.UpdatedAt, DateTime.UtcNow));
+
+        if (updated == 0)
+        {
+            throw new InvalidOperationException($"No wallet for user {userId}");
+        }
+
+        return await CurrentBalanceAsync(userId);
+    }
+
     // Inside the caller's transaction our UPDATE still holds the row lock, so this reads the balance we produced.
     private Task<decimal> CurrentBalanceAsync(string userId) =>
         dbContext.UserWallets.AsNoTracking()

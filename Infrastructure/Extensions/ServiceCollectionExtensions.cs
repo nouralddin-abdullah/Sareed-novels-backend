@@ -18,6 +18,7 @@ using Microsoft.Extensions.Logging;
 using Infrastructure.BackgroundJobs;
 using Infrastructure.Services.Search;
 using Infrastructure.Services.Covers;
+using Infrastructure.PlayBilling;
 
 namespace Infrastructure.Extensions;
 
@@ -98,6 +99,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPointTransactionRepository, PointTransactionRepository>();
         services.AddScoped<IPointCalculationService, PointCalculationService>();
         services.AddScoped<IWalletService, WalletService>();
+        services.AddPlayBilling(configuration); // point packs bought in the Android app (Infrastructure/PlayBilling)
         
         // Gift System
         services.AddScoped<IGiftRepository, GiftRepository>();
