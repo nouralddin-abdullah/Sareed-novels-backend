@@ -38,6 +38,20 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
         return true;
     }
 
+    public async Task<bool> RemoveCommentAsync(Guid commentId)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        // A comment its author deleted (soft) goes too, with the replies still under it.
+        if (!await dbContext.Comments.IgnoreQueryFilters().AnyAsync(c => c.Id == commentId))
+        {
+            return false;
+        }
+
+        await SocialCounters.DeleteCommentTree(dbContext, commentId);
+        await transaction.CommitAsync();
+        return true;
+    }
+
     public async Task<(IEnumerable<Comments>, int)> GetChapterComments(Guid chapterId, int pageNumber, int pageSize, string sorting = "recent", string? viewerId = null)
     {
         IQueryable<Comments> query = dbContext.Comments

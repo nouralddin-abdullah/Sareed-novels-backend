@@ -87,7 +87,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITransactionManager, TransactionManager>();
 
         // Moderation: reports, blocks, suspensions.
+        services.AddScoped<IReportsRepository, ReportsRepository>();
         services.AddScoped<IUserBlocksRepository, UserBlocksRepository>();
+        services.AddScoped<IAccountSuspensionService, AccountSuspensionService>();
         
         // Wallet System
         services.AddScoped<IUserWalletRepository, UserWalletRepository>();

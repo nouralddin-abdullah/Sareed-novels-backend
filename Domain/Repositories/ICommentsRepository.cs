@@ -26,6 +26,12 @@ public interface ICommentsRepository
     Task<int> CountCommentsAheadAsync(Comments comment, string? viewerId = null);
     /// <summary>Soft-deletes the comment and lowers the counters CreateComment raised, in one transaction.</summary>
     Task<bool> DeleteComment(Guid commentId);
+    /// <summary>
+    /// Moderation: hard-deletes the comment with every reply below it, their likes and the notifications about them,
+    /// and lowers the counters they held (their authors', and the post's, paragraph's or chapter's for a visible
+    /// top-level comment), in one transaction. False when there was no such comment.
+    /// </summary>
+    Task<bool> RemoveCommentAsync(Guid commentId);
     Task<int> GetCommentCountForChapter(Guid chapterId);
     /// <summary>
     /// Visible replies per comment, for a page of comments, in one grouped query; replies by users the viewer blocked

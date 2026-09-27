@@ -171,5 +171,19 @@ namespace Infrastructure.Repositories
 
             return userId == null ? null : await userManager.FindByIdAsync(userId);
         }
+
+        public async Task<Dictionary<string, User>> GetByIdsAsync(IReadOnlyCollection<string> userIds, CancellationToken cancellationToken = default)
+        {
+            var ids = userIds.Distinct().ToList();
+            if (ids.Count == 0)
+            {
+                return [];
+            }
+
+            return await dbContext.Users
+                .AsNoTracking()
+                .Where(u => ids.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, StringComparer.OrdinalIgnoreCase, cancellationToken);
+        }
     }
 }

@@ -1,13 +1,14 @@
 ﻿using Application.Services;
 using Domain.Entities;
 using Domain.Exceptions;
+using Domain.Moderation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Users.Commands.UserLogin;
 
-public class UserLoginCommandHandler(UserManager<User> userManager, ILogger<UserLoginCommandHandler> logger, IJWTService jWTService) : IRequestHandler<UserLoginCommand, UserLoginResult>
+public class UserLoginCommandHandler(UserManager<User> userManager, ILogger<UserLoginCommandHandler> logger, IJWTService jWTService, TimeProvider time) : IRequestHandler<UserLoginCommand, UserLoginResult>
 {
     public async Task<UserLoginResult> Handle(UserLoginCommand request, CancellationToken cancellationToken)
     {
@@ -37,6 +38,13 @@ public class UserLoginCommandHandler(UserManager<User> userManager, ILogger<User
 
         if (await userManager.GetAccessFailedCountAsync(user) > 0)
             await userManager.ResetAccessFailedCountAsync(user);
+
+        // A moderator suspended the account. Checked after the password, so only its owner learns of it.
+        if (Suspension.IsActive(user.SuspendedUntil, time.GetUtcNow().UtcDateTime))
+        {
+            logger.LogInformation("Sign-in refused: user {UserId} is suspended", user.Id);
+            throw new AccountSuspendedException(user.SuspendedUntil!.Value);
+        }
 
         var accessToken = jWTService.GenerateAccessToken(user);
         var expiresAt = DateTime.UtcNow.AddDays(60);
