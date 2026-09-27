@@ -8,6 +8,9 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Google.Apis.Auth;
+using System.Buffers.Binary;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Application.Users.Commands.GoogleLogin
 {
@@ -27,109 +30,138 @@ namespace Application.Users.Commands.GoogleLogin
 
         public async Task<UserLoginResult> Handle(GoogleLoginCommand request, CancellationToken cancellationToken)
         {
+            GoogleJsonWebSignature.Payload payload;
             try
             {
-                var payload = await googleTokens.ValidateAsync(request.IdToken);
-
-                // Accounts are matched by email, so an unverified Google email must not sign in to (or be linked
-                // with) the Sard account that uses that address.
-                if (!payload.EmailVerified)
-                {
-                    logger.LogWarning("Google sign-in refused: email not verified by Google");
-                    throw new ForbidException("Your Google account's email address is not verified");
-                }
-
-                logger.LogInformation("Google authentication successful");
-
-                // Find or create user
-                var user = await userManager.FindByEmailAsync(payload.Email);
-                var passwordReset = false;
-
-                // A moderator suspended the account: no sign-in, and nothing about it changes.
-                if (user != null && Suspension.IsActive(user.SuspendedUntil, time.GetUtcNow().UtcDateTime))
-                {
-                    logger.LogInformation("Google sign-in refused: user {UserId} is suspended", user.Id);
-                    throw new AccountSuspendedException(user.SuspendedUntil!.Value);
-                }
-
-                if (user == null)
-                {
-                    // Create new user from Google account. The handle is public (/profile/{userName}), so it is never
-                    // derived from the email address, and neither is the display name.
-                    var randomNumber = new Random().Next(100000, 999999);
-                    var userName = $"sarduser{randomNumber}";
-                    user = new User
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        UserName = userName,
-                        Email = payload.Email,
-                        DisplayName = string.IsNullOrWhiteSpace(payload.Name) ? userName : payload.Name,
-                        EmailConfirmed = payload.EmailVerified,
-                        ProfilePhoto = payload.Picture,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    var createResult = await userManager.CreateAsync(user);
-                    if (!createResult.Succeeded)
-                    {
-                        var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
-                        logger.LogError("Failed to create Google user: {errors}", errors);
-                        throw new InvalidOperationException($"Failed to create user: {errors}");
-                    }
-
-                    // Add Google login
-                    var addLoginResult = await userManager.AddLoginAsync(user, new UserLoginInfo(GoogleProvider, payload.Subject, GoogleProvider));
-                    if (!addLoginResult.Succeeded)
-                    {
-                        logger.LogWarning("Failed to add Google login for user {userId}", user.Id);
-                    }
-
-                    logger.LogInformation("Created new user from Google account: {userId}", user.Id);
-                }
-                else
-                {
-                    if (!user.EmailConfirmed)
-                    {
-                        passwordReset = await HandOverToEmailOwnerAsync(user, payload.Subject, cancellationToken);
-                    }
-
-                    // Check if Google login already exists
-                    var existingLogin = await userManager.FindByLoginAsync(GoogleProvider, payload.Subject);
-                    if (existingLogin == null)
-                    {
-                        // Add Google login to existing account
-                        var addLoginResult = await userManager.AddLoginAsync(user, new UserLoginInfo(GoogleProvider, payload.Subject, GoogleProvider));
-                        if (!addLoginResult.Succeeded)
-                        {
-                            logger.LogWarning("Failed to add Google login for existing user {userId}", user.Id);
-                        }
-                    }
-
-                    logger.LogInformation("Google login successful for existing user: {userId}", user.Id);
-                }
-
-
-                // Generate JWT token
-                var accessToken = jwtService.GenerateAccessToken(user);
-                var expiresAt = DateTime.UtcNow.AddDays(60);
-
-                return new UserLoginResult(accessToken, expiresAt, passwordReset);
+                payload = await googleTokens.ValidateAsync(request.IdToken);
             }
             catch (InvalidJwtException ex)
             {
-                logger.LogError(ex, "Invalid Google ID token");
-                throw new ForbidException("Invalid Google token");
+                logger.LogWarning(ex, "Invalid Google ID token");
+                throw new ForbidException(InvalidTokenMessage, InvalidTokenCode);
             }
-            catch (ForbidException)
+
+            // Accounts are matched by email, so an unverified Google email must not sign in to (or be linked
+            // with) the Sard account that uses that address.
+            if (!payload.EmailVerified)
             {
-                throw;
+                logger.LogWarning("Google sign-in refused: email not verified by Google");
+                throw new ForbidException(EmailNotVerifiedMessage, EmailNotVerifiedCode);
             }
-            catch (Exception ex)
+
+            logger.LogInformation("Google authentication successful");
+
+            // Find or create user
+            var user = await userManager.FindByEmailAsync(payload.Email);
+            var passwordReset = false;
+
+            // A moderator suspended the account: no sign-in, and nothing about it changes.
+            if (user != null && Suspension.IsActive(user.SuspendedUntil, time.GetUtcNow().UtcDateTime))
             {
-                logger.LogError(ex, "Google authentication failed");
-                throw new InvalidOperationException("Google authentication failed");
+                logger.LogInformation("Google sign-in refused: user {UserId} is suspended", user.Id);
+                throw new AccountSuspendedException(user.SuspendedUntil!.Value);
             }
+
+            if (user == null)
+            {
+                user = await CreateUserAsync(payload);
+
+                // Add Google login
+                var addLoginResult = await userManager.AddLoginAsync(user, new UserLoginInfo(GoogleProvider, payload.Subject, GoogleProvider));
+                if (!addLoginResult.Succeeded)
+                {
+                    logger.LogWarning("Failed to add Google login for user {userId}", user.Id);
+                }
+
+                logger.LogInformation("Created new user from Google account: {userId}", user.Id);
+            }
+            else
+            {
+                if (!user.EmailConfirmed)
+                {
+                    passwordReset = await HandOverToEmailOwnerAsync(user, payload.Subject, cancellationToken);
+                }
+
+                // Check if Google login already exists
+                var existingLogin = await userManager.FindByLoginAsync(GoogleProvider, payload.Subject);
+                if (existingLogin == null)
+                {
+                    // Add Google login to existing account
+                    var addLoginResult = await userManager.AddLoginAsync(user, new UserLoginInfo(GoogleProvider, payload.Subject, GoogleProvider));
+                    if (!addLoginResult.Succeeded)
+                    {
+                        logger.LogWarning("Failed to add Google login for existing user {userId}", user.Id);
+                    }
+                }
+
+                logger.LogInformation("Google login successful for existing user: {userId}", user.Id);
+            }
+
+
+            // Generate JWT token
+            var accessToken = jwtService.GenerateAccessToken(user);
+            var expiresAt = DateTime.UtcNow.AddDays(60);
+
+            return new UserLoginResult(accessToken, expiresAt, passwordReset);
         }
+
+        /// <summary>
+        /// A new account for a Google user. The handle is public (/profile/{userName}), so it never comes from the email
+        /// address, and neither does the display name: it is "sarduser" and six digits (<see cref="CandidateUserName"/>),
+        /// drawn again when another account holds it.
+        /// </summary>
+        private async Task<User> CreateUserAsync(GoogleJsonWebSignature.Payload payload)
+        {
+            IdentityResult result;
+            var attempt = 0;
+            do
+            {
+                var userName = CandidateUserName(payload.Subject, attempt);
+                var user = new User
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    UserName = userName,
+                    Email = payload.Email,
+                    DisplayName = string.IsNullOrWhiteSpace(payload.Name) ? userName : payload.Name,
+                    EmailConfirmed = payload.EmailVerified,
+                    ProfilePhoto = payload.Picture,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                result = await userManager.CreateAsync(user);
+                if (result.Succeeded)
+                {
+                    return user;
+                }
+            } while (++attempt < UserNameAttempts
+                     && result.Errors.All(e => e.Code == nameof(IdentityErrorDescriber.DuplicateUserName)));
+
+            // Every handle tried was taken, or the account was refused for another reason (the address was just taken
+            // by a sign-in running at the same time): an answer, not a server error.
+            logger.LogError("Failed to create Google user after {Attempts} attempt(s): {Errors}",
+                attempt, string.Join(", ", result.Errors.Select(e => e.Code)));
+            throw new BadRequestException(SignInFailedMessage, SignInFailedCode);
+        }
+
+        /// <summary>How many handles a new Google user tries before sign-in gives up.</summary>
+        public const int UserNameAttempts = 5;
+
+        /// <summary>
+        /// The handle a new Google account tries on its <paramref name="attempt"/>th try (from 0): "sarduser" and six
+        /// digits from a hash of Google's id for the person, so each try differs and a test can predict them.
+        /// </summary>
+        public static string CandidateUserName(string googleSubject, int attempt)
+        {
+            var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{googleSubject}:{attempt}"));
+            return $"sarduser{BinaryPrimitives.ReadUInt32BigEndian(hash) % 900_000 + 100_000}";
+        }
+
+        public const string InvalidTokenCode = "GoogleTokenInvalid";
+        public const string InvalidTokenMessage = "تعذّر التحقق من حساب Google. حاول تسجيل الدخول مرة أخرى.";
+        public const string EmailNotVerifiedCode = "GoogleEmailNotVerified";
+        public const string EmailNotVerifiedMessage = "لم تؤكّد Google البريد الإلكتروني لهذا الحساب، فلا يمكن تسجيل الدخول به. أكّد بريدك لدى Google ثم حاول مرة أخرى.";
+        public const string SignInFailedCode = "GoogleSignInFailed";
+        public const string SignInFailedMessage = "تعذّر إنشاء حسابك بحساب Google الآن. حاول مرة أخرى.";
 
         /// <summary>
         /// The account's email address was never verified: sign-up doesn't check it, so whoever registered it may not

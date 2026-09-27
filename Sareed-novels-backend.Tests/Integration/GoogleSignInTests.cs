@@ -57,11 +57,12 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
 
     private static string NewName() => "g" + Guid.NewGuid().ToString("N")[..10];
 
+    /// <summary>The sign-in's answer: the token and flags, or the {code, message} of a refusal.</summary>
     private async Task<JsonElement> GoogleLogin(string idToken, HttpStatusCode expected = HttpStatusCode.OK)
     {
         var response = await api.ClientFrom(NewIp()).PostAsJsonAsync("/api/identity/google-login", new { idToken });
         Assert.Equal(expected, response.StatusCode);
-        return expected == HttpStatusCode.OK ? await response.Content.ReadFromJsonAsync<JsonElement>() : default;
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
 
     private async Task<string> Register(string userName, string email, string password)
@@ -231,7 +232,9 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
     public async Task An_address_Google_has_not_verified_is_refused()
     {
         var email = NewEmail();
-        await GoogleLogin(api.GoogleTokens.Issue(email, emailVerified: false), HttpStatusCode.Forbidden);
+        var refused = await GoogleLogin(api.GoogleTokens.Issue(email, emailVerified: false), HttpStatusCode.Forbidden);
+        Assert.Equal(GoogleLoginCommandHandler.EmailNotVerifiedCode, refused.GetProperty("code").GetString());
+        Assert.Equal(GoogleLoginCommandHandler.EmailNotVerifiedMessage, refused.GetProperty("message").GetString());
 
         var unverifiedForExisting = NewEmail();
         await Register(NewName(), unverifiedForExisting, AttackersPassword);
@@ -249,6 +252,63 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
     [Fact]
     public async Task A_token_Google_did_not_issue_is_refused()
     {
-        await GoogleLogin("forged-id-token", HttpStatusCode.Forbidden);
+        var refused = await GoogleLogin("forged-id-token", HttpStatusCode.Forbidden);
+
+        Assert.Equal(GoogleLoginCommandHandler.InvalidTokenCode, refused.GetProperty("code").GetString());
+        Assert.Equal(GoogleLoginCommandHandler.InvalidTokenMessage, refused.GetProperty("message").GetString());
+    }
+
+    /// <summary>A user holding <paramref name="userName"/>, created directly.</summary>
+    private async Task Occupy(string userName)
+    {
+        using var scope = api.Services.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+        var holder = new User { UserName = userName, Email = NewEmail(), DisplayName = userName, CreatedAt = DateTime.UtcNow };
+        Assert.True((await users.CreateAsync(holder)).Succeeded);
+    }
+
+    [Fact]
+    public async Task A_new_Google_user_whose_handle_is_taken_gets_the_next_one()
+    {
+        // Used to be an InvalidOperationException, answered 500 "Something went wrong".
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+        var first = GoogleLoginCommandHandler.CandidateUserName(subject, 0);
+        await Occupy(first);
+
+        var result = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), subject: subject));
+
+        var profile = await (await MyProfile(result.GetProperty("accessToken").GetString()!)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(GoogleLoginCommandHandler.CandidateUserName(subject, 1), profile.GetProperty("userName").GetString());
+        Assert.NotEqual(first, profile.GetProperty("userName").GetString());
+    }
+
+    [Fact]
+    public async Task When_every_handle_it_tries_is_taken_sign_in_is_refused_with_a_code_not_a_server_error()
+    {
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+        for (var attempt = 0; attempt < GoogleLoginCommandHandler.UserNameAttempts; attempt++)
+        {
+            await Occupy(GoogleLoginCommandHandler.CandidateUserName(subject, attempt));
+        }
+        var email = NewEmail();
+
+        var refused = await GoogleLogin(api.GoogleTokens.Issue(email, subject: subject), HttpStatusCode.BadRequest);
+
+        Assert.Equal(GoogleLoginCommandHandler.SignInFailedCode, refused.GetProperty("code").GetString());
+        Assert.Matches(@"\p{IsArabic}", refused.GetProperty("message").GetString()!);
+        using var scope = api.Services.CreateScope();
+        Assert.Null(await scope.ServiceProvider.GetRequiredService<UserManager<User>>().FindByEmailAsync(email));
+    }
+
+    [Fact]
+    public async Task Candidate_handles_are_six_digit_sard_handles_that_differ_per_attempt()
+    {
+        var candidates = Enumerable.Range(0, GoogleLoginCommandHandler.UserNameAttempts)
+            .Select(attempt => GoogleLoginCommandHandler.CandidateUserName("same-subject", attempt))
+            .ToList();
+
+        Assert.All(candidates, name => Assert.Matches("^sarduser[1-9][0-9]{5}$", name));
+        Assert.Equal(candidates.Count, candidates.Distinct().Count());
+        Assert.Equal(candidates[0], GoogleLoginCommandHandler.CandidateUserName("same-subject", 0));
     }
 }
