@@ -6,6 +6,7 @@ using Domain.Repositories;
 using Infrastructure.Authorization;
 using Infrastructure.Configuration;
 using Infrastructure.Persistence;
+using Infrastructure.Push;
 using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Microsoft.AspNetCore.Identity;
@@ -79,6 +80,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INovelEntityRepository, NovelEntityRepository>();
         services.AddScoped<INotificationsRepository, NotificationsRepository>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddPushNotifications(configuration);
         services.AddScoped<ITransactionManager, TransactionManager>();
         
         // Wallet System
