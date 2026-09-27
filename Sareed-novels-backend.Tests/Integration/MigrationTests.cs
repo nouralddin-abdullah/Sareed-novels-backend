@@ -45,7 +45,8 @@ public class DataFixMigrationTests(EmptySqlServerDatabase database) : IClassFixt
         var changedSince = Seed.Novel(author, "الجريمة");
         changedSince.Id = Guid.Parse("8f4f8f8f-a6ba-45ce-92d1-8170b2136ba1");
         changedSince.CoverImageUrl = "https://example.test/new-cover.png";
-        db.AddRange(author, stale, changedSince);
+        await Seed.InsertUserRowAsync(db, author);
+        db.AddRange(stale, changedSince);
         await db.SaveChangesAsync();
 
         await migrator.MigrateAsync();

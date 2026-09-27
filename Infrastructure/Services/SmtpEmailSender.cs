@@ -109,6 +109,11 @@ public class SmtpEmailSender : IEmailSender
                 subject = "Reset Your Password - Sard Novels";
                 break;
 
+            case "password-removed":
+                htmlContent = EmailTemplates.GetPasswordRemovedTemplate();
+                subject = "تمت إزالة كلمة المرور من حسابك في سرد";
+                break;
+
             default:
                 _logger.LogError("Unknown template ID: {TemplateId}", templateId);
                 throw new ArgumentException($"Unknown template ID: {templateId}");

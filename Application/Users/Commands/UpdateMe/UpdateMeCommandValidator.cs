@@ -13,6 +13,10 @@ public class UpdateMeCommandValidator : AbstractValidator<UpdateMeCommand>
             .When(dto => dto.UserName != null)
             .WithMessage("A user should have valid user name");
 
+        RuleFor(dto => dto.UserName)
+            .Must(UserNameRules.HasNoAtSign)
+            .WithMessage(UserNameRules.NoAtSignMessage);
+
         RuleFor(dto => dto.DisplayName)
            .NotEmpty()
            .Length(3, 20)

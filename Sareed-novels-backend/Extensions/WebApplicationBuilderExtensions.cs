@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Threading.RateLimiting;
+using Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -87,6 +88,8 @@ public static class WebApplicationBuilderExtensions
                 ValidAudience = builder.Configuration["Jwt:Audience"],
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
             };
+            // Tokens issued before their user's sign-out-everywhere cut-off are refused (ITokenRevocationService).
+            options.Events = new JwtBearerEvents { OnTokenValidated = AccessTokens.RejectRevokedAsync };
         });
 
         // Per-client-IP limits on the anonymous account endpoints (password guessing, sign-up spam, email bombing).
