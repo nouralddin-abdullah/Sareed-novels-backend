@@ -90,7 +90,8 @@ public class SendGiftCommandHandler(
                     fromTransactionType: TransactionType.GiftSent,
                     toTransactionType: TransactionType.GiftReceived,
                     fromDescription: $"Sent {request.Count}x {gift.Name} to {novel.Title}",
-                    toDescription: $"Received {request.Count}x {gift.Name} from {currentUser.UserName} on {novel.Title}"
+                    // The author's wallet names the sender by display name: user names used to be email addresses.
+                    toDescription: $"Received {request.Count}x {gift.Name} from {currentUser.DisplayName} on {novel.Title}"
                 );
 
                 var record = new GiftTransaction

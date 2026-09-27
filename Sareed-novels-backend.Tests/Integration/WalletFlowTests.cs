@@ -233,6 +233,30 @@ public class WalletFlowTests(SqlServerDatabase database) : IClassFixture<SqlServ
     }
 
     [Fact]
+    public async Task The_authors_wallet_names_the_sender_by_display_name_not_user_name()
+    {
+        // User names used to be email addresses, and the author reads this description in their wallet.
+        var sender = Seed.User(displayName: "قارئ كريم", userName: "reader" + Seed.Marker());
+        var author = Seed.User();
+        await using (var db = database.CreateContext())
+        {
+            db.Users.AddRange(sender, author);
+            db.UserWallets.Add(new UserWallet { Id = Guid.NewGuid(), UserId = sender.Id, CurrentBalance = 1000m });
+            await db.SaveChangesAsync();
+        }
+        var (gift, novel) = await SeedGiftAndNovel(author, cost: 100);
+
+        await using var request = new Request(database);
+        var result = await SendGift(request, sender).Handle(
+            new SendGiftCommand { GiftId = gift.Id, NovelId = novel.Id, Count = 2 }, CancellationToken.None);
+
+        Assert.True(result.Success);
+        var received = Assert.Single(await Ledger(author.Id));
+        Assert.Equal($"Received 2x {gift.Name} from قارئ كريم on {novel.Title}", received.Description);
+        Assert.DoesNotContain(sender.UserName!, received.Description);
+    }
+
+    [Fact]
     public async Task A_failed_gift_record_rolls_the_payment_back()
     {
         var users = await SeedUsers(1000m, 0m);

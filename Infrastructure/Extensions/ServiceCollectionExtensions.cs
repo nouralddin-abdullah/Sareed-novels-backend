@@ -38,6 +38,9 @@ public static class ServiceCollectionExtensions
         services.AddIdentity<User, IdentityRole>(options =>
         {
             options.User.RequireUniqueEmail = true;
+            // Identity's default set without "@": user names are public, and email addresses used as user names were
+            // published that way (validators give the Arabic message; this is the backstop).
+            options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._+";
 
             // Password options - Make them more user-friendly
             options.Password.RequireDigit = false;              // Don't require numbers

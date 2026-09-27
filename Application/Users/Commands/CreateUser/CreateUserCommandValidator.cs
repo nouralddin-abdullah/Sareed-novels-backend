@@ -12,6 +12,10 @@ public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
             .NotEmpty()
             .WithMessage("A user should have valid user name");
 
+        RuleFor(dto => dto.UserName)
+            .Must(UserNameRules.HasNoAtSign)
+            .WithMessage(UserNameRules.NoAtSignMessage);
+
         RuleFor(dto => dto.Email)
             .EmailAddress()
             .WithMessage("A user should have a valid email");

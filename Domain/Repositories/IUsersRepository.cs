@@ -24,4 +24,10 @@ public interface IUsersRepository
     Task<int> GetFollowersCount(string userId);
     Task<int> GetFollowingCount(string userId);
     Task<int> GetNovelsCount(string userId);
+
+    /// <summary>
+    /// The member who most recently gave up <paramref name="userName"/> (see <see cref="UserNameChange"/>), for old
+    /// profile links. Only for names no live user holds: callers look the live name up first.
+    /// </summary>
+    Task<User?> GetByPreviousUserNameAsync(string userName, CancellationToken cancellationToken = default);
 }

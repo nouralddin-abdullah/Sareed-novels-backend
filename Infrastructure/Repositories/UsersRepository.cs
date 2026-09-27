@@ -157,5 +157,19 @@ namespace Infrastructure.Repositories
                 .Where(n => n.AuthorId == userId && !n.IsDraft && !n.IsDeleted)
                 .CountAsync();
         }
+
+        public async Task<User?> GetByPreviousUserNameAsync(string userName, CancellationToken cancellationToken = default)
+        {
+            var normalized = userManager.NormalizeName(userName);
+            // The latest to give the name up, if a name went through several members.
+            var userId = await dbContext.UserNameChanges
+                .Where(c => c.OldNormalizedUserName == normalized)
+                .OrderByDescending(c => c.ChangedAt)
+                .ThenByDescending(c => c.Id)
+                .Select(c => c.UserId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return userId == null ? null : await userManager.FindByIdAsync(userId);
+        }
     }
 }
