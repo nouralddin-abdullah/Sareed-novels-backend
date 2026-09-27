@@ -112,33 +112,35 @@ internal static class SocialCounters
     /// and that paragraph's chapter, or its chapter. The caller runs it inside a transaction.
     /// </summary>
     public static Task DeleteCommentTree(ApplicationDbContext db, Guid commentId) =>
-        db.Database.ExecuteSqlRawAsync(
-            DoomedComments("c.Id = @id")
-            + """
-              DECLARE @postId uniqueidentifier, @paragraphId uniqueidentifier, @chapterId uniqueidentifier;
-              SELECT @postId = c.PostId, @paragraphId = c.ParagraphId, @chapterId = c.ChapterId
-              FROM Comments c
-              WHERE c.Id = @id AND c.ParentCommentId IS NULL AND c.IsDeleted = 0;
+        db.Database.ExecuteSqlRawAsync(DeleteCommentTreeSql, new SqlParameter("@id", commentId));
 
-              IF @postId IS NOT NULL
-                  UPDATE Posts SET CommentsCount = CASE WHEN CommentsCount > 0 THEN CommentsCount - 1 ELSE 0 END
-                  WHERE Id = @postId;
-              ELSE IF @paragraphId IS NOT NULL
-              BEGIN
-                  UPDATE ChapterParagraphs SET CommentsCount = CASE WHEN CommentsCount > 0 THEN CommentsCount - 1 ELSE 0 END
-                  WHERE Id = @paragraphId;
-                  UPDATE ch SET TotalCommentsCount = CASE WHEN ch.TotalCommentsCount > 0 THEN ch.TotalCommentsCount - 1 ELSE 0 END
-                  FROM Chapters ch JOIN ChapterParagraphs p ON p.ChapterId = ch.Id
-                  WHERE p.Id = @paragraphId;
-              END
-              ELSE IF @chapterId IS NOT NULL
-                  UPDATE Chapters SET CommentsCount = CASE WHEN CommentsCount > 0 THEN CommentsCount - 1 ELSE 0 END,
-                                      TotalCommentsCount = CASE WHEN TotalCommentsCount > 0 THEN TotalCommentsCount - 1 ELSE 0 END
-                  WHERE Id = @chapterId;
+    // Built once from constant parts, like RemovedParagraphCommentsSql: the comment id is only ever the @id parameter.
+    private static readonly string DeleteCommentTreeSql =
+        DoomedComments("c.Id = @id")
+        + """
+          DECLARE @postId uniqueidentifier, @paragraphId uniqueidentifier, @chapterId uniqueidentifier;
+          SELECT @postId = c.PostId, @paragraphId = c.ParagraphId, @chapterId = c.ChapterId
+          FROM Comments c
+          WHERE c.Id = @id AND c.ParentCommentId IS NULL AND c.IsDeleted = 0;
 
-              """
-            + DeleteDoomed,
-            new SqlParameter("@id", commentId));
+          IF @postId IS NOT NULL
+              UPDATE Posts SET CommentsCount = CASE WHEN CommentsCount > 0 THEN CommentsCount - 1 ELSE 0 END
+              WHERE Id = @postId;
+          ELSE IF @paragraphId IS NOT NULL
+          BEGIN
+              UPDATE ChapterParagraphs SET CommentsCount = CASE WHEN CommentsCount > 0 THEN CommentsCount - 1 ELSE 0 END
+              WHERE Id = @paragraphId;
+              UPDATE ch SET TotalCommentsCount = CASE WHEN ch.TotalCommentsCount > 0 THEN ch.TotalCommentsCount - 1 ELSE 0 END
+              FROM Chapters ch JOIN ChapterParagraphs p ON p.ChapterId = ch.Id
+              WHERE p.Id = @paragraphId;
+          END
+          ELSE IF @chapterId IS NOT NULL
+              UPDATE Chapters SET CommentsCount = CASE WHEN CommentsCount > 0 THEN CommentsCount - 1 ELSE 0 END,
+                                  TotalCommentsCount = CASE WHEN TotalCommentsCount > 0 THEN TotalCommentsCount - 1 ELSE 0 END
+              WHERE Id = @chapterId;
+
+          """
+        + DeleteDoomed;
 
     private const string RemovedParagraphCommentsSql = """
         DECLARE @doomed TABLE (Id uniqueidentifier PRIMARY KEY);
