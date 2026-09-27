@@ -180,5 +180,9 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped<IJWTService, JwtService>();
+
+        // Sign-out everywhere: checked on every authenticated request (AccessTokens.RejectRevokedAsync).
+        services.AddSingleton<TokenCutoffCache>();
+        services.AddScoped<ITokenRevocationService, TokenRevocationService>();
     }
 }
