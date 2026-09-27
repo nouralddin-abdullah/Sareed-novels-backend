@@ -16,5 +16,4 @@ public interface INotificationsRepository
     Task<bool> MarkAsRead(Guid notificationId);
     Task<bool> MarkAllAsRead(string userId);
     Task<bool> DeleteNotification(Guid notificationId);
-    Task<int> GetCommentPageNumber(Guid? chapterId, Guid? postId, Guid commentId, int pageSize);
 }

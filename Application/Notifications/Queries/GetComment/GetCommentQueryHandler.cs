@@ -1,6 +1,9 @@
+using Application.Common;
 using Application.Notifications.DTOs;
+using Application.Services;
 using Application.Users;
 using AutoMapper;
+using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
@@ -12,12 +15,12 @@ namespace Application.Notifications.Queries.GetComment;
 public class GetCommentQueryHandler(
     ILogger<GetCommentQueryHandler> logger,
     ICommentsRepository commentsRepository,
-    INotificationsRepository notificationsRepository,
     IChaptersRepository chaptersRepository,
     IChapterParagraphsRepository paragraphsRepository,
     INovelsRepository novelsRepository,
     IPostsRepository postsRepository,
     ICommentLikesRepository commentLikesRepository,
+    IPrivilegeService privilegeService,
     IUserContext userContext,
     IMapper mapper) : IRequestHandler<GetCommentQuery, CommentDetailDto>
 {
@@ -45,53 +48,27 @@ public class GetCommentQueryHandler(
             commentDto.IsLikedByCurrentUser = likedCommentIds.Contains(comment.Id);
         }
 
-        // Get context information
-        var context = new CommentLocationDto();
-        var pageSize = 10; // Default page size
+        // Where the comment is: its chapter (through its paragraph, for a paragraph comment) and novel, or its post.
+        // A reply is stored at its parent's place, so it resolves the same way.
+        var context = new CommentLocationDto { ParentCommentId = comment.ParentCommentId };
 
-        if (comment.ChapterId.HasValue)
+        if (comment.ParagraphId.HasValue)
         {
-            var chapter = await chaptersRepository.GetChapterById(comment.ChapterId.Value)
-                ?? throw new NotFoundException("Chapter not found");
-            
-            var novel = await novelsRepository.GetOne(chapter.NovelId)
-                ?? throw new NotFoundException("Novel not found");
-
-            context.ChapterId = chapter.Id;
-            context.ChapterTitle = chapter.Title;
-            context.ChapterSlug = chapter.Slug;
-            context.NovelId = novel.Id;
-            context.NovelSlug = novel.Slug;
-            context.NovelTitle = novel.Title;
-            context.TotalComments = chapter.TotalCommentsCount;
-
-            var pageNumber = await notificationsRepository.GetCommentPageNumber(
-                chapter.Id, null, comment.Id, pageSize);
-            context.PageNumber = pageNumber;
-        }
-        else if (comment.ParagraphId.HasValue)
-        {
-            // Paragraph comment - need to get chapter through paragraph
             var paragraph = await paragraphsRepository.GetParagraphById(comment.ParagraphId.Value)
                 ?? throw new NotFoundException("Paragraph not found");
-            
-            var chapter = await chaptersRepository.GetChapterById(paragraph.ChapterId)
-                ?? throw new NotFoundException("Chapter not found");
-            
-            var novel = await novelsRepository.GetOne(chapter.NovelId)
-                ?? throw new NotFoundException("Novel not found");
 
-            context.ChapterId = chapter.Id;
-            context.ChapterTitle = chapter.Title;
-            context.ChapterSlug = chapter.Slug;
-            context.NovelId = novel.Id;
-            context.NovelSlug = novel.Slug;
-            context.NovelTitle = novel.Title;
-            context.TotalComments = chapter.TotalCommentsCount;
-
-            var pageNumber = await notificationsRepository.GetCommentPageNumber(
-                chapter.Id, null, comment.Id, pageSize);
-            context.PageNumber = pageNumber;
+            var (chapter, novel) = await SetChapter(context, paragraph.ChapterId);
+            context.ParagraphId = paragraph.Id;
+            context.ParagraphOrderIndex = paragraph.OrderIndex;
+            // The excerpt is chapter text, so only for someone the reader would show this chapter to.
+            if (await CanReadChapter(novel, chapter, currentUser))
+            {
+                context.ParagraphExcerpt = PlainText.Excerpt(paragraph.Content, ParagraphExcerptLength);
+            }
+        }
+        else if (comment.ChapterId.HasValue)
+        {
+            await SetChapter(context, comment.ChapterId.Value);
         }
         else if (comment.PostId.HasValue)
         {
@@ -100,11 +77,11 @@ public class GetCommentQueryHandler(
 
             context.PostId = post.Id;
             context.TotalComments = post.CommentsCount;
-
-            var pageNumber = await notificationsRepository.GetCommentPageNumber(
-                null, post.Id, comment.Id, pageSize);
-            context.PageNumber = pageNumber;
         }
+
+        // Within the list that shows the comment: its paragraph's, chapter's or post's, or for a reply its thread.
+        var (_, pageSize) = Paging.Clamp(1, request.PageSize);
+        context.PageNumber = await commentsRepository.CountCommentsAheadAsync(comment) / pageSize + 1;
 
         // Get parent comment if this is a reply
         CommentDto? parentCommentDto = null;
@@ -142,5 +119,41 @@ public class GetCommentQueryHandler(
             ParentComment = parentCommentDto,
             Replies = replies
         };
+    }
+
+    private const int ParagraphExcerptLength = 140;
+
+    private async Task<(Chapter Chapter, Novel Novel)> SetChapter(CommentLocationDto context, Guid chapterId)
+    {
+        var chapter = await chaptersRepository.GetChapterById(chapterId)
+            ?? throw new NotFoundException("Chapter not found");
+
+        var novel = await novelsRepository.GetOne(chapter.NovelId)
+            ?? throw new NotFoundException("Novel not found");
+
+        context.ChapterId = chapter.Id;
+        context.ChapterTitle = chapter.Title;
+        context.ChapterSlug = chapter.Slug;
+        context.NovelId = novel.Id;
+        context.NovelSlug = novel.Slug;
+        context.NovelTitle = novel.Title;
+        context.TotalComments = chapter.TotalCommentsCount;
+        return (chapter, novel);
+    }
+
+    /// <summary>
+    /// Whether the chapter reader (GetChapterReaderHandler) would show this chapter's text to the caller: its author
+    /// always; anyone else only a published chapter of a published novel that the privilege system doesn't lock for them.
+    /// </summary>
+    private async Task<bool> CanReadChapter(Novel novel, Chapter chapter, CurrentUser? currentUser)
+    {
+        if (currentUser != null && novel.AuthorId == currentUser.Id)
+        {
+            return true;
+        }
+
+        return !novel.IsDraft
+            && chapter.Status == "Published"
+            && !await privilegeService.IsChapterLockedAsync(chapter.Id, currentUser?.Id);
     }
 }

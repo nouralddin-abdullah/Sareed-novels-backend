@@ -16,6 +16,12 @@ public interface ICommentsRepository
     /// just created serializes exactly as it will in a list.
     /// </summary>
     Task<Comments?> GetCommentAsListedAsync(Guid commentId);
+    /// <summary>
+    /// How many comments come before this one in the list that shows it, in that list's default order: newer top-level
+    /// comments on the same paragraph, chapter or post (those lists are newest first), or earlier replies to the same
+    /// comment (replies are oldest first).
+    /// </summary>
+    Task<int> CountCommentsAheadAsync(Comments comment);
     /// <summary>Soft-deletes the comment and lowers the counters CreateComment raised, in one transaction.</summary>
     Task<bool> DeleteComment(Guid commentId);
     Task<int> GetCommentCountForChapter(Guid chapterId);

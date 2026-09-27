@@ -76,6 +76,11 @@ public class CommentUserDto
 
 public class CommentLocationDto
 {
+    /// <summary>
+    /// The page that holds the comment in the list that shows it, at the pageSize asked for (10 by default) and in that
+    /// list's default order: for a top-level comment, its paragraph's, chapter's or post's comments (newest first); for a
+    /// reply, the replies of <see cref="ParentCommentId"/> (oldest first).
+    /// </summary>
     public int PageNumber { get; set; }
     public Guid? ChapterId { get; set; }
     public string? ChapterTitle { get; set; }
@@ -85,4 +90,19 @@ public class CommentLocationDto
     public string? NovelSlug { get; set; }
     public string? NovelTitle { get; set; }
     public int TotalComments { get; set; }
+
+    /// <summary>For a comment on a paragraph (or a reply under one): the paragraph; null otherwise.</summary>
+    public Guid? ParagraphId { get; set; }
+
+    /// <summary>That paragraph's position in its chapter, from 0.</summary>
+    public int? ParagraphOrderIndex { get; set; }
+
+    /// <summary>
+    /// The start of that paragraph as plain text, at most 140 characters; null when the caller may not read the chapter
+    /// (a draft, or locked for them by the privilege system), as the chapter reader decides.
+    /// </summary>
+    public string? ParagraphExcerpt { get; set; }
+
+    /// <summary>For a reply, the top-level comment it answers (its thread holds the reply); null otherwise.</summary>
+    public Guid? ParentCommentId { get; set; }
 }

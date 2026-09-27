@@ -73,6 +73,30 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
             .Include(c => c.User)
             .FirstOrDefaultAsync(c => c.Id == commentId);
 
+    public Task<int> CountCommentsAheadAsync(Comments comment)
+    {
+        // The same filters as GetCommentReplies and the Get*Comments lists.
+        if (comment.ParentCommentId is { } parentId)
+        {
+            return dbContext.Comments.CountAsync(c => c.ParentCommentId == parentId && c.CreatedAt < comment.CreatedAt);
+        }
+
+        var newerTopLevel = dbContext.Comments.Where(c => c.ParentCommentId == null && c.CreatedAt > comment.CreatedAt);
+        if (comment.ParagraphId is { } paragraphId)
+        {
+            return newerTopLevel.CountAsync(c => c.ParagraphId == paragraphId);
+        }
+        if (comment.ChapterId is { } chapterId)
+        {
+            return newerTopLevel.CountAsync(c => c.ChapterId == chapterId);
+        }
+        if (comment.PostId is { } postId)
+        {
+            return newerTopLevel.CountAsync(c => c.PostId == postId);
+        }
+        return Task.FromResult(0);
+    }
+
     public Task<int> GetCommentCountForChapter(Guid chapterId)
     {
         return dbContext.Comments.CountAsync(c => c.ChapterId == chapterId && c.ParentCommentId == null);

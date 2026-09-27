@@ -97,35 +97,4 @@ public class NotificationsRepository(ApplicationDbContext dbContext) : INotifica
         dbContext.Notifications.Remove(notification);
         return await dbContext.SaveChangesAsync() > 0;
     }
-
-    public async Task<int> GetCommentPageNumber(Guid? chapterId, Guid? postId, Guid commentId, int pageSize)
-    {
-        IQueryable<Comments> query = dbContext.Comments
-            .Where(c => !c.IsDeleted && !c.ParentCommentId.HasValue);
-
-        if (chapterId.HasValue)
-        {
-            query = query.Where(c => c.ChapterId == chapterId || c.ParagraphId.HasValue && 
-                                     dbContext.ChapterParagraphs.Any(p => p.Id == c.ParagraphId && p.ChapterId == chapterId));
-        }
-        else if (postId.HasValue)
-        {
-            query = query.Where(c => c.PostId == postId);
-        }
-        else
-        {
-            return 1; // Default to first page if no context
-        }
-
-        // Count comments created after the target comment (for descending sort)
-        var commentsAfter = await query
-            .Where(c => c.CreatedAt > dbContext.Comments
-                .Where(target => target.Id == commentId)
-                .Select(target => target.CreatedAt)
-                .FirstOrDefault())
-            .CountAsync();
-
-        var pageNumber = (commentsAfter / pageSize) + 1;
-        return pageNumber;
-    }
 }
