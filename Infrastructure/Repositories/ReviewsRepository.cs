@@ -98,6 +98,12 @@ public class ReviewsRepository(ApplicationDbContext dbContext) : IReviewsReposit
         return await dbContext.Reviews.FirstOrDefaultAsync(r => r.Id == reviewId);
     }
 
+    public Task<Review?> GetReviewAsListedAsync(Guid reviewId) =>
+        dbContext.Reviews
+            .AsNoTracking()
+            .Include(r => r.ReviewOwner)
+            .FirstOrDefaultAsync(r => r.Id == reviewId);
+
     public async Task<Dictionary<Guid, Guid>> GetNovelIdsAsync(IReadOnlyCollection<Guid> reviewIds)
     {
         if (reviewIds.Count == 0)

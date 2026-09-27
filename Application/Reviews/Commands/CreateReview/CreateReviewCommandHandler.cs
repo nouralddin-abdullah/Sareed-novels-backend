@@ -1,6 +1,6 @@
-﻿using Application.Services;
+﻿using Application.Reviews.Queries;
+using Application.Services;
 using Application.Users;
-using Application.Users.Commands.FollowUser;
 using AutoMapper;
 using Domain.Entities;
 using Domain.Exceptions;
@@ -18,16 +18,17 @@ public class CreateReviewCommandHandler(
     IUserContext userContext, 
     IMapper mapper, 
     IReviewsRepository reviewsRepository,
-    IServiceProvider serviceProvider) : IRequestHandler<CreateReviewCommand, OperationResult>
+    IReviewLikesRepository reviewLikesRepository,
+    IServiceProvider serviceProvider) : IRequestHandler<CreateReviewCommand, CreateReviewResult>
 {
-    public async Task<OperationResult> Handle(CreateReviewCommand request, CancellationToken cancellationToken)
+    public async Task<CreateReviewResult> Handle(CreateReviewCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Creating new review {@review}", request);
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
         var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found");
         if (novel.AuthorId == currentUser.Id)
         {
-            return new OperationResult
+            return new CreateReviewResult
             {
                 Success = false,
                 Message = "You cannot review your own novel"
@@ -36,7 +37,7 @@ public class CreateReviewCommandHandler(
         var existingReview = await reviewsRepository.GetUserReviewForNovel(currentUser.Id, request.NovelId);
         if (existingReview != null)
         {
-            return new OperationResult
+            return new CreateReviewResult
             {
                 Success = false,
                 Message = "You have already reviewed this novel"
@@ -51,7 +52,7 @@ public class CreateReviewCommandHandler(
         var result = await reviewsRepository.CreateOne(review);
         if (!result)
         {
-            return new OperationResult
+            return new CreateReviewResult
             {
                 Success = false,
                 Message = "Failed to create review"
@@ -61,10 +62,16 @@ public class CreateReviewCommandHandler(
         // Fire-and-forget: Send notification to novel author
         _ = SendReviewNotificationInBackground(novel.AuthorId, currentUser.Id, review.Id, novel.Id);
 
-        return new OperationResult
+        // Read back as the novel's review list reads reviews, so the app can put it straight into that list.
+        var listed = await reviewsRepository.GetReviewAsListedAsync(review.Id)
+            ?? throw new InvalidOperationException($"Review {review.Id} was saved but can't be read back");
+        var reviewDtos = await ReviewListDtos.Build([listed], mapper, reviewLikesRepository, currentUser);
+
+        return new CreateReviewResult
         {
             Success = true,
-            Message = "Review was created"
+            Message = "Review was created",
+            Review = reviewDtos.Single()
         };
 
     }

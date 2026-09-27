@@ -1,6 +1,6 @@
+using Application.Posts.Queries.GetPost;
 using Application.Services;
 using Application.Users;
-using Application.Users.Commands.FollowUser;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
@@ -14,9 +14,10 @@ public class CreatePostCommandHandler(
     IPostsRepository postsRepository,
     INovelsRepository novelsRepository,
     IUserContext userContext,
-    IFileUploadService fileUploadService) : IRequestHandler<CreatePostCommand, OperationResult>
+    IFileUploadService fileUploadService,
+    ISender sender) : IRequestHandler<CreatePostCommand, CreatePostResult>
 {
-    public async Task<OperationResult> Handle(CreatePostCommand request, CancellationToken cancellationToken)
+    public async Task<CreatePostResult> Handle(CreatePostCommand request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
         
@@ -25,7 +26,7 @@ public class CreatePostCommandHandler(
             var novel = await novelsRepository.GetOne(request.NovelId.Value);
             if (novel == null || novel.IsDeleted)
             {
-                return new OperationResult
+                return new CreatePostResult
                 {
                     Success = false,
                     Message = "Novel not found"
@@ -59,10 +60,12 @@ public class CreatePostCommandHandler(
         
         logger.LogInformation("Post {PostId} created successfully by user {UserId}", post.Id, currentUser.Id);
 
-        return new OperationResult
+        return new CreatePostResult
         {
             Success = true,
-            Message = "Post created successfully"
+            Message = "Post created successfully",
+            // Through GET /api/posts/{id} itself, so the app gets the post exactly as the post pages and lists return it.
+            Post = await sender.Send(new GetPostQuery(post.Id), cancellationToken)
         };
     }
 }    

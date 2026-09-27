@@ -1,9 +1,8 @@
-﻿using Application.Users.Commands.FollowUser;
-using MediatR;
+﻿using MediatR;
 
 namespace Application.Reviews.Commands.CreateReview;
 
-public class CreateReviewCommand(Guid novelId, decimal writingQualityScore, decimal updatingStabilityScore, decimal characterDevelopmentScore, decimal worldBuildingScore, bool isSpoiler, string content) : IRequest<OperationResult>
+public class CreateReviewCommand(Guid novelId, decimal writingQualityScore, decimal updatingStabilityScore, decimal characterDevelopmentScore, decimal worldBuildingScore, bool isSpoiler, string content) : IRequest<CreateReviewResult>
 {
     public Guid NovelId { get; set; } = novelId;
     public decimal WritingQualityScore { get; set; } = writingQualityScore;

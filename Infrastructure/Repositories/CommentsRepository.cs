@@ -67,6 +67,12 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
             .FirstOrDefaultAsync(c => c.Id == commentId);
     }
 
+    public Task<Comments?> GetCommentAsListedAsync(Guid commentId) =>
+        dbContext.Comments
+            .AsNoTracking()
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.Id == commentId);
+
     public Task<int> GetCommentCountForChapter(Guid chapterId)
     {
         return dbContext.Comments.CountAsync(c => c.ChapterId == chapterId && c.ParentCommentId == null);

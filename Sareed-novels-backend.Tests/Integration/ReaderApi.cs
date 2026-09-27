@@ -93,6 +93,38 @@ internal static class ReaderApi
         return novel;
     }
 
+    /// <summary>A published chapter of <paramref name="novel"/> whose text is these paragraphs (HTML, as the editor saves it).</summary>
+    public static async Task<(Chapter Chapter, List<ChapterParagraph> Paragraphs)> AddChapter(this SardApiFactory api, Novel novel, params string[] paragraphs)
+    {
+        var chapter = Seed.Chapters(novel, 1, DateTime.UtcNow).Single();
+        var rows = paragraphs.Select((text, i) => new ChapterParagraph
+        {
+            Id = Guid.NewGuid(),
+            ChapterId = chapter.Id,
+            Content = text,
+            ContentHash = Guid.NewGuid().ToString("N"),
+            OrderIndex = i
+        }).ToList();
+        chapter.ParagraphsCount = rows.Count;
+
+        await using var db = api.Db();
+        db.Chapters.Add(chapter);
+        db.ChapterParagraphs.AddRange(rows);
+        await db.SaveChangesAsync();
+        return (chapter, rows);
+    }
+
+    /// <summary>A multipart form of these text fields.</summary>
+    public static MultipartFormDataContent Form(params (string Name, string Value)[] fields)
+    {
+        var form = new MultipartFormDataContent();
+        foreach (var (name, value) in fields)
+        {
+            form.Add(new StringContent(value), name);
+        }
+        return form;
+    }
+
     /// <summary>The path of a novel page by slug, escaped (slugs are mostly Arabic).</summary>
     public static string BySlug(string slug) => $"/api/novel/{Uri.EscapeDataString(slug)}";
 }

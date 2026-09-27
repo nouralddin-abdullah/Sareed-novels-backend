@@ -1,7 +1,7 @@
 ﻿using Application.ReadingLists.Commands.AddNovelToList;
+using Application.ReadingLists.Queries;
 using Application.Services;
 using Application.Users;
-using Application.Users.Commands.FollowUser;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
@@ -13,21 +13,31 @@ namespace Application.ReadingLists.Commands.CreateReadingList;
 public class CreateReadingListCommandHandler(
     ILogger<CreateReadingListCommandHandler> logger,
     IReadingListsRepository readingListsRepository,
+    INovelsRepository novelsRepository,
     IUserContext userContext,
-    IFileUploadService fileUploadService) : IRequestHandler<CreateReadingListCommand, OperationResult>
+    IFileUploadService fileUploadService) : IRequestHandler<CreateReadingListCommand, CreateReadingListResult>
 {
-    public async Task<OperationResult> Handle(CreateReadingListCommand request, CancellationToken cancellationToken)
+    public async Task<CreateReadingListResult> Handle(CreateReadingListCommand request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
         logger.LogInformation("Creating new reading list for {user}: ", currentUser.UserName);
 
         if (await readingListsRepository.IsNameTakenByUserAsync(currentUser.Id, request.Name))
         {
-            return new OperationResult
+            return new CreateReadingListResult
             {
                 Success = false,
                 Message = $"You already have a reading list named '{request.Name}'"
             };
+        }
+
+        if (request.NovelId is { } novelId)
+        {
+            var refusal = await NovelForReadingList.WhyNotAddable(novelsRepository, novelId);
+            if (refusal != null)
+            {
+                return new CreateReadingListResult { Success = false, Message = refusal };
+            }
         }
 
         var readlingList = new ReadingList
@@ -43,6 +53,19 @@ public class CreateReadingListCommandHandler(
             FollowersCount = 0
         };
 
+        if (request.NovelId is { } firstNovelId)
+        {
+            // Inserted by the same SaveChanges as the list (one transaction): the list is never saved without it.
+            readlingList.Novels.Add(new ReadingListNovel
+            {
+                ReadingListId = readlingList.Id,
+                NovelId = firstNovelId,
+                AddedAt = DateTime.UtcNow,
+                OrderIndex = 0
+            });
+            readlingList.NovelsCount = 1;
+        }
+
         if (request.CoverImage != null)
         {
             using var stream = request.CoverImage.OpenReadStream();
@@ -55,13 +78,17 @@ public class CreateReadingListCommandHandler(
         var result = await readingListsRepository.CreateAsync(readlingList);
         if (result)
         {
-            return new OperationResult
+            // Summarized as "my lists" shows it, so the app can put it straight into that list.
+            var summary = await readingListsRepository.GetSummaryAsync(readlingList.Id)
+                ?? throw new InvalidOperationException($"Reading list {readlingList.Id} was saved but can't be read back");
+            return new CreateReadingListResult
             {
                 Success = true,
-                Message = "Reading list was created successfully."
+                Message = "Reading list was created successfully.",
+                ReadingList = summary.ToPreviewDto(isOwner: true, isFollowing: false)
             };
         }
-        return new OperationResult
+        return new CreateReadingListResult
         {
             Success = false,
             Message = "Failed to create reading list."

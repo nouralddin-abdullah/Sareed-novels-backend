@@ -103,7 +103,7 @@ public class LibraryHandlerTests
         var lists = Substitute.For<IReadingListsRepository>();
         lists.IsNameTakenByUserAsync("reader-1", "Favourites").Returns(true);
         var handler = new CreateReadingListCommandHandler(
-            NullLogger<CreateReadingListCommandHandler>.Instance, lists, userContext, Substitute.For<IFileUploadService>());
+            NullLogger<CreateReadingListCommandHandler>.Instance, lists, novels, userContext, Substitute.For<IFileUploadService>());
 
         var result = await handler.Handle(new CreateReadingListCommand { Name = "Favourites" }, CancellationToken.None);
 

@@ -65,6 +65,12 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
     public Task<(IReadOnlyList<ReadingListSummary>, int)> GetUserReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize) =>
         PageWithPreviews(dbContext.ReadingLists.Where(rl => rl.UserId == userId), pageNumber, pageSize);
 
+    public async Task<ReadingListSummary?> GetSummaryAsync(Guid readingListId)
+    {
+        var (lists, _) = await PageWithPreviews(dbContext.ReadingLists.Where(rl => rl.Id == readingListId), 1, 1);
+        return lists.SingleOrDefault();
+    }
+
     public async Task<(IEnumerable<ReadingList>, int)> GetPublicReadingListsAsync(int pageNumber, int pageSize)
     {
         var query = dbContext.ReadingLists

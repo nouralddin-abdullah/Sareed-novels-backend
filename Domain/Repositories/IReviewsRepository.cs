@@ -13,6 +13,11 @@ public interface IReviewsRepository
     Task RefreshNovelReviewStats(Guid novelId);
     Task<(IEnumerable<Review>, int)> GetNovelReviews(Guid novelId, int PageSize, int PageNumber, string sorting);
     Task<Review?> GetReviewById(Guid reviewId);
+    /// <summary>
+    /// A review with its reviewer, read from the database as <see cref="GetNovelReviews"/> reads them (untracked), so a
+    /// review just created serializes exactly as it will in the list.
+    /// </summary>
+    Task<Review?> GetReviewAsListedAsync(Guid reviewId);
     /// <summary>The novel each of these reviews is on, for the reviews that still exist.</summary>
     Task<Dictionary<Guid, Guid>> GetNovelIdsAsync(IReadOnlyCollection<Guid> reviewIds);
 }
