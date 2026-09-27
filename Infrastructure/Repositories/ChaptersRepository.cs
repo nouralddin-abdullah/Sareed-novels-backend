@@ -142,7 +142,13 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
 
     public async Task<bool> UpdateChapter(Chapter chapter)
     {
-        dbContext.Chapters.Update(chapter);
+        var entry = dbContext.Chapters.Update(chapter);
+        // Comment and view counters move with atomic SQL (comments, a chapter edit's removed paragraphs, view
+        // tracking). Writing back the values loaded with the chapter would undo every change since, e.g. the
+        // comments an edit just deleted.
+        entry.Property(c => c.CommentsCount).IsModified = false;
+        entry.Property(c => c.TotalCommentsCount).IsModified = false;
+        entry.Property(c => c.ViewsCount).IsModified = false;
         var result = await dbContext.SaveChangesAsync();
         return result > 0;
     }

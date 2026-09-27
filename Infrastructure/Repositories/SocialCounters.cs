@@ -1,4 +1,6 @@
+using System.Data;
 using Domain.Entities;
+using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -60,9 +62,10 @@ internal static class SocialCounters
     }
 
     /// <summary>
-    /// Hard-deletes every comment on a chapter (its own and its paragraphs'), with all replies below them and their
-    /// likes, and uncounts the still-visible ones from their authors. Comment likes and replies reference comments
-    /// without a cascade, so a chapter or paragraph with liked or answered comments can't be deleted otherwise.
+    /// Hard-deletes every comment on a chapter (its own and its paragraphs'), with all replies below them, their
+    /// likes and the notifications about them, and uncounts the still-visible ones from their authors. Comment likes
+    /// and replies reference comments without a cascade, so a chapter or paragraph with liked or answered comments
+    /// can't be deleted otherwise.
     /// </summary>
     public static Task DeleteChapterComments(ApplicationDbContext db, Guid chapterId) =>
         db.Database.ExecuteSqlRawAsync(
@@ -89,6 +92,42 @@ internal static class SocialCounters
             + DeleteDoomed,
             new SqlParameter("@id", paragraphId));
 
+    /// <summary>
+    /// Same as <see cref="DeleteChapterComments"/> for the paragraphs a chapter edit removes, which the caller has
+    /// marked with a negative OrderIndex inside its transaction: their comments go with replies, likes and
+    /// notifications, and the chapter's TotalCommentsCount loses their visible top-level comments.
+    /// </summary>
+    public static async Task<RemovedParagraphComments> DeleteCommentsOnRemovedParagraphs(ApplicationDbContext db, Guid chapterId)
+    {
+        var comments = new SqlParameter("@comments", SqlDbType.Int) { Direction = ParameterDirection.Output };
+        var visible = new SqlParameter("@visible", SqlDbType.Int) { Direction = ParameterDirection.Output };
+        await db.Database.ExecuteSqlRawAsync(RemovedParagraphCommentsSql, new SqlParameter("@id", chapterId), comments, visible);
+        return new RemovedParagraphComments((int)comments.Value, (int)visible.Value);
+    }
+
+    private const string RemovedParagraphCommentsSql = """
+        DECLARE @doomed TABLE (Id uniqueidentifier PRIMARY KEY);
+        WITH tree AS (
+            SELECT c.Id FROM Comments c
+            JOIN ChapterParagraphs p ON p.Id = c.ParagraphId
+            WHERE p.ChapterId = @id AND p.OrderIndex < 0
+            UNION ALL
+            SELECT r.Id FROM Comments r JOIN tree t ON r.ParentCommentId = t.Id
+        )
+        INSERT INTO @doomed (Id) SELECT DISTINCT Id FROM tree;
+
+        SELECT @comments = COUNT(*), @visible = COUNT(CASE WHEN c.IsDeleted = 0 THEN 1 END)
+        FROM Comments c JOIN @doomed x ON x.Id = c.Id;
+
+        UPDATE ch SET TotalCommentsCount = CASE WHEN ch.TotalCommentsCount > n.Cnt THEN ch.TotalCommentsCount - n.Cnt ELSE 0 END
+        FROM Chapters ch
+        CROSS APPLY (SELECT COUNT(*) AS Cnt FROM Comments c
+                     JOIN ChapterParagraphs p ON p.Id = c.ParagraphId
+                     WHERE p.ChapterId = @id AND p.OrderIndex < 0 AND c.ParentCommentId IS NULL AND c.IsDeleted = 0) n
+        WHERE ch.Id = @id AND n.Cnt > 0;
+
+        """ + DeleteDoomed;
+
     private static string DoomedComments(string rootPredicate) => $"""
         DECLARE @doomed TABLE (Id uniqueidentifier PRIMARY KEY);
         WITH tree AS (
@@ -107,6 +146,7 @@ internal static class SocialCounters
               WHERE c.IsDeleted = 0 GROUP BY c.UserId) d ON d.UserId = u.Id;
 
         DELETE l FROM CommentLikes l JOIN @doomed x ON x.Id = l.CommentId;
+        DELETE n FROM Notifications n JOIN @doomed x ON x.Id = n.RelatedEntityId WHERE n.RelatedEntityType = N'Comment';
         DELETE c FROM Comments c JOIN @doomed x ON x.Id = c.Id;
         """;
 }
