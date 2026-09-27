@@ -2,6 +2,8 @@ using System.Data.Common;
 using Application.Chapters.Commands.UpdateChapter;
 using Application.Chapters.DTOS;
 using Application.Chapters.Paragraphs;
+using Application.Comments.Queries.GetChapterComments;
+using Application.Comments.Queries.GetParagraphComments;
 using Application.Services;
 using Application.Users;
 using AutoMapper;
@@ -13,6 +15,7 @@ using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Sareed_novels_backend.Tests.Integration;
@@ -125,6 +128,35 @@ public class ChapterEditTests(SqlServerDatabase database) : IClassFixture<SqlSer
         Assert.True(await check.Notifications.AnyAsync(n => n.Id == kept));
         Assert.True(await check.PushOutbox.AnyAsync(o => o.NotificationId == kept));
         await AssertCountersMatchRecount(check, world);
+    }
+
+    [Fact]
+    public async Task After_an_edit_deletes_a_paragraph_the_comment_lists_count_the_replies_they_list()
+    {
+        var world = await SeedChapter();
+        // Paragraph 1 goes: its comment, the reply under it, and the old-style reply to it stored on the chapter.
+        await world.Save(ProductionChapter.Paragraphs.Where((_, i) => i != 1));
+
+        await using var db = database.CreateContext();
+        var (comments, likes) = (new CommentsRepository(db), new CommentLikesRepository(db));
+        var anonymous = Substitute.For<IUserContext>();
+        anonymous.GetCurrentUser().Returns((CurrentUser?)null);
+        var listed = (await new GetChapterCommentsQueryHandler(NullLogger<GetChapterCommentsQueryHandler>.Instance, comments, anonymous, likes, Mapper)
+            .Handle(new GetChapterCommentsQuery(world.ChapterId, 1, 50), CancellationToken.None)).Items.ToList();
+        foreach (var paragraphId in await ParagraphIds(db, world))
+        {
+            listed.AddRange((await new GetParagraphCommentsQueryHandler(NullLogger<GetParagraphCommentsQueryHandler>.Instance, comments, likes, anonymous, Mapper)
+                .Handle(new GetParagraphCommentsQuery(paragraphId, 1, 50, "recent"), CancellationToken.None)).Items);
+        }
+
+        Assert.Equal(5, listed.Count);
+        foreach (var comment in listed)
+        {
+            var (_, replies) = await comments.GetCommentReplies(comment.Id, 1, 50);
+            Assert.Equal(replies, comment.TotalRepliesCount);
+        }
+        // Only the chapter comment's reply is left.
+        Assert.Equal(1, listed.Sum(c => c.TotalRepliesCount));
     }
 
     [Fact]
