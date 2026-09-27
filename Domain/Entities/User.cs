@@ -32,6 +32,12 @@ public class User : IdentityUser
     /// </summary>
     public DateTime? TokensValidAfter { get; set; }
 
+    /// <summary>
+    /// A moderator's suspension (UTC): until then the account can't sign in and its access tokens are refused.
+    /// <see cref="Moderation.Suspension.Permanent"/> for good; null when not suspended. Set through IAccountSuspensionService.
+    /// </summary>
+    public DateTime? SuspendedUntil { get; set; }
+
     public ICollection<Follow> Following { get; set; } = new List<Follow>();
     public ICollection<Follow> Followers { get; set; } = new List<Follow>();
     public ICollection<Novel> Novels { get; set; } = new List<Novel>();
