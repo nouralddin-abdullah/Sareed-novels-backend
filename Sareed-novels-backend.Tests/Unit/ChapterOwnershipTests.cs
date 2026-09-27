@@ -23,7 +23,6 @@ public class ChapterOwnershipTests
 
     private readonly IChaptersRepository chapters = Substitute.For<IChaptersRepository>();
     private readonly IChapterParagraphsRepository paragraphs = Substitute.For<IChapterParagraphsRepository>();
-    private readonly ICommentsRepository comments = Substitute.For<ICommentsRepository>();
     private readonly INovelsRepository novels = Substitute.For<INovelsRepository>();
     private readonly IUserContext userContext = Substitute.For<IUserContext>();
     private readonly IMapper mapper = Substitute.For<IMapper>();
@@ -44,7 +43,7 @@ public class ChapterOwnershipTests
     public async Task Updating_another_novels_chapter_through_your_own_novel_is_not_found()
     {
         var handler = new UpdateChapterCommandHandler(
-            NullLogger<UpdateChapterCommandHandler>.Instance, chapters, paragraphs, comments, novels, userContext, mapper,
+            NullLogger<UpdateChapterCommandHandler>.Instance, chapters, paragraphs, novels, userContext, mapper,
             sequences, services);
 
         await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(
@@ -52,7 +51,7 @@ public class ChapterOwnershipTests
             CancellationToken.None));
 
         await chapters.DidNotReceiveWithAnyArgs().UpdateChapter(default!);
-        await paragraphs.DidNotReceiveWithAnyArgs().DeleteParagraph(default);
+        await paragraphs.DidNotReceiveWithAnyArgs().SaveEditedParagraphs(default, default!, default!);
         Assert.Equal("draft", victimsChapter.Title);
     }
 

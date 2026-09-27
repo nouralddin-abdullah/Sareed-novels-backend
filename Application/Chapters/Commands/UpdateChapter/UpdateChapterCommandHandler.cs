@@ -1,4 +1,6 @@
-﻿using Application.Services;
+﻿using System.Diagnostics;
+using Application.Chapters.Paragraphs;
+using Application.Services;
 using Application.Users;
 using Application.Users.Commands.FollowUser;
 using AutoMapper;
@@ -9,8 +11,6 @@ using Domain.Seo;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Application.Chapters.Commands.UpdateChapter;
 
@@ -18,7 +18,6 @@ public class UpdateChapterCommandHandler(
     ILogger<UpdateChapterCommandHandler> logger, 
     IChaptersRepository chaptersRepository, 
     IChapterParagraphsRepository paragraphsRepository, 
-    ICommentsRepository commentsRepository, 
     INovelsRepository novelsRepository, 
     IUserContext userContext, 
     IMapper mapper,
@@ -44,6 +43,13 @@ public class UpdateChapterCommandHandler(
         var needsSequenceRecalculation = statusChanging && 
             (oldStatus == "Published" || request.Status == "Published");
         
+        // Paragraphs first, while the chapter entity is unchanged: the paragraph transaction then holds the chapter
+        // row only for its counter update at the end, not from its first write, while readers may be commenting.
+        if (!string.IsNullOrEmpty(request.Content))
+        {
+            chapter.ParagraphsCount = await SaveParagraphs(chapter.Id, request.Content);
+        }
+        
         if (request.Title != null)
         {
             // The editor resends the unchanged title on every save; only a real rename may change the slug.
@@ -56,62 +62,6 @@ public class UpdateChapterCommandHandler(
         
         // Update basic fields
         mapper.Map(request, chapter);
-        
-        // Handle content update - O(n) hash-based matching
-        if (!string.IsNullOrEmpty(request.Content))
-        {
-            logger.LogInformation("Updating paragraphs for chapter {ChapterId}", chapter.Id);
-            
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            
-            // Get existing paragraphs
-            var existingParagraphs = await paragraphsRepository.GetChapterParagraphs(chapter.Id);
-            
-            // Split new content into paragraphs
-            var newParagraphTexts = SplitIntoParagraphs(request.Content);
-            
-            // O(n) hash-based matching
-            var matchResult = MatchParagraphsByHash(existingParagraphs, newParagraphTexts, chapter.Id);
-            
-            sw.Stop();
-            logger.LogDebug("Paragraph matching took {ElapsedMs}ms for {ParagraphCount} paragraphs", 
-                sw.ElapsedMilliseconds, existingParagraphs.Count);
-            
-            // Delete paragraphs that were removed or changed
-            foreach (var paragraphToDelete in matchResult.ParagraphsToDelete)
-            {
-                await commentsRepository.DeleteParagraphComments(paragraphToDelete.Id);
-                await paragraphsRepository.DeleteParagraph(paragraphToDelete.Id);
-            }
-            
-            // Update order index for unchanged paragraphs (if moved)
-            foreach (var (paragraph, newIndex) in matchResult.ParagraphsToUpdate)
-            {
-                if (paragraph.OrderIndex != newIndex)
-                {
-                    paragraph.OrderIndex = newIndex;
-                    paragraph.UpdatedAt = DateTime.UtcNow;
-                    await paragraphsRepository.UpdateParagraph(paragraph);
-                }
-            }
-            
-            // Create new paragraphs
-            if (matchResult.ParagraphsToCreate.Any())
-            {
-                await paragraphsRepository.CreateParagraphs(matchResult.ParagraphsToCreate);
-            }
-            
-            // Update paragraph count
-            chapter.ParagraphsCount = newParagraphTexts.Count;
-            
-            logger.LogInformation(
-                "Chapter {ChapterId} updated: {UnchangedCount} preserved, {ChangedCount} changed, {DeletedCount} deleted, {NewCount} new",
-                chapter.Id, 
-                matchResult.ParagraphsToUpdate.Count, 
-                matchResult.ParagraphsToDelete.Count - matchResult.ParagraphsToUpdate.Count,
-                matchResult.ParagraphsToDelete.Count, 
-                matchResult.ParagraphsToCreate.Count);
-        }
         
         var result = await chaptersRepository.UpdateChapter(chapter);
         
@@ -190,100 +140,76 @@ public class UpdateChapterCommandHandler(
         }
     }
     
-    private static List<string> SplitIntoParagraphs(string content)
+    /// <summary>
+    /// Replaces the chapter's paragraphs with the edited content and returns how many there are now. A paragraph
+    /// whose words are unchanged (<see cref="ParagraphText.VisibleText"/>) keeps its id and its comments, wherever
+    /// it moved and whatever its formatting; a changed or deleted paragraph goes, and its comments with it.
+    /// </summary>
+    private async Task<int> SaveParagraphs(Guid chapterId, string content)
     {
-        return content
-            .Split(new[] { "\n\n", "\r\n\r\n", "</p><p>", "</p>" }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(p => p.Trim()
-                .Replace("<p>", "")
-                .Replace("</p>", ""))
-            // Keep <br> tags to preserve line breaks within paragraphs
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .ToList();
-    }
-    
-    private static ParagraphMatchResult MatchParagraphsByHash(
-        List<ChapterParagraph> existingParagraphs, 
-        List<string> newParagraphTexts,
-        Guid chapterId) // Add chapterId parameter
-    {
-        // Build hash dictionary from existing paragraphs - O(n)
-        var existingByHash = new Dictionary<string, ChapterParagraph>();
-        foreach (var para in existingParagraphs)
+        var stopwatch = Stopwatch.StartNew();
+        var saved = await paragraphsRepository.GetChapterParagraphs(chapterId);
+        var editedTexts = ParagraphText.Split(content);
+        var match = ParagraphMatcher.Match(saved.Select(p => p.Content).ToList(), editedTexts);
+
+        var now = DateTime.UtcNow;
+        var reformatted = 0;
+        var paragraphs = new List<ChapterParagraph>(editedTexts.Count);
+        for (var index = 0; index < editedTexts.Count; index++)
         {
-            if (!existingByHash.ContainsKey(para.ContentHash))
+            var text = editedTexts[index];
+            var savedIndex = match.SavedIndexByEdited[index];
+            if (savedIndex < 0)
             {
-                existingByHash[para.ContentHash] = para;
-            }
-        }
-        
-        var paragraphsToUpdate = new List<(ChapterParagraph paragraph, int newIndex)>();
-        var paragraphsToCreate = new List<ChapterParagraph>();
-        var usedHashes = new HashSet<string>();
-        
-        // Match new paragraphs with existing ones - O(n)
-        for (int newIndex = 0; newIndex < newParagraphTexts.Count; newIndex++)
-        {
-            var newText = newParagraphTexts[newIndex];
-            var newHash = ComputeContentHash(newText);
-            
-            // Check if this exact content exists
-            if (existingByHash.TryGetValue(newHash, out var existingParagraph) && 
-                !usedHashes.Contains(newHash))
-            {
-                // Reuse existing paragraph (preserve comments)
-                paragraphsToUpdate.Add((existingParagraph, newIndex));
-                usedHashes.Add(newHash);
-            }
-            else
-            {
-                // Create new paragraph
-                paragraphsToCreate.Add(new ChapterParagraph
+                paragraphs.Add(new ChapterParagraph
                 {
                     Id = Guid.NewGuid(),
-                    ChapterId = chapterId, // ✅ FIX: Use chapterId parameter instead of Guid.Empty fallback
-                    Content = newText,
-                    ContentHash = newHash,
-                    OrderIndex = newIndex,
+                    ChapterId = chapterId,
+                    Content = text,
+                    ContentHash = ParagraphText.Hash(text),
+                    OrderIndex = index,
                     ContentType = "text",
-                    CreatedAt = DateTime.UtcNow,
+                    CreatedAt = now,
                     CommentsCount = 0
                 });
+                continue;
             }
+
+            var paragraph = saved[savedIndex];
+            var changed = false;
+            if (paragraph.Content != text)
+            {
+                // Same words in new markup (bold, italic, line breaks, spacing): readers get the new markup.
+                paragraph.Content = text;
+                paragraph.ContentHash = ParagraphText.Hash(text);
+                reformatted++;
+                changed = true;
+            }
+
+            if (paragraph.OrderIndex != index)
+            {
+                paragraph.OrderIndex = index;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                paragraph.UpdatedAt = now;
+            }
+
+            paragraphs.Add(paragraph);
         }
-        
-        // Identify paragraphs to delete (not matched)
-        var matchedParagraphIds = paragraphsToUpdate.Select(x => x.paragraph.Id).ToHashSet();
-        var paragraphsToDelete = existingParagraphs
-            .Where(p => !matchedParagraphIds.Contains(p.Id))
-            .ToList();
-        
-        return new ParagraphMatchResult
-        {
-            ParagraphsToUpdate = paragraphsToUpdate,
-            ParagraphsToCreate = paragraphsToCreate,
-            ParagraphsToDelete = paragraphsToDelete
-        };
-    }
-    
-    private static string ComputeContentHash(string content)
-    {
-        // Normalize content before hashing (same as CreateChapterCommandHandler)
-        var normalized = content.Trim()
-            .Replace("\r\n", "\n")
-            .Replace("\r", "\n")
-            .Replace("\t", " ");
-        
-        using var sha256 = SHA256.Create();
-        var bytes = Encoding.UTF8.GetBytes(normalized);
-        var hashBytes = sha256.ComputeHash(bytes);
-        return Convert.ToBase64String(hashBytes);
-    }
-    
-    private class ParagraphMatchResult
-    {
-        public List<(ChapterParagraph paragraph, int newIndex)> ParagraphsToUpdate { get; set; } = new();
-        public List<ChapterParagraph> ParagraphsToCreate { get; set; } = new();
-        public List<ChapterParagraph> ParagraphsToDelete { get; set; } = new();
+
+        var removed = match.RemovedSaved.Select(i => saved[i]).ToList();
+        var deleted = await paragraphsRepository.SaveEditedParagraphs(chapterId, paragraphs, removed);
+
+        logger.Log(deleted.Visible > 0 ? LogLevel.Warning : LogLevel.Information,
+            "Chapter {ChapterId} paragraphs saved: {Kept} kept, {Moved} moved, {Created} new, {Removed} removed " +
+            "({Reformatted} kept with new formatting); {CommentsDeleted} comments deleted with the removed paragraphs " +
+            "({VisibleCommentsDeleted} visible to readers); {ElapsedMs} ms",
+            chapterId, match.Kept, match.Moved, match.Created, match.Removed, reformatted,
+            deleted.Comments, deleted.Visible, stopwatch.ElapsedMilliseconds);
+
+        return paragraphs.Count;
     }
 }
