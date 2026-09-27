@@ -113,10 +113,11 @@ public class ChapterEditTests(SqlServerDatabase database) : IClassFixture<SqlSer
             db.UserDevices.Add(device);
             await db.SaveChangesAsync();
             var notifications = new NotificationsRepository(db);
-            gone = (await notifications.CreateNotification(
-                Notification(world.Author, world.Readers[0], NotificationType.LikeOnComment, world.CommentsOn[1][0]))).Id;
-            kept = (await notifications.CreateNotification(
-                Notification(world.Author, world.Readers[0], NotificationType.LikeOnComment, world.CommentsOn[6][0]))).Id;
+            var goneNotification = Notification(world.Author, world.Readers[0], NotificationType.LikeOnComment, world.CommentsOn[1][0]);
+            var keptNotification = Notification(world.Author, world.Readers[0], NotificationType.LikeOnComment, world.CommentsOn[6][0]);
+            Assert.True(await notifications.CreateNotification(goneNotification));
+            Assert.True(await notifications.CreateNotification(keptNotification));
+            (gone, kept) = (goneNotification.Id, keptNotification.Id);
             Assert.Equal(2, await db.PushOutbox.CountAsync(o => o.DeviceId == device.Id && (o.NotificationId == gone || o.NotificationId == kept)));
         }
 

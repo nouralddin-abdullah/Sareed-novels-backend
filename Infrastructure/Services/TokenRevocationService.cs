@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Application.Services;
 using Domain.Entities;
+using Domain.Moderation;
 using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -42,18 +43,21 @@ internal sealed class TokenRevocationService(ApplicationDbContext db, TokenCutof
             state = await db.Users
                 .AsNoTracking()
                 .Where(u => u.Id == userId)
-                .Select(u => new UserTokenCutoff(true, u.TokensValidAfter))
+                .Select(u => new UserTokenCutoff(true, u.TokensValidAfter, u.SuspendedUntil))
                 .FirstOrDefaultAsync(cancellationToken)
                 ?? UserTokenCutoff.NoSuchUser;
             cache.Set(userId, state, readStartedAt);
         }
 
-        return state.UserExists && (state.ValidAfter is not { } validAfter || issuedAtUtc >= validAfter);
+        return state.UserExists
+            && (state.ValidAfter is not { } validAfter || issuedAtUtc >= validAfter)
+            // Suspending revokes every token, but one issued in the revoking second would pass the cut-off.
+            && !Suspension.IsActive(state.SuspendedUntil, time.GetUtcNow().UtcDateTime);
     }
 }
 
-/// <summary>A user's token cut-off as last read from the database.</summary>
-internal sealed record UserTokenCutoff(bool UserExists, DateTime? ValidAfter)
+/// <summary>A user's token cut-off and suspension as last read from the database.</summary>
+internal sealed record UserTokenCutoff(bool UserExists, DateTime? ValidAfter, DateTime? SuspendedUntil = null)
 {
     public static readonly UserTokenCutoff NoSuchUser = new(false, null);
 }
@@ -103,6 +107,7 @@ internal sealed class TokenCutoffCache(IMemoryCache cache)
         }
     }
 
+    /// <summary>Drops the user's cached state, so the next check reads the database (after a revocation or a suspension change).</summary>
     public void Forget(string userId)
     {
         lock (sync)

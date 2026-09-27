@@ -19,6 +19,7 @@ public class CreateCommentCommandHandler(
     IChapterParagraphsRepository paragraphsRepository, 
     IPostsRepository postsRepository,
     ICommentLikesRepository commentLikesRepository,
+    IUserBlocksRepository blocksRepository,
     IUserContext userContext, 
     IFileUploadService fileUploadService, 
     IMapper mapper,
@@ -49,6 +50,12 @@ public class CreateCommentCommandHandler(
             // The query filter hides deleted posts, so they are "not found" too.
             var post = await postsRepository.GetPostById(request.PostId.Value) ?? throw new NotFoundException("Post not found");
             postId = post.Id;
+
+            // A post's author who blocked someone gets no comments (or replies) from them on it.
+            if (post.UserId != currentUser.Id && await blocksRepository.IsBlockedAsync(post.UserId, currentUser.Id, cancellationToken))
+            {
+                throw new ForbidException("لا يمكنك التعليق على منشورات هذا المستخدم", "Blocked");
+            }
         }
         else
         {
@@ -62,6 +69,12 @@ public class CreateCommentCommandHandler(
         if (request.ParentCommentId.HasValue)
         {
             var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId.Value) ?? throw new NotFoundException("Parent comment not found!");
+
+            // Nor replies to their comments.
+            if (parentComment.UserId != currentUser.Id && await blocksRepository.IsBlockedAsync(parentComment.UserId, currentUser.Id, cancellationToken))
+            {
+                throw new ForbidException("لا يمكنك الرد على تعليقات هذا المستخدم", "Blocked");
+            }
 
             // Threads are one level deep (the web app only shows replies under top-level comments), and a reply lives
             // where its parent does.

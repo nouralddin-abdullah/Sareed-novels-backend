@@ -114,6 +114,10 @@ public static class WebApplicationBuilderExtensions
             options.AddPolicy(RateLimitPolicies.Devices, context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            // Per IP, like the others; the report handler also limits each account (CreateReportCommandHandler.PerUserLimit).
+            options.AddPolicy(RateLimitPolicies.Reports, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(10), QueueLimit = 0 }));
         });
 
         // 2. Add MVC Controllers
@@ -166,4 +170,7 @@ public static class RateLimitPolicies
 
     /// <summary>Push device registration: 30 requests per minute per IP.</summary>
     public const string Devices = "devices";
+
+    /// <summary>Reporting content or users: 30 requests per 10 minutes per IP (and 20 new reports an hour per account).</summary>
+    public const string Reports = "reports";
 }

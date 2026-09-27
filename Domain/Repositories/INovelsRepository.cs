@@ -13,6 +13,11 @@ public interface INovelsRepository
     /// </summary>
     Task<Novel?> GetOneBySlug(string slug);
     Task<bool> UpdateOne(Novel novel);
+    /// <summary>
+    /// Deletes the novel the way its author does (soft: IsDeleted, and out of the rankings), in one UPDATE. False when
+    /// there is no such novel or it was already deleted.
+    /// </summary>
+    Task<bool> SoftDeleteAsync(Guid novelId);
     /// <summary>Sets ChapterCount to the novel's current number of chapters in one SQL statement (no read-modify-write).</summary>
     Task RefreshChapterCountAsync(Guid novelId, DateTime? lastUpdatedAt = null);
     Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber);

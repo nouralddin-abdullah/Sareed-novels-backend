@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Users.Queries.GetUserProfile;
 
-public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logger, UserManager<User> userManager, IUserContext userContext,IMapper mapper, IUsersRepository usersRepository) : IRequestHandler<GetUserProfileQuery, UserProfile>
+public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logger, UserManager<User> userManager, IUserContext userContext,IMapper mapper, IUsersRepository usersRepository, IUserBlocksRepository blocksRepository) : IRequestHandler<GetUserProfileQuery, UserProfile>
 {
     public async Task<UserProfile> Handle(GetUserProfileQuery request, CancellationToken cancellationToken)
     {
@@ -20,6 +20,19 @@ public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logg
             ?? await usersRepository.GetByPreviousUserNameAsync(request.UserName, cancellationToken)
             ?? throw new NotFoundException("User is not found");
         logger.LogInformation("Getting profile for {UserId}", user.Id);
+
+        // Someone this user blocked finds no such user (the same answer as for a name nobody has); someone who blocked
+        // this user still sees them, flagged, so they can unblock.
+        var blockedByMe = false;
+        if (currentUser != null && currentUser.Id != user.Id)
+        {
+            var relation = await blocksRepository.GetRelationAsync(currentUser.Id, user.Id, cancellationToken);
+            if (relation.OtherBlockedViewer)
+            {
+                throw new NotFoundException("User is not found");
+            }
+            blockedByMe = relation.ViewerBlockedOther;
+        }
         
         // Only get total counts (no recent followers/following)
         var totalFollowers = await usersRepository.GetFollowersCount(user);
@@ -40,6 +53,7 @@ public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logg
         profile.TotalFollowers = totalFollowers;
         profile.TotalFollowing = totalFollowing;
         profile.IsFollowing = isFollowing;
+        profile.IsBlockedByMe = blockedByMe;
 
         return profile;
     }

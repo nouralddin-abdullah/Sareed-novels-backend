@@ -41,6 +41,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<NotificationPreferences> NotificationPreferences { get; set; }
     internal DbSet<PushOutboxMessage> PushOutbox { get; set; }
 
+    // Moderation (ModerationConfiguration.cs)
+    internal DbSet<Report> Reports { get; set; }
+    internal DbSet<UserBlock> UserBlocks { get; set; }
+
     // Wallet System
     internal DbSet<UserWallet> UserWallets { get; set; }
     internal DbSet<RechargeRequest> RechargeRequests { get; set; }
@@ -971,6 +975,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.ApplyConfiguration(new UserDeviceConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationPreferencesConfiguration());
         modelBuilder.ApplyConfiguration(new PushOutboxMessageConfiguration());
+
+        // Moderation: reports for the admins, and users blocking users.
+        modelBuilder.ApplyConfiguration(new ReportConfiguration());
+        modelBuilder.ApplyConfiguration(new UserBlockConfiguration());
 
         // UserWallet configuration
         modelBuilder.Entity<UserWallet>(entity =>

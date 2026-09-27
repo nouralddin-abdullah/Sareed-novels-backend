@@ -24,4 +24,6 @@ public class UserProfile
     public int TotalFollowing { get; set; }
     public int TotalFollowers { get; set; }
     public bool IsFollowing { get; set; }
+    /// <summary>Whether the signed-in viewer blocked this user (so the app can offer to unblock); false when anonymous.</summary>
+    public bool IsBlockedByMe { get; set; }
 }

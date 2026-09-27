@@ -30,4 +30,7 @@ public interface IUsersRepository
     /// profile links. Only for names no live user holds: callers look the live name up first.
     /// </summary>
     Task<User?> GetByPreviousUserNameAsync(string userName, CancellationToken cancellationToken = default);
+
+    /// <summary>These users (untracked) by id, in one query; ids without a user are left out.</summary>
+    Task<Dictionary<string, User>> GetByIdsAsync(IReadOnlyCollection<string> userIds, CancellationToken cancellationToken = default);
 }

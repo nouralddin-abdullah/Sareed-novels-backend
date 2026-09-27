@@ -17,6 +17,10 @@ public class UpdateMeCommandValidator : AbstractValidator<UpdateMeCommand>
             .Must(UserNameRules.HasNoAtSign)
             .WithMessage(UserNameRules.NoAtSignMessage);
 
+        RuleFor(dto => dto.UserName)
+            .Must(UserNameRules.IsNotReserved)
+            .WithMessage(UserNameRules.ReservedMessage);
+
         RuleFor(dto => dto.DisplayName)
            .NotEmpty()
            .Length(3, 20)

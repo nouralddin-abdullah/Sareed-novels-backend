@@ -22,7 +22,8 @@ public interface ITokenRevocationService
 
     /// <summary>
     /// Whether a token issued to <paramref name="userId"/> at <paramref name="issuedAtUtc"/> is still accepted: false
-    /// when it was issued before the user's cut-off, or when the user no longer exists.
+    /// when it was issued before the user's cut-off, while the user is suspended (User.SuspendedUntil), or when the
+    /// user no longer exists.
     /// </summary>
     Task<bool> IsTokenActiveAsync(string userId, DateTime issuedAtUtc, CancellationToken cancellationToken = default);
 }

@@ -24,10 +24,8 @@ public class DeleteWorkCommandHandler(
             throw new ForbidException("Forbidden");
         }
         
-        novel.IsDeleted = true;
-        novel.IsEligibleForRanking = false;
-        
-        var result = await novelsRepository.UpdateOne(novel);
+        // Soft delete, out of the rankings too: the same path as a moderator removing a reported novel.
+        var result = await novelsRepository.SoftDeleteAsync(novel.Id);
         
         if (result)
         {

@@ -16,6 +16,10 @@ public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
             .Must(UserNameRules.HasNoAtSign)
             .WithMessage(UserNameRules.NoAtSignMessage);
 
+        RuleFor(dto => dto.UserName)
+            .Must(UserNameRules.IsNotReserved)
+            .WithMessage(UserNameRules.ReservedMessage);
+
         RuleFor(dto => dto.Email)
             .EmailAddress()
             .WithMessage("A user should have a valid email");
