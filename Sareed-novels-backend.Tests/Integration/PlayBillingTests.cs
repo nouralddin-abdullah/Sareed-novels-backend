@@ -21,7 +21,7 @@ namespace Sareed_novels_backend.Tests.Integration;
 public class PlayBillingTests(SqlServerDatabase database) : IClassFixture<SqlServerDatabase>, IAsyncLifetime
 {
     private readonly FakeGooglePlay google = new();
-    private readonly TestClock clock = new(DateTime.UtcNow);
+    private readonly MutableClock clock = new(DateTime.UtcNow);
 
     public async Task InitializeAsync()
     {

@@ -236,13 +236,3 @@ public sealed class FakePlayPurchase
         return json;
     }
 }
-
-/// <summary>A clock tests move by hand.</summary>
-public sealed class TestClock(DateTime utcNow) : TimeProvider
-{
-    public DateTime UtcNow { get; set; } = utcNow;
-
-    public override DateTimeOffset GetUtcNow() => new(DateTime.SpecifyKind(UtcNow, DateTimeKind.Utc));
-
-    public void Advance(TimeSpan by) => UtcNow += by;
-}
