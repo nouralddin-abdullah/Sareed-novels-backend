@@ -13,6 +13,17 @@ public class NotificationDto
     public DateTime CreatedAt { get; set; }
     public Guid? RelatedEntityId { get; set; }
     public string? RelatedEntityType { get; set; }
+
+    /// <summary>
+    /// The novel the notification is about, for GiftReceived, PrivilegeSubscribed, NewChapterInLibrary, ReviewOnNovel
+    /// and LikeOnReview (null for the others, and for a review that has since been deleted). Open it with
+    /// GET /api/novel/by-id/{novelId}: a rename changes the slug frozen in <see cref="ActionUrl"/>. Comment
+    /// notifications get their novel from GET /api/notifications/comment/{RelatedEntityId}.
+    /// </summary>
+    public Guid? NovelId { get; set; }
+
+    /// <summary>The novel's current slug; null when there is no <see cref="NovelId"/> or the novel was deleted.</summary>
+    public string? NovelSlug { get; set; }
 }
 
 public class NotificationListDto

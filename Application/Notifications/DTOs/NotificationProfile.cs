@@ -8,7 +8,9 @@ public class NotificationProfile : Profile
 {
     public NotificationProfile()
     {
-        CreateMap<Notification, NotificationDto>();
+        CreateMap<Notification, NotificationDto>()
+            .ForMember(dest => dest.NovelId, opt => opt.Ignore()) // set by GetNotificationsQueryHandler
+            .ForMember(dest => dest.NovelSlug, opt => opt.Ignore());
         
         CreateMap<Domain.Entities.Comments, CommentDto>()
             .ForMember(dest => dest.User, opt => opt.MapFrom(src => src.User));
