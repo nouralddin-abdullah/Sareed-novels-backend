@@ -146,7 +146,6 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
     public async Task<Novel?> GetOneBySlug(string slug)
     {
         var novel = await dbContext.Novels
-            .Where(n => !n.IsDraft)
             .Include(n=>n.Owner)
             .Include(n => n.NovelGenres)
                 .ThenInclude(ng => ng.Genre)

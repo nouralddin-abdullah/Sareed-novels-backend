@@ -7,6 +7,10 @@ public interface INovelsRepository
 {
     Task<bool> CreateNovel(Novel novel);
     Task<Novel?> GetOne(Guid novelId);
+    /// <summary>
+    /// The novel with its author and genres, drafts included like <see cref="GetOne"/> (the caller decides who may see
+    /// a draft); deleted novels are never found.
+    /// </summary>
     Task<Novel?> GetOneBySlug(string slug);
     Task<bool> UpdateOne(Novel novel);
     /// <summary>Sets ChapterCount to the novel's current number of chapters in one SQL statement (no read-modify-write).</summary>
