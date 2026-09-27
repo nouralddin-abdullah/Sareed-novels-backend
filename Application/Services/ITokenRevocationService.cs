@@ -14,7 +14,8 @@ public interface ITokenRevocationService
 {
     /// <summary>
     /// Signs the user out everywhere: every access token issued to them before now is refused from the next request
-    /// on. For account takeover fixes, password changes and account deletion. Call it after the surrounding
+    /// on, and the phones registered for their push notifications are unregistered (the app registers again when it
+    /// signs in). For account takeover fixes, password changes and account deletion. Call it after the surrounding
     /// transaction (if any) has committed, so no other request can cache the old cut-off.
     /// </summary>
     Task RevokeAllTokensAsync(string userId, CancellationToken cancellationToken = default);

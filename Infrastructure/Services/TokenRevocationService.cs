@@ -26,6 +26,12 @@ internal sealed class TokenRevocationService(ApplicationDbContext db, TokenCutof
                 u => u.TokensValidAfter != null && u.TokensValidAfter > cutoff ? u.TokensValidAfter : cutoff), cancellationToken);
 
         cache.Forget(userId);
+
+        // The phones those sessions registered for push notifications would otherwise keep receiving the account's
+        // notifications. The app registers its phone again when it signs in.
+        await db.UserDevices
+            .Where(d => d.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
     public async Task<bool> IsTokenActiveAsync(string userId, DateTime issuedAtUtc, CancellationToken cancellationToken = default)

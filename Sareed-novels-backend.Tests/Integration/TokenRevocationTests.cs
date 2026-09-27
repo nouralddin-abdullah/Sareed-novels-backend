@@ -7,6 +7,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Application.Services;
+using Domain.Constants;
 using Domain.Entities;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
@@ -119,6 +120,30 @@ public class TokenRevocationTests(SqlServerDatabase database) : IClassFixture<Sq
 
         Assert.Equal(NoonSharp, await StoredCutoff(user.Id));
     }
+
+    [Fact]
+    public async Task A_revocation_unregisters_the_users_push_devices()
+    {
+        var (user, other) = (await SeedUser(), await SeedUser());
+        await using (var db = database.CreateContext())
+        {
+            db.UserDevices.AddRange(Device(user.Id), Device(user.Id), Device(other.Id));
+            await db.SaveChangesAsync();
+        }
+
+        await Service(NewCache(), new Clock(Noon)).RevokeAllTokensAsync(user.Id);
+
+        // The sessions that registered them have ended: those phones must not keep getting the account's notifications.
+        await using var check = database.CreateContext();
+        Assert.False(await check.UserDevices.AnyAsync(d => d.UserId == user.Id));
+        Assert.Equal(1, await check.UserDevices.CountAsync(d => d.UserId == other.Id));
+    }
+
+    private static UserDevice Device(string userId) => new()
+    {
+        Id = Guid.NewGuid(), UserId = userId, Token = "token-" + Guid.NewGuid().ToString("N"), Platform = DevicePlatforms.Android,
+        CreatedAt = DateTime.UtcNow, LastSeenAt = DateTime.UtcNow
+    };
 
     [Fact]
     public async Task Tokens_of_users_that_no_longer_exist_are_refused()

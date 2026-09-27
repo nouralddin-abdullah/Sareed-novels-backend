@@ -120,7 +120,9 @@ public class PushNotificationHttpTests(PushApiFactory push) : IClassFixture<Push
         var jwtKey = push.Factory.Services.GetRequiredService<IConfiguration>()["Jwt:Key"]!;
         var earlier = account with { Token = TokenFactory.Write(account.Id, DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddDays(59), jwtKey) };
         var client = Client();
-        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(As(earlier, HttpMethod.Get, "/api/notifications/preferences"))).StatusCode);
+        var phone = FcmToken();
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await client.SendAsync(As(earlier, HttpMethod.Post, "/api/notifications/devices", new { token = phone, platform = "android" }))).StatusCode);
 
         using (var scope = push.Factory.Services.CreateScope())
         {
@@ -136,6 +138,9 @@ public class PushNotificationHttpTests(PushApiFactory push) : IClassFixture<Push
             var response = await client.SendAsync(As(earlier, method, url, new { token = FcmToken(), platform = "android", social = false }));
             Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         }
+
+        // The phone that signed-out session registered no longer gets the account's pushes.
+        Assert.Empty(await DevicesWith(phone));
     }
 
     [Fact]
