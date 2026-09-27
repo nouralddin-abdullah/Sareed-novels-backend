@@ -3,7 +3,6 @@ using System.Net;
 using System.Text.Json;
 using Infrastructure.Persistence;
 using Infrastructure.Push;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Sareed_novels_backend.Tests.Integration;
@@ -124,21 +123,6 @@ public sealed class MutableClock(DateTime utcNow) : TimeProvider
     public void Advance(TimeSpan by) => UtcNow += by;
 
     public override DateTimeOffset GetUtcNow() => new(DateTime.SpecifyKind(UtcNow, DateTimeKind.Utc));
-}
-
-/// <summary>Keeps what was logged, to check that failures are surfaced.</summary>
-public sealed class ListLogger<T> : ILogger<T>
-{
-    public ConcurrentQueue<(LogLevel Level, string Message)> Entries { get; } = new();
-
-    public IEnumerable<string> Warnings => Entries.Where(e => e.Level == LogLevel.Warning).Select(e => e.Message);
-
-    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-    public bool IsEnabled(LogLevel logLevel) => true;
-
-    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-        Entries.Enqueue((logLevel, formatter(state, exception)));
 }
 
 internal static class PushTesting
