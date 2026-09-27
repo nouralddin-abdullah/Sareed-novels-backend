@@ -40,6 +40,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
     internal DbSet<PointTransaction> PointTransactions { get; set; }
     
+    // Google Play point packs (PlayBillingConfiguration.cs)
+    internal DbSet<PlayPurchase> PlayPurchases { get; set; }
+    internal DbSet<PlaySyncCursor> PlaySyncCursors { get; set; }
+
     // Gift System
     internal DbSet<Gift> Gifts { get; set; }
     internal DbSet<GiftTransaction> GiftTransactions { get; set; }
@@ -1107,6 +1111,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(pt => new { pt.Type, pt.CreatedAt })
                 .HasDatabaseName("IX_PointTransactions_Type_Created");
         });
+
+        // Google Play point packs: one row per purchase token, and the voided-purchases poll's cursor.
+        modelBuilder.ApplyConfiguration(new PlayPurchaseConfiguration());
+        modelBuilder.ApplyConfiguration(new PlaySyncCursorConfiguration());
 
         // Gift configuration
         modelBuilder.Entity<Gift>(entity =>
