@@ -19,6 +19,14 @@ namespace Sareed_novels_backend.Controllers
             return Ok(novelDto);
         }
 
+        /// <summary>
+        /// The same novel page as by slug (same DTO, drafts for their author only), by id: ids never change, while a
+        /// rename changes the slug that older links and notifications carry.
+        /// </summary>
+        [HttpGet("by-id/{novelId:guid}")]
+        public async Task<IActionResult> GetNovelById([FromRoute] Guid novelId) =>
+            Ok(await mediator.Send(new GetNovelQuery(novelId)));
+
         [HttpGet]
         public async Task<IActionResult> GetAllNovels(
             [FromQuery] int pageNumber = 1,

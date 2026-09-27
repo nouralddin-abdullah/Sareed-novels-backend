@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Threading.RateLimiting;
+using Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -87,6 +88,8 @@ public static class WebApplicationBuilderExtensions
                 ValidAudience = builder.Configuration["Jwt:Audience"],
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
             };
+            // Tokens issued before their user's sign-out-everywhere cut-off are refused (ITokenRevocationService).
+            options.Events = new JwtBearerEvents { OnTokenValidated = AccessTokens.RejectRevokedAsync };
         });
 
         // Per-client-IP limits on the anonymous account endpoints (password guessing, sign-up spam, email bombing).
@@ -107,6 +110,10 @@ public static class WebApplicationBuilderExtensions
             options.AddPolicy(RateLimitPolicies.Email, context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 }));
+            // Per IP (this runs before authentication), and loose enough for many phones behind one carrier NAT.
+            options.AddPolicy(RateLimitPolicies.Devices, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
 
         // 2. Add MVC Controllers
@@ -156,4 +163,7 @@ public static class RateLimitPolicies
 
     /// <summary>Endpoints that send an email: 5 requests per 15 minutes per IP.</summary>
     public const string Email = "email";
+
+    /// <summary>Push device registration: 30 requests per minute per IP.</summary>
+    public const string Devices = "devices";
 }

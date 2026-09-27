@@ -156,26 +156,24 @@ public class NotificationService(
     {
         try
         {
-            foreach (var userId in userIds)
+            var notifications = userIds.Select(userId => new Notification
             {
-                var notification = new Notification
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = userId,
-                    Type = NotificationType.NewChapterInLibrary,
-                    ActorId = novel.Id.ToString(), // Use novel ID instead of author ID
-                    ActorDisplayName = novel.Title, // Novel title instead of author name
-                    ActorProfilePhoto = novel.CoverImageUrl, // Novel cover instead of author photo
-                    Message = $"فصل جديد في '{novel.Title}': {chapter.Title}",
-                    ActionUrl = $"/novel/{novel.Slug}/chapter/{chapter.Id}",
-                    IsRead = false,
-                    RelatedEntityId = chapter.Id,
-                    RelatedEntityType = "Chapter",
-                    CreatedAt = DateTime.UtcNow
-                };
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Type = NotificationType.NewChapterInLibrary,
+                ActorId = novel.Id.ToString(), // Use novel ID instead of author ID
+                ActorDisplayName = novel.Title, // Novel title instead of author name
+                ActorProfilePhoto = novel.CoverImageUrl, // Novel cover instead of author photo
+                Message = $"فصل جديد في '{novel.Title}': {chapter.Title}",
+                ActionUrl = $"/novel/{novel.Slug}/chapter/{chapter.Id}",
+                IsRead = false,
+                RelatedEntityId = chapter.Id,
+                RelatedEntityType = "Chapter",
+                CreatedAt = DateTime.UtcNow
+            }).ToList();
 
-                await notificationsRepository.CreateNotification(notification);
-            }
+            // A novel can have thousands of readers: insert them (and their pushes) in batches, not one by one.
+            await notificationsRepository.CreateNotifications(notifications);
 
             logger.LogDebug("Created NewChapterInLibrary notifications for {Count} users", userIds.Count);
         }

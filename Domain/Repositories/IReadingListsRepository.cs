@@ -10,6 +10,8 @@ public interface IReadingListsRepository
     Task<ReadingList?> GetByIdWithDetailsAsync(Guid id);
     Task<(IEnumerable<ReadingList>, int)> GetUserReadingListsAsync(string userId, int pageNumber, int pageSize);
     Task<(IReadOnlyList<ReadingListSummary>, int)> GetUserReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize);
+    /// <summary>One list as the list pages summarize them (visible-novel count and preview), or null if it doesn't exist.</summary>
+    Task<ReadingListSummary?> GetSummaryAsync(Guid readingListId);
     Task<(IReadOnlyList<ReadingListSummary>, int)> GetUserPublicReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize);
     Task<(IEnumerable<ReadingList>, int)> GetPublicReadingListsAsync(int pageNumber, int pageSize);
     Task<(IEnumerable<ReadingList>, int)> GetFollowedReadingListsAsync(string userId, int pageNumber, int pageSize);

@@ -14,7 +14,11 @@ public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logg
     public async Task<UserProfile> Handle(GetUserProfileQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? null;
-        var user = await userManager.FindByNameAsync(request.UserName) ?? throw new NotFoundException("User is not found");
+        // A name the member used before still finds them (old links); the profile carries the current userName, so
+        // clients can move to it. A live user with that name always wins.
+        var user = await userManager.FindByNameAsync(request.UserName)
+            ?? await usersRepository.GetByPreviousUserNameAsync(request.UserName, cancellationToken)
+            ?? throw new NotFoundException("User is not found");
         logger.LogInformation("Getting profile for {UserId}", user.Id);
         
         // Only get total counts (no recent followers/following)

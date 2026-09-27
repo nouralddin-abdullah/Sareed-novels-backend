@@ -1,5 +1,6 @@
 ﻿using Domain.Entities;
 using Domain.Search;
+using Infrastructure.Push;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,7 +34,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<EntityRelationship> EntityRelationships { get; set; }
     internal DbSet<EntityGalleryImage> EntityGalleryImages { get; set; }
     internal DbSet<Notification> Notifications { get; set; }
+    internal DbSet<UserNameChange> UserNameChanges { get; set; }
     
+    // Push notifications (PushNotificationsConfiguration.cs)
+    internal DbSet<UserDevice> UserDevices { get; set; }
+    internal DbSet<NotificationPreferences> NotificationPreferences { get; set; }
+    internal DbSet<PushOutboxMessage> PushOutbox { get; set; }
+
     // Wallet System
     internal DbSet<UserWallet> UserWallets { get; set; }
     internal DbSet<RechargeRequest> RechargeRequests { get; set; }
@@ -125,6 +132,20 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                   .HasMaxLength(SearchText.TitleMaxLength)
                   .HasDefaultValue(string.Empty);
             entity.HasIndex(u => u.SearchName);
+        });
+
+        modelBuilder.Entity<UserNameChange>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            // Identity's own limit for user names.
+            entity.Property(c => c.OldUserName).HasMaxLength(256);
+            entity.Property(c => c.OldNormalizedUserName).HasMaxLength(256);
+            entity.HasIndex(c => c.OldNormalizedUserName);
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(c => c.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<DailyUniqueView>(entity =>
@@ -946,6 +967,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasDatabaseName("IX_Notifications_ActorId");
         });
 
+        // Push notifications: device tokens, per-group preferences, and the outbox the push worker drains.
+        modelBuilder.ApplyConfiguration(new UserDeviceConfiguration());
+        modelBuilder.ApplyConfiguration(new NotificationPreferencesConfiguration());
+        modelBuilder.ApplyConfiguration(new PushOutboxMessageConfiguration());
+
         // UserWallet configuration
         modelBuilder.Entity<UserWallet>(entity =>
         {
@@ -1422,12 +1448,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         RefreshSearchColumns();
+        RecordUserNameChanges();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         RefreshSearchColumns();
+        RecordUserNameChanges();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
@@ -1453,6 +1481,35 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         foreach (var entity in entities) entity.SearchName = SearchText.Normalize(entity.Name);
 
         return novels.Count + users.Count + entities.Count == 0 ? 0 : await SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Keeps the user names members give up (<see cref="UserNameChange"/>), in the same save as the rename, so links
+    /// to an old name still find them. Works from the loaded values of the user, which is how Identity's UserManager
+    /// updates users (update-me): it saves users it loaded through this context.
+    /// </summary>
+    private void RecordUserNameChanges()
+    {
+        var renamed = ChangeTracker.Entries<User>()
+            .Where(e => e.State == EntityState.Modified)
+            .Select(e => (
+                e.Entity,
+                OldName: e.Property(u => u.UserName).OriginalValue,
+                OldNormalizedName: e.Property(u => u.NormalizedUserName).OriginalValue))
+            .Where(r => r.OldName != null && r.OldNormalizedName != null
+                && !string.Equals(r.OldNormalizedName, r.Entity.NormalizedUserName, StringComparison.Ordinal))
+            .ToList();
+
+        foreach (var (user, oldName, oldNormalizedName) in renamed)
+        {
+            UserNameChanges.Add(new UserNameChange
+            {
+                UserId = user.Id,
+                OldUserName = oldName!,
+                OldNormalizedUserName = oldNormalizedName!,
+                ChangedAt = DateTime.UtcNow
+            });
+        }
     }
 
     private void RefreshSearchColumns()

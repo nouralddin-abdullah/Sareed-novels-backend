@@ -29,8 +29,8 @@ public class GetNovelReviewsHandler(
             request.PageNumber, 
             request.Sorting);
         
-        var reviewsDto = mapper.Map<IEnumerable<ReviewsDTO>>(reviewsRaw).ToList();
         var currentUser = userContext.GetCurrentUser();
+        var reviewsDto = await ReviewListDtos.Build(reviewsRaw, mapper, reviewLikesRepository, currentUser);
 
         // Get current user's review (if authenticated)
         CurrentUserReviewDTO? currentUserReview = null;
@@ -40,18 +40,6 @@ public class GetNovelReviewsHandler(
             if (userReview != null)
             {
                 currentUserReview = mapper.Map<CurrentUserReviewDTO>(userReview);
-            }
-
-            // Mark which reviews the current user has liked
-            if (reviewsDto.Count != 0)
-            {
-                var reviewIds = reviewsDto.Select(r => r.Id);
-                var userLikedReviewIds = await reviewLikesRepository.GetUserLikedReviewIds(currentUser.Id, reviewIds);
-
-                foreach (var reviewDto in reviewsDto)
-                {
-                    reviewDto.IsLikedByCurrentUser = userLikedReviewIds.Contains(reviewDto.Id);
-                }
             }
         }
 

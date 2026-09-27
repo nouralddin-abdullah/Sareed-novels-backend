@@ -89,7 +89,9 @@ namespace Sareed_novels_backend.Controllers
                 var result = await mediator.Send(command);
                 // The token goes in the URL fragment, which browsers never send to servers, so it stays
                 // out of access logs, proxies and Referer headers. The web app reads it and strips it.
-                return Redirect($"{frontendUrl}/auth/success#token={Uri.EscapeDataString(result.AccessToken)}");
+                // passwordReset=1: this sign-in removed a password set before the email was verified (the web says so).
+                var passwordReset = result.PasswordReset ? "&passwordReset=1" : "";
+                return Redirect($"{frontendUrl}/auth/success#token={Uri.EscapeDataString(result.AccessToken)}{passwordReset}");
             }
             catch (Exception)
             {

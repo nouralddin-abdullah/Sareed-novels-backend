@@ -3,7 +3,16 @@ using MediatR;
 
 namespace Application.Novels.Queries.GetNovel;
 
-public class GetNovelQuery(string novelSlug) : IRequest<NovelsDTO>
+/// <summary>
+/// A novel's page, by slug or by id. Both go through the same handler, so they return the same DTO under the same
+/// rules: a draft is visible to its author only, a deleted novel to nobody.
+/// </summary>
+public class GetNovelQuery : IRequest<NovelsDTO>
 {
-    public string NovelSlug { get; set; } = novelSlug;
+    public GetNovelQuery(string novelSlug) => NovelSlug = novelSlug;
+
+    public GetNovelQuery(Guid novelId) => NovelId = novelId;
+
+    public string? NovelSlug { get; }
+    public Guid? NovelId { get; }
 }

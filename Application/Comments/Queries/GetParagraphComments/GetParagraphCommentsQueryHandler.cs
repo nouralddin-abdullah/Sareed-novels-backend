@@ -22,20 +22,7 @@ public class GetParagraphCommentsQueryHandler(ILogger<GetParagraphCommentsQueryH
             pageSize,
             request.Sorting);
 
-        var commentDtos = mapper.Map<List<CommentsDTO>>(comments);
-        await CommentReplyCounts.Fill(commentsRepository, commentDtos);
-
-        var currentUser = userContext.GetCurrentUser();
-        if (currentUser != null && commentDtos.Any())
-        {
-            var commentIds = commentDtos.Select(c => c.Id);
-            var likedCommentIds = await commentLikesRepository.GetUserLikedCommentIds(currentUser.Id, commentIds);
-
-            foreach (var commentDto in commentDtos)
-            {
-                commentDto.IsLikedByCurrentUser = likedCommentIds.Contains(commentDto.Id);
-            }
-        }
+        var commentDtos = await CommentListDtos.Build(comments, mapper, commentsRepository, commentLikesRepository, userContext.GetCurrentUser());
 
         return new PagedResult<CommentsDTO>(
             commentDtos,

@@ -14,6 +14,10 @@ public class GiftTransactionDto
 {
     public Guid Id { get; set; }
     public GiftDto Gift { get; set; } = default!;
+    /// <summary>The novel the gift was sent to.</summary>
+    public Guid NovelId { get; set; }
+    /// <summary>That novel's current slug.</summary>
+    public string? NovelSlug { get; set; }
     public string SenderUserName { get; set; } = default!;
     public string SenderDisplayName { get; set; } = default!;
     public string SenderProfilePhoto { get; set; } = default!;

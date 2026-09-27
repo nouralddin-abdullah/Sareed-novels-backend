@@ -98,6 +98,26 @@ public class ReviewsRepository(ApplicationDbContext dbContext) : IReviewsReposit
         return await dbContext.Reviews.FirstOrDefaultAsync(r => r.Id == reviewId);
     }
 
+    public Task<Review?> GetReviewAsListedAsync(Guid reviewId) =>
+        dbContext.Reviews
+            .AsNoTracking()
+            .Include(r => r.ReviewOwner)
+            .FirstOrDefaultAsync(r => r.Id == reviewId);
+
+    public async Task<Dictionary<Guid, Guid>> GetNovelIdsAsync(IReadOnlyCollection<Guid> reviewIds)
+    {
+        if (reviewIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await dbContext.Reviews
+            .AsNoTracking()
+            .Where(r => reviewIds.Contains(r.Id))
+            .Select(r => new { r.Id, r.NovelId })
+            .ToDictionaryAsync(r => r.Id, r => r.NovelId);
+    }
+
     public async Task<Review?> GetUserReviewForNovel(string userId, Guid novelId)
     {
         return await dbContext.Reviews.FirstOrDefaultAsync(r => r.ReviewerId == userId && r.NovelId == novelId);

@@ -52,6 +52,20 @@ internal static class Seed
         };
     }
 
+    /// <summary>
+    /// Inserts <paramref name="user"/> with plain SQL, naming only columns that predate the account security migration:
+    /// for data-fix tests that seed a database migrated to an older point, where saving a User through the current
+    /// model would name columns that don't exist yet.
+    /// </summary>
+    public static Task InsertUserRowAsync(ApplicationDbContext db, User user) => db.Database.ExecuteSqlInterpolatedAsync($"""
+        INSERT INTO AspNetUsers (Id, UserName, NormalizedUserName, Email, NormalizedEmail, EmailConfirmed, PasswordHash,
+            SecurityStamp, ConcurrencyStamp, PhoneNumberConfirmed, TwoFactorEnabled, LockoutEnabled, AccessFailedCount,
+            DisplayName, CreatedAt, ReviewsCount, CommentsCount, LibraryNovelsCount, PointBalance, PointBalanceLastUpdated)
+        VALUES ({user.Id}, {user.UserName}, {user.NormalizedUserName}, {user.Email}, {user.NormalizedEmail},
+            {user.EmailConfirmed}, {user.PasswordHash}, {user.SecurityStamp}, {user.ConcurrencyStamp}, 0, 0, 1, 0,
+            {user.DisplayName}, {user.CreatedAt}, 0, 0, 0, 0, {user.CreatedAt})
+        """);
+
     public static Genre Genre(string? name = null)
     {
         name ??= "Genre" + Guid.NewGuid().ToString("N")[..8];

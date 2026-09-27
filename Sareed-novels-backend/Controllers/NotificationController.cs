@@ -1,11 +1,17 @@
 ﻿using Application.Notifications.Commands.MarkAllAsRead;
 using Application.Notifications.Commands.MarkAsRead;
+using Application.Notifications.Commands.RegisterDevice;
+using Application.Notifications.Commands.UnregisterDevice;
+using Application.Notifications.Commands.UpdatePreferences;
 using Application.Notifications.Queries.GetComment;
 using Application.Notifications.Queries.GetNotifications;
+using Application.Notifications.Queries.GetPreferences;
 using Application.Notifications.Queries.GetUnreadCount;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Sareed_novels_backend.Extensions;
 
 namespace Sareed_novels_backend.Controllers;
 
@@ -32,9 +38,10 @@ public class NotificationController(IMediator mediator) : ControllerBase
 
     [HttpGet("comment/{commentId}")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetComment([FromRoute] Guid commentId)
+    public async Task<IActionResult> GetComment([FromRoute] Guid commentId, [FromQuery] int? pageSize)
     {
-        var query = new GetCommentQuery(commentId);
+        // pageSize: what the client pages the comment's list with, so context.pageNumber lands on the right page.
+        var query = new GetCommentQuery(commentId, pageSize ?? 10);
         var result = await mediator.Send(query);
         return Ok(result);
     }
@@ -61,5 +68,38 @@ public class NotificationController(IMediator mediator) : ControllerBase
             return NoContent();
         }
         return BadRequest("Failed to mark all notifications as read");
+    }
+
+    /// <summary>Registers the app's FCM token for push notifications (after sign-in and on token refresh).</summary>
+    [HttpPost("devices")]
+    [EnableRateLimiting(RateLimitPolicies.Devices)]
+    public async Task<IActionResult> RegisterDevice([FromBody] RegisterDeviceCommand command)
+    {
+        await mediator.Send(command);
+        return NoContent();
+    }
+
+    /// <summary>Unregisters the caller's FCM token (on sign-out). The token must be URL-encoded.</summary>
+    [HttpDelete("devices/{token}")]
+    public async Task<IActionResult> UnregisterDevice([FromRoute] string token)
+    {
+        await mediator.Send(new UnregisterDeviceCommand(token));
+        return NoContent();
+    }
+
+    /// <summary>Which notification groups (social, chapters, support) are sent as push notifications.</summary>
+    [HttpGet("preferences")]
+    public async Task<IActionResult> GetPreferences()
+    {
+        var result = await mediator.Send(new GetNotificationPreferencesQuery());
+        return Ok(result);
+    }
+
+    /// <summary>Switches push notification groups on or off; groups left out keep their setting.</summary>
+    [HttpPatch("preferences")]
+    public async Task<IActionResult> UpdatePreferences([FromBody] UpdateNotificationPreferencesCommand command)
+    {
+        var result = await mediator.Send(command);
+        return Ok(result);
     }
 }

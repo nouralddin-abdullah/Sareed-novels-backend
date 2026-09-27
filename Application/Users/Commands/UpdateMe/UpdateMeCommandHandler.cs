@@ -84,6 +84,11 @@ public class UpdateMeCommandHandler(
             }
         }
         mapper.Map(request, user);
+        // The mapping copies what was sent; an empty (or blank) bio or link means "remove it".
+        user.UserBio = ClearIfBlank(user.UserBio);
+        user.FacebookUrl = ClearIfBlank(user.FacebookUrl);
+        user.TwitterUrl = ClearIfBlank(user.TwitterUrl);
+        user.DiscordUrl = ClearIfBlank(user.DiscordUrl);
         if (!string.IsNullOrWhiteSpace(newProfilePhotoUrl))
         {
             user.ProfilePhoto = newProfilePhotoUrl;
@@ -113,5 +118,7 @@ public class UpdateMeCommandHandler(
             Message = "Profile updated successfully"
         };
     }
+
+    private static string? ClearIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
 }

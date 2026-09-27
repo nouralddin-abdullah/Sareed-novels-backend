@@ -1,10 +1,9 @@
-﻿using Application.Users.Commands.FollowUser;
-using MediatR;
+﻿using MediatR;
 using Microsoft.AspNetCore.Http;
 
 namespace Application.Comments.Commands.CreateComment;
 
-public class CreateCommentCommand(Guid? chapterId, Guid? paragraphId, Guid? postId, string content, IFormFile? attachedImage, Guid? parentCommentId) : IRequest<OperationResult>
+public class CreateCommentCommand(Guid? chapterId, Guid? paragraphId, Guid? postId, string content, IFormFile? attachedImage, Guid? parentCommentId) : IRequest<CreateCommentResult>
 {
     public Guid? ChapterId { get; set; } = chapterId;
     public Guid? ParagraphId { get; set; } = paragraphId;

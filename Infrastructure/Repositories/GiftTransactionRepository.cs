@@ -20,6 +20,7 @@ public class GiftTransactionRepository(ApplicationDbContext dbContext) : IGiftTr
             .Where(t => t.NovelId == novelId)
             .Include(t => t.Gift)
             .Include(t => t.Sender)
+            .Include(t => t.Novel)
             .OrderByDescending(t => t.CreatedAt);
 
         var totalCount = await query.CountAsync();

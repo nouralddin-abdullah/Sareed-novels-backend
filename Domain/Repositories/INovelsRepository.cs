@@ -7,6 +7,10 @@ public interface INovelsRepository
 {
     Task<bool> CreateNovel(Novel novel);
     Task<Novel?> GetOne(Guid novelId);
+    /// <summary>
+    /// The novel with its author and genres, drafts included like <see cref="GetOne"/> (the caller decides who may see
+    /// a draft); deleted novels are never found.
+    /// </summary>
     Task<Novel?> GetOneBySlug(string slug);
     Task<bool> UpdateOne(Novel novel);
     /// <summary>Sets ChapterCount to the novel's current number of chapters in one SQL statement (no read-modify-write).</summary>
@@ -18,6 +22,8 @@ public interface INovelsRepository
     Task<int> GetPublishedChaptersCountAsync(Guid novelId);
     Task<int> RecalculatePublishedSequencesAsync(Guid novelId);
     Task<List<Novel>> GetNovelsByIdsAsync(List<Guid> novelIds);
+    /// <summary>The current slug of each of these novels that still exists (deleted ones are left out).</summary>
+    Task<Dictionary<Guid, string>> GetSlugsAsync(IReadOnlyCollection<Guid> novelIds);
     Task<List<Novel>> GetNovelsBySharedGenresAsync(List<int> genreIds, Guid excludeNovelId, int limit);
     /// <summary>Every published novel with at least one published chapter, and those chapters, for sitemap.xml.</summary>
     Task<List<NovelSitemapEntry>> GetSitemapEntriesAsync(CancellationToken cancellationToken = default);
