@@ -1,22 +1,54 @@
 using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Persistence;
+using Infrastructure.Push;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories;
 
-public class NotificationsRepository(ApplicationDbContext dbContext) : INotificationsRepository
+/// <summary>
+/// Every notification is created here, and each one also queues a push to each of its recipient's devices
+/// (<see cref="PushOutboxMessage"/>), saved in the same transaction; recipients without the app get none.
+/// </summary>
+public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxSignal? pushSignal = null) : INotificationsRepository
 {
+    /// <summary>Notifications inserted per save in a fan-out (a new chapter to every reader of a novel).</summary>
+    internal const int FanOutBatchSize = 500;
+
     public async Task<Notification> CreateNotification(Notification notification)
     {
         dbContext.Notifications.Add(notification);
+        var pushes = await PushesFor([notification]);
+        dbContext.PushOutbox.AddRange(pushes);
         await dbContext.SaveChangesAsync();
+        WakePushWorker(pushes.Count);
         return notification;
+    }
+
+    public async Task CreateNotifications(IReadOnlyCollection<Notification> notifications)
+    {
+        var queued = 0;
+        foreach (var batch in notifications.Chunk(FanOutBatchSize))
+        {
+            dbContext.Notifications.AddRange(batch);
+            var pushes = await PushesFor(batch);
+            dbContext.PushOutbox.AddRange(pushes);
+            await dbContext.SaveChangesAsync();
+
+            // Keep the change tracker small over thousands of readers.
+            foreach (var entity in batch.Cast<object>().Concat(pushes))
+            {
+                dbContext.Entry(entity).State = EntityState.Detached;
+            }
+            queued += pushes.Count;
+        }
+        WakePushWorker(queued);
     }
 
     public async Task<bool> CreateUnlessUnreadExists(Notification notification)
     {
         var n = notification;
+        var pushes = await PushesFor([n]);
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
         var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO Notifications (Id, UserId, Type, ActorId, ActorDisplayName, ActorProfilePhoto, Message, ActionUrl,
@@ -28,8 +60,45 @@ public class NotificationsRepository(ApplicationDbContext dbContext) : INotifica
                 WHERE UserId = {n.UserId} AND IsRead = 0 AND Type = {n.Type} AND ActorId = {n.ActorId}
                   AND (RelatedEntityId = {n.RelatedEntityId} OR (RelatedEntityId IS NULL AND {n.RelatedEntityId} IS NULL)))
             """);
+        if (inserted == 1 && pushes.Count > 0)
+        {
+            dbContext.PushOutbox.AddRange(pushes);
+            await dbContext.SaveChangesAsync();
+        }
         await transaction.CommitAsync();
+        if (inserted == 1)
+        {
+            WakePushWorker(pushes.Count);
+        }
         return inserted == 1;
+    }
+
+    /// <summary>One outbox row per device of each notification's recipient (not yet added to the context).</summary>
+    private async Task<List<PushOutboxMessage>> PushesFor(IReadOnlyCollection<Notification> notifications)
+    {
+        var userIds = notifications.Select(n => n.UserId).Distinct().ToList();
+        var devices = await dbContext.UserDevices
+            .AsNoTracking()
+            .Where(d => userIds.Contains(d.UserId))
+            .Select(d => new { d.Id, d.UserId })
+            .ToListAsync();
+        if (devices.Count == 0)
+        {
+            return [];
+        }
+
+        var devicesByUser = devices.ToLookup(d => d.UserId, d => d.Id);
+        return notifications
+            .SelectMany(n => devicesByUser[n.UserId].Select(deviceId => PushOutboxMessage.For(n, deviceId)))
+            .ToList();
+    }
+
+    private void WakePushWorker(int queued)
+    {
+        if (queued > 0)
+        {
+            pushSignal?.Notify();
+        }
     }
 
     public async Task<(IEnumerable<Notification>, int)> GetUserNotifications(string userId, int pageNumber, int pageSize, bool unreadOnly = false)
