@@ -20,13 +20,22 @@ public class GetNovelQueryHandler(
 {
     public async Task<NovelsDTO> Handle(GetNovelQuery request, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Getting novel slug {slug}", request.NovelSlug);
-        var novel = await novelsRepository.GetOneBySlug(request.NovelSlug) ?? throw new NotFoundException("This novel was not found");
+        logger.LogInformation("Getting novel {Novel}", request.NovelId?.ToString() ?? request.NovelSlug);
+        var novel = request.NovelId is { } novelId
+            ? await novelsRepository.GetOne(novelId)
+            : await novelsRepository.GetOneBySlug(request.NovelSlug!);
+
+        // Deleted novels never load; a draft is shown to its author only, and to everyone else it doesn't exist.
+        var isAuthor = novel != null && userContext.GetCurrentUser()?.Id == novel.AuthorId;
+        if (novel == null || (novel.IsDraft && !isAuthor))
+        {
+            throw new NotFoundException("This novel was not found");
+        }
+
         var novelDto = mapper.Map<NovelsDTO>(novel);
 
         // Resolve the visitor now: the background task outlives the request and can't read HttpContext.
         var visitorKey = visitorContext.GetVisitorKey();
-        var isAuthor = userContext.GetCurrentUser()?.Id == novel.AuthorId;
         if (visitorKey != null && !isAuthor)
         {
             _ = TrackViewInBackground(novel.Id, visitorKey);

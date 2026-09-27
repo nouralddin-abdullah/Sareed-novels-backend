@@ -146,7 +146,6 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
     public async Task<Novel?> GetOneBySlug(string slug)
     {
         var novel = await dbContext.Novels
-            .Where(n => !n.IsDraft)
             .Include(n=>n.Owner)
             .Include(n => n.NovelGenres)
                 .ThenInclude(ng => ng.Genre)
@@ -298,6 +297,20 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
             .Include(n => n.NovelGenres)
                 .ThenInclude(ng => ng.Genre)
             .ToListAsync();
+    }
+
+    public async Task<Dictionary<Guid, string>> GetSlugsAsync(IReadOnlyCollection<Guid> novelIds)
+    {
+        if (novelIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await dbContext.Novels
+            .AsNoTracking()
+            .Where(n => novelIds.Contains(n.Id))
+            .Select(n => new { n.Id, n.Slug })
+            .ToDictionaryAsync(n => n.Id, n => n.Slug);
     }
 
     public async Task<List<Novel>> GetNovelsBySharedGenresAsync(

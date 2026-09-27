@@ -32,9 +32,10 @@ public class NotificationController(IMediator mediator) : ControllerBase
 
     [HttpGet("comment/{commentId}")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetComment([FromRoute] Guid commentId)
+    public async Task<IActionResult> GetComment([FromRoute] Guid commentId, [FromQuery] int? pageSize)
     {
-        var query = new GetCommentQuery(commentId);
+        // pageSize: what the client pages the comment's list with, so context.pageNumber lands on the right page.
+        var query = new GetCommentQuery(commentId, pageSize ?? 10);
         var result = await mediator.Send(query);
         return Ok(result);
     }

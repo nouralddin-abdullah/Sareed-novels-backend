@@ -32,6 +32,7 @@ public class GetMySubscriptionsQueryHandler(
         {
             Id = s.Id,
             NovelId = s.NovelId,
+            NovelSlug = s.Novel?.Slug,
             NovelTitle = s.Novel?.Title ?? "Unknown",
             NovelCoverImageUrl = s.Novel?.CoverImageUrl,
             IsActive = s.IsActive,

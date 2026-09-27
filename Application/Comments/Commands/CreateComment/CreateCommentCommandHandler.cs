@@ -1,6 +1,7 @@
-﻿using Application.Services;
+﻿using Application.Comments.Queries;
+using Application.Services;
 using Application.Users;
-using Application.Users.Commands.FollowUser;
+using AutoMapper;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
@@ -17,11 +18,13 @@ public class CreateCommentCommandHandler(
     IChaptersRepository chaptersRepository, 
     IChapterParagraphsRepository paragraphsRepository, 
     IPostsRepository postsRepository,
+    ICommentLikesRepository commentLikesRepository,
     IUserContext userContext, 
     IFileUploadService fileUploadService, 
-    IServiceProvider serviceProvider) : IRequestHandler<CreateCommentCommand, OperationResult>
+    IMapper mapper,
+    IServiceProvider serviceProvider) : IRequestHandler<CreateCommentCommand, CreateCommentResult>
 {
-    public async Task<OperationResult> Handle(CreateCommentCommand request, CancellationToken cancellationToken)
+    public async Task<CreateCommentResult> Handle(CreateCommentCommand request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
         
@@ -49,7 +52,7 @@ public class CreateCommentCommandHandler(
         }
         else
         {
-            return new OperationResult
+            return new CreateCommentResult
             {
                 Success = false,
                 Message = "Either ChapterId, ParagraphId, or PostId must be provided"
@@ -64,7 +67,7 @@ public class CreateCommentCommandHandler(
             // where its parent does.
             if (parentComment.ParentCommentId.HasValue)
             {
-                return new OperationResult { Success = false, Message = "Replies can only be added to top-level comments" };
+                return new CreateCommentResult { Success = false, Message = "Replies can only be added to top-level comments" };
             }
 
             var sameLocation = request.PostId.HasValue ? parentComment.PostId == request.PostId
@@ -72,7 +75,7 @@ public class CreateCommentCommandHandler(
                 : parentComment.ChapterId == request.ChapterId && parentComment.ParagraphId == null;
             if (!sameLocation)
             {
-                return new OperationResult { Success = false, Message = "The parent comment belongs to a different chapter, paragraph or post" };
+                return new CreateCommentResult { Success = false, Message = "The parent comment belongs to a different chapter, paragraph or post" };
             }
         }
         
@@ -108,10 +111,16 @@ public class CreateCommentCommandHandler(
         
         logger.LogInformation("Comment {CommentId} created successfully", createdComment.Id);
 
-        return new OperationResult
+        // Read back as the lists read comments, so the app can put it straight into the list it came from.
+        var listed = await commentsRepository.GetCommentAsListedAsync(createdComment.Id)
+            ?? throw new InvalidOperationException($"Comment {createdComment.Id} was saved but can't be read back");
+        var commentDtos = await CommentListDtos.Build([listed], mapper, commentsRepository, commentLikesRepository, currentUser);
+
+        return new CreateCommentResult
         {
             Success = true,
-            Message = "Comment created successfully"
+            Message = "Comment created successfully",
+            Comment = commentDtos.Single()
         };
     }
     

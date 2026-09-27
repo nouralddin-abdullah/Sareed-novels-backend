@@ -11,6 +11,7 @@ public class GiftProfile : Profile
         CreateMap<Gift, GiftDto>();
         
         CreateMap<GiftTransaction, GiftTransactionDto>()
+            .ForMember(dest => dest.NovelSlug, opt => opt.MapFrom(src => src.Novel != null ? src.Novel.Slug : null))
             .ForMember(dest => dest.SenderUserName, opt => opt.MapFrom(src => src.Sender.UserName))
             .ForMember(dest => dest.SenderDisplayName, opt => opt.MapFrom(src => src.Sender.DisplayName))
             .ForMember(dest => dest.SenderProfilePhoto, opt => opt.MapFrom(src => src.Sender.ProfilePhoto));

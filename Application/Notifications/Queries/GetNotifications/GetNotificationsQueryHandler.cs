@@ -1,6 +1,7 @@
 using Application.Notifications.DTOs;
 using Application.Users;
 using AutoMapper;
+using Domain.Constants;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
@@ -11,6 +12,8 @@ namespace Application.Notifications.Queries.GetNotifications;
 public class GetNotificationsQueryHandler(
     ILogger<GetNotificationsQueryHandler> logger,
     INotificationsRepository notificationsRepository,
+    INovelsRepository novelsRepository,
+    IReviewsRepository reviewsRepository,
     IUserContext userContext,
     IMapper mapper) : IRequestHandler<GetNotificationsQuery, NotificationListDto>
 {
@@ -28,6 +31,7 @@ public class GetNotificationsQueryHandler(
             request.UnreadOnly);
 
         var notificationDtos = mapper.Map<List<NotificationDto>>(notifications);
+        await SetNovels(notificationDtos);
         
         var unreadCount = await notificationsRepository.GetUnreadCount(currentUser.Id);
         
@@ -42,5 +46,45 @@ public class GetNotificationsQueryHandler(
             PageSize = request.PageSize,
             TotalPages = totalPages
         };
+    }
+
+    /// <summary>
+    /// Sets the novel each notification is about, and that novel's current slug, in two small lookups for the page.
+    /// Gift and privilege notifications keep the novel's id in RelatedEntityId, new-chapter ones in ActorId, and review
+    /// ones reach it through their review.
+    /// </summary>
+    private async Task SetNovels(List<NotificationDto> notifications)
+    {
+        var reviewIds = notifications
+            .Where(n => n.Type is NotificationType.ReviewOnNovel or NotificationType.LikeOnReview)
+            .Select(n => n.RelatedEntityId)
+            .OfType<Guid>()
+            .ToList();
+        var reviewNovelIds = reviewIds.Count == 0 ? [] : await reviewsRepository.GetNovelIdsAsync(reviewIds);
+
+        foreach (var notification in notifications)
+        {
+            notification.NovelId = notification.Type switch
+            {
+                NotificationType.GiftReceived or NotificationType.PrivilegeSubscribed => notification.RelatedEntityId,
+                NotificationType.NewChapterInLibrary => Guid.TryParse(notification.ActorId, out var novelId) ? novelId : null,
+                NotificationType.ReviewOnNovel or NotificationType.LikeOnReview
+                    when notification.RelatedEntityId is { } reviewId && reviewNovelIds.TryGetValue(reviewId, out var reviewedNovelId)
+                    => reviewedNovelId,
+                _ => null
+            };
+        }
+
+        var novelIds = notifications.Select(n => n.NovelId).OfType<Guid>().Distinct().ToList();
+        if (novelIds.Count == 0)
+        {
+            return;
+        }
+
+        var slugs = await novelsRepository.GetSlugsAsync(novelIds);
+        foreach (var notification in notifications)
+        {
+            notification.NovelSlug = notification.NovelId is { } id ? slugs.GetValueOrDefault(id) : null;
+        }
     }
 }

@@ -27,16 +27,13 @@ public class AddNovelToListCommandHandler(
             throw new ForbidException("You don't own this reading list");
         }
 
-        var novel = await novelsRepository.GetOne(request.NovelId)
-            ?? throw new NotFoundException("Novel not found");
-
-        // Check if novel is publicly visible
-        if (!novel.IsPubliclyVisible)
+        var refusal = await NovelForReadingList.WhyNotAddable(novelsRepository, request.NovelId);
+        if (refusal != null)
         {
             return new OperationResult
             {
                 Success = false,
-                Message = "Cannot add deleted or draft novels to reading list"
+                Message = refusal
             };
         }
 

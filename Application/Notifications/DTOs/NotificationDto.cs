@@ -13,6 +13,17 @@ public class NotificationDto
     public DateTime CreatedAt { get; set; }
     public Guid? RelatedEntityId { get; set; }
     public string? RelatedEntityType { get; set; }
+
+    /// <summary>
+    /// The novel the notification is about, for GiftReceived, PrivilegeSubscribed, NewChapterInLibrary, ReviewOnNovel
+    /// and LikeOnReview (null for the others, and for a review that has since been deleted). Open it with
+    /// GET /api/novel/by-id/{novelId}: a rename changes the slug frozen in <see cref="ActionUrl"/>. Comment
+    /// notifications get their novel from GET /api/notifications/comment/{RelatedEntityId}.
+    /// </summary>
+    public Guid? NovelId { get; set; }
+
+    /// <summary>The novel's current slug; null when there is no <see cref="NovelId"/> or the novel was deleted.</summary>
+    public string? NovelSlug { get; set; }
 }
 
 public class NotificationListDto
@@ -65,6 +76,11 @@ public class CommentUserDto
 
 public class CommentLocationDto
 {
+    /// <summary>
+    /// The page that holds the comment in the list that shows it, at the pageSize asked for (10 by default) and in that
+    /// list's default order: for a top-level comment, its paragraph's, chapter's or post's comments (newest first); for a
+    /// reply, the replies of <see cref="ParentCommentId"/> (oldest first).
+    /// </summary>
     public int PageNumber { get; set; }
     public Guid? ChapterId { get; set; }
     public string? ChapterTitle { get; set; }
@@ -74,4 +90,19 @@ public class CommentLocationDto
     public string? NovelSlug { get; set; }
     public string? NovelTitle { get; set; }
     public int TotalComments { get; set; }
+
+    /// <summary>For a comment on a paragraph (or a reply under one): the paragraph; null otherwise.</summary>
+    public Guid? ParagraphId { get; set; }
+
+    /// <summary>That paragraph's position in its chapter, from 0.</summary>
+    public int? ParagraphOrderIndex { get; set; }
+
+    /// <summary>
+    /// The start of that paragraph as plain text, at most 140 characters; null when the caller may not read the chapter
+    /// (a draft, or locked for them by the privilege system), as the chapter reader decides.
+    /// </summary>
+    public string? ParagraphExcerpt { get; set; }
+
+    /// <summary>For a reply, the top-level comment it answers (its thread holds the reply); null otherwise.</summary>
+    public Guid? ParentCommentId { get; set; }
 }
