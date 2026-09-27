@@ -110,6 +110,10 @@ public static class WebApplicationBuilderExtensions
             options.AddPolicy(RateLimitPolicies.Email, context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 }));
+            // Per IP (this runs before authentication), and loose enough for many phones behind one carrier NAT.
+            options.AddPolicy(RateLimitPolicies.Devices, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
 
         // 2. Add MVC Controllers
@@ -159,4 +163,7 @@ public static class RateLimitPolicies
 
     /// <summary>Endpoints that send an email: 5 requests per 15 minutes per IP.</summary>
     public const string Email = "email";
+
+    /// <summary>Push device registration: 30 requests per minute per IP.</summary>
+    public const string Devices = "devices";
 }

@@ -5,6 +5,8 @@ namespace Domain.Repositories;
 public interface INotificationsRepository
 {
     Task<Notification> CreateNotification(Notification notification);
+    /// <summary>Inserts many notifications (a fan-out) in batches rather than one round trip each.</summary>
+    Task CreateNotifications(IReadOnlyCollection<Notification> notifications);
     /// <summary>
     /// Inserts the notification unless its recipient still has an unread one of the same type from the same actor
     /// about the same item (RelatedEntityId); false when it was skipped. Safe under concurrent calls.

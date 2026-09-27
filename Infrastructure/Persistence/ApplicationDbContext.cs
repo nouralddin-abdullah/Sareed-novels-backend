@@ -1,5 +1,6 @@
 ﻿using Domain.Entities;
 using Domain.Search;
+using Infrastructure.Push;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,6 +36,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     internal DbSet<Notification> Notifications { get; set; }
     internal DbSet<UserNameChange> UserNameChanges { get; set; }
     
+    // Push notifications (PushNotificationsConfiguration.cs)
+    internal DbSet<UserDevice> UserDevices { get; set; }
+    internal DbSet<NotificationPreferences> NotificationPreferences { get; set; }
+    internal DbSet<PushOutboxMessage> PushOutbox { get; set; }
+
     // Wallet System
     internal DbSet<UserWallet> UserWallets { get; set; }
     internal DbSet<RechargeRequest> RechargeRequests { get; set; }
@@ -960,6 +966,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(n => n.ActorId)
                 .HasDatabaseName("IX_Notifications_ActorId");
         });
+
+        // Push notifications: device tokens, per-group preferences, and the outbox the push worker drains.
+        modelBuilder.ApplyConfiguration(new UserDeviceConfiguration());
+        modelBuilder.ApplyConfiguration(new NotificationPreferencesConfiguration());
+        modelBuilder.ApplyConfiguration(new PushOutboxMessageConfiguration());
 
         // UserWallet configuration
         modelBuilder.Entity<UserWallet>(entity =>
