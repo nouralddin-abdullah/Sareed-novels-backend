@@ -612,7 +612,10 @@ public class PrivilegeService(
             };
         }
         
-        // Payment and subscription commit together or not at all.
+        // Payment and subscription commit together or not at all. Both ledger rows point at the subscription: that pairs
+        // the reader's payment with the author's earning, which a refund of the points behind it takes back while it is
+        // still on hold (#22).
+        var subscriptionId = Guid.NewGuid();
         try
         {
             await transactionManager.InTransactionAsync(async () =>
@@ -626,6 +629,7 @@ public class PrivilegeService(
                     toTransactionType: TransactionType.PrivilegeRevenue,
                     fromDescription: TransactionDescriptions.PrivilegeSubscription(novel.Title),
                     toDescription: TransactionDescriptions.PrivilegeRevenue(novel.Title),
+                    relatedRequestId: subscriptionId,
                     details: new TransactionDetails(NovelId: novel.Id)
                 );
 
@@ -639,7 +643,7 @@ public class PrivilegeService(
                 // Step 2: Create subscription record (PERMANENT)
                 await subscriptionRepository.CreateAsync(new NovelPrivilegeSubscription
                 {
-                    Id = Guid.NewGuid(),
+                    Id = subscriptionId,
                     NovelId = novelId,
                     UserId = userId,
                     SubscribedAt = DateTime.UtcNow,

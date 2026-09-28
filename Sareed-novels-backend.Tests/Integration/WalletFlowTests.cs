@@ -30,8 +30,7 @@ public class WalletFlowTests(SqlServerDatabase database) : IClassFixture<SqlServ
         public ApplicationDbContext Db { get; } = database.CreateContext();
         public TransactionManager Transactions => new(Db);
 
-        public WalletService Wallet => new(NullLogger<WalletService>.Instance, new UserWalletRepository(Db),
-            new PointTransactionRepository(Db), null!, Transactions);
+        public WalletService Wallet => WalletTesting.Wallet(Db);
 
         public ValueTask DisposeAsync() => Db.DisposeAsync();
     }

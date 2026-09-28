@@ -1,23 +1,33 @@
 ﻿using Application.Services;
+using Domain.Constants;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
+using Infrastructure.Configuration;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Services;
 
 /// <summary>
 /// Every balance change is a single conditional SQL UPDATE (never read-modify-write) and is committed together with its
-/// PointTransaction row: each method joins the caller's transaction or opens its own.
+/// PointTransaction row: each method joins the caller's transaction or opens its own. Earnings are held for
+/// Wallet:EarningsHoldDays (their AvailableAt) before they can be withdrawn (#22).
 /// </summary>
 public class WalletService(
     ILogger<WalletService> logger,
     IUserWalletRepository walletRepository,
     IPointTransactionRepository transactionRepository,
     UserManager<User> userManager,
-    ITransactionManager transactionManager) : IWalletService
+    ITransactionManager transactionManager,
+    TimeProvider clock,
+    IOptions<WalletSettings> settings) : IWalletService
 {
+    private int HoldDays => settings.Value.EarningsHoldDays;
+
+    private DateTime Now() => clock.GetUtcNow().UtcDateTime;
+
     public async Task<UserWallet> GetOrCreateWalletAsync(string userId)
     {
         var wallet = await walletRepository.GetByUserIdAsync(userId);
@@ -114,6 +124,9 @@ public class WalletService(
             throw new ArgumentException("Cannot transfer points to the same user");
         }
 
+        // The two rows always share an id: the refund clawback finds the author's earning from the reader's payment by it.
+        relatedRequestId ??= Guid.NewGuid();
+
         await transactionManager.InTransactionAsync(async () =>
         {
             // Touch the two wallets in a fixed order (by user id) so opposite transfers (A->B while B->A) take their
@@ -148,8 +161,10 @@ public class WalletService(
         ?? throw new InsufficientBalanceException(amount);
 
     private Task RecordAsync(string userId, decimal signedAmount, decimal balanceAfter, string type, string description, Guid? relatedRequestId,
-        TransactionDetails? details) =>
-        transactionRepository.CreateAsync(new PointTransaction
+        TransactionDetails? details)
+    {
+        var now = Now();
+        return transactionRepository.CreateAsync(new PointTransaction
         {
             Id = Guid.NewGuid(),
             UserId = userId,
@@ -162,8 +177,11 @@ public class WalletService(
             NovelId = details?.NovelId,
             GiftId = details?.GiftId,
             GiftCount = details?.GiftCount,
-            CreatedAt = DateTime.UtcNow
+            // Earnings are held; everything else has no hold.
+            AvailableAt = TransactionType.IsEarning(type) ? now.AddDays(HoldDays) : null,
+            CreatedAt = now
         });
+    }
 
     private static void EnsurePositive(decimal amount)
     {

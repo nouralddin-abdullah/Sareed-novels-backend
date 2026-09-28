@@ -656,9 +656,8 @@ public class PlayBillingTests(SqlServerDatabase database) : IClassFixture<SqlSer
         Assert.True((await Verify(user.Id, purchase)).Success);
         await using (var request = NewRequest())
         {
-            var wallet = new WalletService(NullLogger<WalletService>.Instance, new UserWalletRepository(request.Db),
-                new PointTransactionRepository(request.Db), null!, new TransactionManager(request.Db));
-            await wallet.TransferPointsAsync(user.Id, author.Id, 800, TransactionType.GiftSent, TransactionType.GiftReceived, "s", "r");
+            await WalletTesting.Wallet(request.Db, clock)
+                .TransferPointsAsync(user.Id, author.Id, 800, TransactionType.GiftSent, TransactionType.GiftReceived, "s", "r");
         }
 
         clock.Advance(TimeSpan.FromDays(2));
