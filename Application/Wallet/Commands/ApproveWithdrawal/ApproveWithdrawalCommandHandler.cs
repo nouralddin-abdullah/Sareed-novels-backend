@@ -18,7 +18,7 @@ public class ApproveWithdrawalCommandHandler(
 {
     public async Task<OperationResult> Handle(ApproveWithdrawalCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         var withdrawalRequest = await withdrawalRepository.GetByIdAsync(request.RequestId);
         if (withdrawalRequest == null)
@@ -26,6 +26,7 @@ public class ApproveWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "RequestNotFound",
                 Message = "Withdrawal request not found"
             };
         }
@@ -35,6 +36,7 @@ public class ApproveWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyProcessed",
                 Message = $"Request already {withdrawalRequest.Status.ToLower()}"
             };
         }
@@ -45,6 +47,7 @@ public class ApproveWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "InsufficientBalance",
                 Message = "User no longer has sufficient balance for this withdrawal"
             };
         }
@@ -65,7 +68,7 @@ public class ApproveWithdrawalCommandHandler(
                     withdrawalRequest.UserId,
                     withdrawalRequest.PointsRequested,
                     TransactionType.WithdrawalApproved,
-                    $"Withdrawal approved: {withdrawalRequest.PointsRequested} points ({withdrawalRequest.NetAmountEGP} EGP via {withdrawalRequest.WithdrawalMethod})",
+                    TransactionDescriptions.WithdrawalApproved(withdrawalRequest.PointsRequested, withdrawalRequest.NetAmountEGP, withdrawalRequest.WithdrawalMethod),
                     withdrawalRequest.Id
                 );
                 return true;
@@ -77,6 +80,7 @@ public class ApproveWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "InsufficientBalance",
                 Message = "User no longer has sufficient balance for this withdrawal"
             };
         }
@@ -86,6 +90,7 @@ public class ApproveWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyProcessed",
                 Message = "Request was already processed"
             };
         }

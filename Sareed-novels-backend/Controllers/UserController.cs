@@ -36,41 +36,47 @@ namespace Sareed_novels_backend.Controllers
             var result = await mediator.Send(command);
             if (!result.Success)
             {
-                return BadRequest(result.Message);
+                return BadRequest(result);
             }
             return Ok(result);
         }
 
+        /// <summary>
+        /// Changes the caller's password. A refusal is 400 {code, message, errors}: code is ASP.NET Identity's for the first
+        /// problem (PasswordMismatch for a wrong current password, PasswordTooShort...), message its Arabic description.
+        /// </summary>
         [HttpPatch("update-password")]
         public async Task<IActionResult> UpdatePassword(ChangePasswordCommand command)
         {
             var result = await mediator.Send(command);
             if (!result.Succeeded)
             {
-                return BadRequest(result.Errors);
+                return BadRequest(IdentityErrors.Body(result));
             }
             return Ok(result);
         }
 
+        /// <summary>Follows a user; 400 AlreadyFollowing when the caller already does (and CannotFollowSelf).</summary>
         [HttpPost("follow")]
         public async Task<IActionResult> FollowUser(FollowUserCommand command)
         {
             var result = await mediator.Send(command);
             if (!result.Success)
             {
-                return BadRequest(result.Message);
+                return BadRequest(result);
             }
 
             return Ok(result);
         }
 
+        /// <summary>Unfollows a user; 400 NotFollowing when the caller doesn't follow them (and CannotUnfollowSelf).</summary>
         [HttpDelete("unfollow")]
         public async Task<IActionResult> FollowUser(UnFollowUserCommand command)
         {
             var result = await mediator.Send(command);
             if (!result.Success)
             {
-                return BadRequest(result.Message);
+                return BadRequest(result);
             }
 
             return Ok(result);

@@ -390,7 +390,7 @@ public class NotificationService(
                 ActorId = sender.Id,
                 ActorDisplayName = sender.DisplayName,
                 ActorProfilePhoto = sender.ProfilePhoto,
-                Message = $"{sender.DisplayName} أرسل لك {count}x {gift.Name} على رواية '{novel.Title}'",
+                Message = $"{sender.DisplayName} أرسل لك {count}x {gift.NameAr} على رواية '{novel.Title}'",
                 ActionUrl = $"/novel/{novel.Slug}",
                 IsRead = false,
                 RelatedEntityId = novel.Id,

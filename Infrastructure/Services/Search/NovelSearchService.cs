@@ -16,16 +16,14 @@ namespace Infrastructure.Services.Search;
 public class NovelSearchService(ApplicationDbContext dbContext) : INovelSearchService
 {
     private const string Published = "Published";
-    internal const int MaxPageSize = 50;
-    // Keeps (page - 1) * size inside int: a huge page number used to overflow into a negative OFFSET and a 500.
-    internal const int MaxPageNumber = int.MaxValue / MaxPageSize;
+    // Paging.Clamp also keeps (page - 1) * size inside int: a huge page number used to overflow into a negative OFFSET.
+    internal const int MaxPageSize = Paging.MaxPageSize;
 
     public async Task<PagedResult<NovelSearchResult>> SearchNovelsAsync(
         SearchNovelsRequest request,
         CancellationToken cancellationToken = default)
     {
-        var pageNumber = Math.Clamp(request.PageNumber, 1, MaxPageNumber);
-        var pageSize = Math.Clamp(request.PageSize, 1, MaxPageSize);
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, MaxPageSize);
         var tokens = SearchText.Tokens(request.Query);
         if (SearchText.HasNothingSearchable(request.Query, tokens))
         {

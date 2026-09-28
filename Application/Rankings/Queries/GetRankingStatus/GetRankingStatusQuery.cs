@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using System.Text.Json.Serialization;
 
 namespace Application.Rankings.Queries.GetRankingStatus;
 
@@ -10,6 +11,9 @@ public class GetRankingStatusQuery : IRequest<GetRankingStatusResult>
 public class GetRankingStatusResult
 {
     public bool Success { get; set; }
+    /// <summary>Set on failure (OperationFailed), like OperationResult's.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Code { get; set; }
     public string Message { get; set; } = default!;
     public DateTime Timestamp { get; set; }
     public int TotalRankingLists { get; set; }

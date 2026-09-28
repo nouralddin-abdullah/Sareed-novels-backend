@@ -12,7 +12,7 @@ public class GetNotificationPreferencesQueryHandler(
 {
     public async Task<NotificationPreferencesDto> Handle(GetNotificationPreferencesQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("يجب تسجيل الدخول أولًا");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("يجب تسجيل الدخول أولًا", "NotSignedIn");
         return NotificationPreferencesDto.From(await preferencesRepository.Get(currentUser.Id));
     }
 }

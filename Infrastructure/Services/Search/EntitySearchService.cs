@@ -24,8 +24,7 @@ public class EntitySearchService(ApplicationDbContext dbContext) : IEntitySearch
         int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        pageNumber = Math.Clamp(pageNumber, 1, NovelSearchService.MaxPageNumber);
-        pageSize = Math.Clamp(pageSize, 1, NovelSearchService.MaxPageSize);
+        (pageNumber, pageSize) = Paging.Clamp(pageNumber, pageSize, NovelSearchService.MaxPageSize);
         var tokens = SearchText.Tokens(query);
         if (SearchText.HasNothingSearchable(query, tokens))
         {

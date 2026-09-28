@@ -16,16 +16,17 @@ public class TrackReadingProgressCommandHandler(
 {
     public async Task<OperationResult> Handle(TrackReadingProgressCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         var chapter = await chaptersRepository.GetChapterById(request.ChapterId)
-            ?? throw new NotFoundException("Chapter not found");
+            ?? throw new NotFoundException("Chapter not found", "ChapterNotFound");
 
         if (chapter.Status != "Published")
         {
             return new OperationResult
             {
                 Success = false,
+                Code = "ChapterNotPublished",
                 Message = "Cannot track progress for unpublished chapters"
             };
         }
@@ -38,6 +39,7 @@ public class TrackReadingProgressCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "NovelNotPublished",
                 Message = "Cannot track progress for unpublished novels"
             };
         }
@@ -61,6 +63,7 @@ public class TrackReadingProgressCommandHandler(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "ChapterNotPublished",
                     Message = "Chapter not found in published chapters"
                 };
             }

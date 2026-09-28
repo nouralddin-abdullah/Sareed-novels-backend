@@ -36,16 +36,17 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
         _logger.LogInformation("Liking comment {CommentId}", request.CommentId);
 
         var currentUser = _userContext.GetCurrentUser()
-            ?? throw new ForbidException("User not signed in");
+            ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         var comment = await _commentsRepository.GetCommentById(request.CommentId)
-            ?? throw new NotFoundException("Comment not found");
+            ?? throw new NotFoundException("Comment not found", "CommentNotFound");
 
         if (comment.UserId == currentUser.Id)
         {
             return new OperationResult
             {
                 Success = false,
+                Code = "CannotLikeOwnContent",
                 Message = "You cannot like your own comment"
             };
         }
@@ -56,6 +57,7 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyLiked",
                 Message = "You already liked this comment"
             };
         }

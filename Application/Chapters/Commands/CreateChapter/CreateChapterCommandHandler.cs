@@ -28,11 +28,11 @@ public class CreateChapterCommandHandler(
     {
         logger.LogInformation("Adding new chapter for novel {NovelId}", request.NovelId);
         
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
         
         if (novel.AuthorId != currentUser.Id) 
-            throw new ForbidException("User doesn't own this novel");
+            throw new ForbidException("User doesn't own this novel", "NotOwner");
         
         var chapter = mapper.Map<Chapter>(request);
         chapter.ChapterIndex = await chaptersRepository.GetNextChapterIndex(novel.Id);

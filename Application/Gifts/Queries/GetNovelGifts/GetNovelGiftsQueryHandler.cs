@@ -13,8 +13,7 @@ public class GetNovelGiftsQueryHandler(
     public async Task<PagedResult<GiftTransactionDto>> Handle(GetNovelGiftsQuery request, CancellationToken cancellationToken)
     {
         // Out-of-range paging used to throw (page 0) or divide by zero (size 0).
-        var pageNumber = Math.Max(1, request.PageNumber);
-        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, GiftPaging.MaxPageSize);
 
         var (transactions, totalCount) = await giftTransactionRepository.GetTransactionsByNovel(
             request.NovelId,

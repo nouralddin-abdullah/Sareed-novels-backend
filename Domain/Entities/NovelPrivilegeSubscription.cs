@@ -18,7 +18,11 @@ public class NovelPrivilegeSubscription
     
     // Subscription Details
     public DateTime SubscribedAt { get; set; } = DateTime.UtcNow;
-    public bool IsActive { get; set; } = true; // Can be manually cancelled by user
+    /// <summary>
+    /// False only for subscriptions users cancelled while cancelling was offered; since #17 a subscription can't be
+    /// cancelled. An inactive one unlocks nothing and isn't listed, and subscribing again pays again.
+    /// </summary>
+    public bool IsActive { get; set; } = true;
     
     // Payment Information
     public decimal AmountPaid { get; set; } // Points spent for subscription

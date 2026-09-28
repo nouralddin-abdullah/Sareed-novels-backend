@@ -12,11 +12,11 @@ namespace Application.Novels.Commands.ChangeCover
     {
         public async Task<ChangeCoverResult> Handle(ChangerCoverCommand request, CancellationToken cancellationToken)
         {
-            var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-            var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("Novel was not found");
+            var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+            var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("Novel was not found", "NovelNotFound");
             if (novel.AuthorId != currentUser.Id)
             {
-                throw new ForbidException("Forbidden");
+                throw new ForbidException("Forbidden", "NotOwner");
             }
             logger.LogInformation("Changing the cover for {NovelId}", novel.Id);
 
@@ -30,7 +30,7 @@ namespace Application.Novels.Commands.ChangeCover
             catch (CoverImageException ex)
             {
                 logger.LogInformation("Refused a new cover for {NovelId}: {Code}", novel.Id, ex.Code);
-                return new ChangeCoverResult { Success = false, Message = ex.Message, ErrorCode = ex.Code };
+                return new ChangeCoverResult { Success = false, Code = ex.Code, Message = ex.Message, ErrorCode = ex.Code };
             }
 
             // One UPDATE of the cover column: saving the whole tracked novel would write back stale view/chapter counters.

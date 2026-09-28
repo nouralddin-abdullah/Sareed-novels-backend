@@ -19,7 +19,7 @@ public class CreateReadingListCommandHandler(
 {
     public async Task<CreateReadingListResult> Handle(CreateReadingListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         logger.LogInformation("Creating new reading list for {user}: ", currentUser.UserName);
 
         if (await readingListsRepository.IsNameTakenByUserAsync(currentUser.Id, request.Name))
@@ -27,6 +27,7 @@ public class CreateReadingListCommandHandler(
             return new CreateReadingListResult
             {
                 Success = false,
+                Code = "DuplicateListName",
                 Message = $"You already have a reading list named '{request.Name}'"
             };
         }
@@ -36,7 +37,7 @@ public class CreateReadingListCommandHandler(
             var refusal = await NovelForReadingList.WhyNotAddable(novelsRepository, novelId);
             if (refusal != null)
             {
-                return new CreateReadingListResult { Success = false, Message = refusal };
+                return new CreateReadingListResult { Success = false, Code = NovelForReadingList.NotAddableCode, Message = refusal };
             }
         }
 
@@ -91,6 +92,7 @@ public class CreateReadingListCommandHandler(
         return new CreateReadingListResult
         {
             Success = false,
+            Code = "OperationFailed",
             Message = "Failed to create reading list."
         };
     }

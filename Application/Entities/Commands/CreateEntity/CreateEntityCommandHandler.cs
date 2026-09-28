@@ -20,7 +20,7 @@ public class CreateEntityCommandHandler(
 {
     public async Task<OperationResult> Handle(CreateEntityCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
 
         logger.LogInformation(
             "User {UserId} creating entity '{Name}' for novel {NovelId}",
@@ -36,6 +36,7 @@ public class CreateEntityCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "NovelNotFound",
                 Message = "Novel not found"
             };
         }
@@ -45,6 +46,7 @@ public class CreateEntityCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "NotOwner",
                 Message = "You don't have permission to add entities to this novel"
             };
         }
@@ -56,6 +58,7 @@ public class CreateEntityCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "InvalidIcon",
                 Message = $"Invalid icon. Valid icons are: {string.Join(", ", EntityIconValidator.GetValidIcons())}"
             };
         }

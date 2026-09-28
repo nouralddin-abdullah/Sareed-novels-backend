@@ -18,7 +18,7 @@ public class ApproveRechargeCommandHandler(
 {
     public async Task<OperationResult> Handle(ApproveRechargeCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         var rechargeRequest = await rechargeRepository.GetByIdAsync(request.RequestId);
         if (rechargeRequest == null)
@@ -26,6 +26,7 @@ public class ApproveRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "RequestNotFound",
                 Message = "Recharge request not found"
             };
         }
@@ -35,6 +36,7 @@ public class ApproveRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyProcessed",
                 Message = $"Request already {rechargeRequest.Status.ToLower()}"
             };
         }
@@ -52,7 +54,7 @@ public class ApproveRechargeCommandHandler(
                 rechargeRequest.UserId,
                 rechargeRequest.PointsRequested,
                 TransactionType.RechargeApproved,
-                $"Recharge approved: {rechargeRequest.PointsRequested} points ({rechargeRequest.TotalAmountEGP} EGP via {rechargeRequest.PaymentMethod})",
+                TransactionDescriptions.RechargeApproved(rechargeRequest.PointsRequested, rechargeRequest.TotalAmountEGP, rechargeRequest.PaymentMethod),
                 rechargeRequest.Id
             );
             return true;
@@ -63,6 +65,7 @@ public class ApproveRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyProcessed",
                 Message = "Request was already processed"
             };
         }

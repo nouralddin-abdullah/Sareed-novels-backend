@@ -24,13 +24,14 @@ public class CreateReviewCommandHandler(
     public async Task<CreateReviewResult> Handle(CreateReviewCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Creating new review {@review}", request);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
         if (novel.AuthorId == currentUser.Id)
         {
             return new CreateReviewResult
             {
                 Success = false,
+                Code = "CannotReviewOwnNovel",
                 Message = "You cannot review your own novel"
             };
         }
@@ -40,6 +41,7 @@ public class CreateReviewCommandHandler(
             return new CreateReviewResult
             {
                 Success = false,
+                Code = "AlreadyReviewed",
                 Message = "You have already reviewed this novel"
             };
         }
@@ -55,6 +57,7 @@ public class CreateReviewCommandHandler(
             return new CreateReviewResult
             {
                 Success = false,
+                Code = "OperationFailed",
                 Message = "Failed to create review"
             };
         }

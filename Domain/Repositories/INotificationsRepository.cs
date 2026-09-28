@@ -23,7 +23,9 @@ public interface INotificationsRepository
     Task<(IEnumerable<Notification>, int)> GetUserNotifications(string userId, int pageNumber, int pageSize, bool unreadOnly = false);
     Task<Notification?> GetNotificationById(Guid notificationId);
     Task<int> GetUnreadCount(string userId);
+    /// <summary>Marks the notification read (already read is fine); false when it doesn't exist.</summary>
     Task<bool> MarkAsRead(Guid notificationId);
-    Task<bool> MarkAllAsRead(string userId);
+    /// <summary>Marks every unread notification of the user read in one statement; how many there were (0 is fine).</summary>
+    Task<int> MarkAllAsRead(string userId);
     Task<bool> DeleteNotification(Guid notificationId);
 }

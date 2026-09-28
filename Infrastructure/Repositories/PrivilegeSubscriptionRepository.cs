@@ -30,9 +30,11 @@ public class PrivilegeSubscriptionRepository(ApplicationDbContext dbContext) : I
         int pageSize,
         bool includeExpired = false)
     {
+        // Subscriptions to a deleted novel are left out of the count as well as the page (the Include's join already
+        // dropped them from the page, since Novel has a query filter).
         var query = dbContext.NovelPrivilegeSubscriptions
             .Include(s => s.Novel)
-            .Where(s => s.UserId == userId);
+            .Where(s => s.UserId == userId && !s.Novel.IsDeleted);
 
         if (!includeExpired)
         {
@@ -90,6 +92,13 @@ public class PrivilegeSubscriptionRepository(ApplicationDbContext dbContext) : I
                 s.UserId == userId && 
                 s.IsActive); // No expiration check - permanent subscriptions!
     }
+
+    public async Task<DateTime?> GetActiveSubscriptionDateAsync(Guid novelId, string userId) =>
+        await dbContext.NovelPrivilegeSubscriptions
+            .Where(s => s.NovelId == novelId && s.UserId == userId && s.IsActive)
+            .OrderBy(s => s.SubscribedAt)
+            .Select(s => (DateTime?)s.SubscribedAt)
+            .FirstOrDefaultAsync();
 
     public async Task<List<NovelPrivilegeSubscription>> GetExpiredSubscriptionsAsync()
     {

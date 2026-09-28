@@ -22,6 +22,7 @@ public class CreateGiftCommandHandler(
         {
             Id = Guid.NewGuid(),
             Name = request.Name,
+            NameAr = string.IsNullOrWhiteSpace(request.NameAr) ? request.Name : request.NameAr.Trim(),
             Cost = request.Cost,
             IsActive = true,
             CreatedAt = DateTime.UtcNow

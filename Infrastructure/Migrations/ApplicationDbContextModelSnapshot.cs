@@ -699,6 +699,11 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("NameAr")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -1420,6 +1425,15 @@ namespace Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("GiftCount")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("GiftId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("NovelId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid?>("RelatedRequestId")
                         .HasColumnType("uniqueidentifier");

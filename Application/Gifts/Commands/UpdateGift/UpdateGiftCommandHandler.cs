@@ -16,10 +16,13 @@ public class UpdateGiftCommandHandler(
         logger.LogInformation("Updating gift: {GiftId}", request.GiftId);
 
         var gift = await giftRepository.GetGiftById(request.GiftId)
-            ?? throw new NotFoundException("Gift not found");
+            ?? throw new NotFoundException("Gift not found", "GiftNotFound");
 
         if (request.Name != null)
             gift.Name = request.Name;
+
+        if (!string.IsNullOrWhiteSpace(request.NameAr))
+            gift.NameAr = request.NameAr.Trim();
 
         if (request.Cost.HasValue)
             gift.Cost = request.Cost.Value;

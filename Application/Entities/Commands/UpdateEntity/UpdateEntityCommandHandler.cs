@@ -18,7 +18,7 @@ public class UpdateEntityCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateEntityCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
 
         var entity = await entityRepository.GetEntityByIdAsync(request.EntityId);
         if (entity == null)
@@ -26,6 +26,7 @@ public class UpdateEntityCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "EntityNotFound",
                 Message = "Entity not found"
             };
         }
@@ -33,7 +34,7 @@ public class UpdateEntityCommandHandler(
         // Verify user owns the novel (using included Novel)
         if (entity.Novel == null || entity.Novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
         }
 
         // Validate icon if provided
@@ -45,6 +46,7 @@ public class UpdateEntityCommandHandler(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "InvalidIcon",
                     Message = $"Invalid icon. Valid icons are: {string.Join(", ", EntityIconValidator.GetValidIcons())}"
                 };
             }
@@ -82,6 +84,7 @@ public class UpdateEntityCommandHandler(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "InvalidAttributes",
                     Message = "Invalid JSON format for Attributes"
                 };
             }

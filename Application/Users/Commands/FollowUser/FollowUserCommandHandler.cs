@@ -19,15 +19,16 @@ public class FollowUserCommandHandler(
 {
     public async Task<OperationResult> Handle(FollowUserCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("The user is not authorized");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("The user is not authorized", "NotSignedIn");
         logger.LogInformation("User {UserId} trying to follow {UserId}", currentUser.Id, request.UserIdToFollow);
-        var userToFollow = await userManager.FindByIdAsync(request.UserIdToFollow) ?? throw new NotFoundException("User you trying to follow not found");
+        var userToFollow = await userManager.FindByIdAsync(request.UserIdToFollow) ?? throw new NotFoundException("User you trying to follow not found", "UserNotFound");
 
         if (currentUser.Id == userToFollow.Id)
         {
             return new OperationResult
             {
                 Success = false,
+                Code = "CannotFollowSelf",
                 Message = "You cannot follow yourself",
             };
         }
@@ -49,6 +50,7 @@ public class FollowUserCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyFollowing",
                 Message = "You already following this user",
             };
         }

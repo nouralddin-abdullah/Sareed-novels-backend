@@ -18,7 +18,7 @@ public class UpdatePrivilegeCommandHandler(
             request.NovelId, request.NewSubscriptionCost, request.NewPrivilegeStartSequence);
         
         var currentUser = userContext.GetCurrentUser() 
-            ?? throw new ForbidException("User not signed in");
+            ?? throw new ForbidException("User not signed in", "NotSignedIn");
         
         var result = await privilegeService.UpdatePrivilegeConfigAsync(
             request.NovelId, 

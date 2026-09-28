@@ -48,7 +48,7 @@ public class WalletController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command);
         if (!result.Success)
         {
-            return BadRequest(result.Message);
+            return BadRequest(result);
         }
         return Ok(result);
     }
@@ -79,7 +79,7 @@ public class WalletController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command);
         if (!result.Success)
         {
-            return BadRequest(result.Message);
+            return BadRequest(result);
         }
         return Ok(result);
     }

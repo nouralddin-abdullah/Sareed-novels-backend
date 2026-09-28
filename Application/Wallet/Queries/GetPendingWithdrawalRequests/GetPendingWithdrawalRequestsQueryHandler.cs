@@ -2,6 +2,7 @@
 using AutoMapper;
 using Domain.Repositories;
 using MediatR;
+using Application.Common;
 
 namespace Application.Wallet.Queries.GetPendingWithdrawalRequests;
 
@@ -11,10 +12,8 @@ public class GetPendingWithdrawalRequestsQueryHandler(
 {
     public async Task<(IEnumerable<WithdrawalRequestDto>, int)> Handle(GetPendingWithdrawalRequestsQuery request, CancellationToken cancellationToken)
     {
-        var (requests, totalCount) = await withdrawalRepository.GetPendingRequestsAsync(
-            request.PageNumber,
-            request.PageSize
-        );
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
+        var (requests, totalCount) = await withdrawalRepository.GetPendingRequestsAsync(pageNumber, pageSize);
         
         var dtos = mapper.Map<IEnumerable<WithdrawalRequestDto>>(requests);
         

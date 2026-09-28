@@ -21,7 +21,7 @@ public class GetChaptersReaderQueryHandler(
     public async Task<IEnumerable<ChaptersDTO>> Handle(GetChaptersReaderQuery request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Getting reader view chapters for {@novel}", request);
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
         var chapters = await chaptersRepository.GetChaptersReaderView(request.NovelId);
         var chapterDtos = mapper.Map<IEnumerable<ChaptersDTO>>(chapters).ToList();
         

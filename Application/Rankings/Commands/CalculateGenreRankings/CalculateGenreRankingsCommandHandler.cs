@@ -35,6 +35,7 @@ public class CalculateGenreRankingsCommandHandler(IRankingService rankingService
             return new CalculateGenreRankingsResult
             {
                 Success = false,
+                Code = "OperationFailed",
                 Message = $"Failed to calculate rankings for genre {request.GenreId}",
                 GenreId = request.GenreId,
                 RankingType = request.RankingType,

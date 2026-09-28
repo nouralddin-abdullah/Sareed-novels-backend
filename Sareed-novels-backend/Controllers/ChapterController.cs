@@ -8,6 +8,7 @@ using Application.Chapters.Queries.GetChaptersReader;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Application.Common;
 
 namespace Sareed_novels_backend.Controllers
 {
@@ -33,7 +34,7 @@ namespace Sareed_novels_backend.Controllers
             {
                 return NoContent();
             }
-            return BadRequest();
+            return BadRequest(new ApiError("OperationFailed", "Failed to delete the chapter"));
         }
         [HttpPatch("{chapterId}")]
         [Authorize]

@@ -18,17 +18,18 @@ public class FollowReadingListCommandHandler(
 {
     public async Task<OperationResult> Handle(FollowReadingListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         logger.LogInformation("User {UserId} trying to follow reading list {ListId}", currentUser.Id, request.ReadingListId);
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found");
+            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
 
         if (!readingList.IsPublic)
         {
             return new OperationResult
             {
                 Success = false,
+                Code = "ReadingListPrivate",
                 Message = "Cannot follow a private reading list"
             };
         }
@@ -38,6 +39,7 @@ public class FollowReadingListCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "CannotFollowOwnList",
                 Message = "You cannot follow your own reading list"
             };
         }
@@ -49,6 +51,7 @@ public class FollowReadingListCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyFollowing",
                 Message = "You are already following this reading list"
             };
         }
@@ -81,6 +84,7 @@ public class FollowReadingListCommandHandler(
         return new OperationResult
         {
             Success = false,
+            Code = "OperationFailed",
             Message = "Failed to follow reading list"
         };
     }

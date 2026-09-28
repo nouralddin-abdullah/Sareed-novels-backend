@@ -16,29 +16,29 @@ public class CreateRelationshipCommandHandler(
 {
     public async Task<OperationResult> Handle(CreateRelationshipCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
 
         var sourceEntity = await entityRepository.GetEntityByIdAsync(request.SourceEntityId);
         if (sourceEntity == null)
         {
-            return new OperationResult { Success = false, Message = "Source entity not found" };
+            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "Source entity not found" };
         }
 
         var targetEntity = await entityRepository.GetEntityByIdAsync(request.TargetEntityId);
         if (targetEntity == null)
         {
-            return new OperationResult { Success = false, Message = "Target entity not found" };
+            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "Target entity not found" };
         }
 
         if (sourceEntity.NovelId != targetEntity.NovelId)
         {
-            return new OperationResult { Success = false, Message = "Entities must belong to the same novel" };
+            return new OperationResult { Success = false, Code = "EntitiesInDifferentNovels", Message = "Entities must belong to the same novel" };
         }
 
         // Verify user owns the novel (using included Novel from source entity)
         if (sourceEntity.Novel == null || sourceEntity.Novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
         }
 
         var relationship = new EntityRelationship

@@ -6,6 +6,7 @@ using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Application.Common;
 
 namespace Application.Notifications.Queries.GetNotifications;
 
@@ -19,15 +20,16 @@ public class GetNotificationsQueryHandler(
 {
     public async Task<NotificationListDto> Handle(GetNotificationsQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         
         logger.LogInformation("Getting notifications for user {UserId}, page {PageNumber}, unreadOnly {UnreadOnly}", 
-            currentUser.Id, request.PageNumber, request.UnreadOnly);
+            currentUser.Id, pageNumber, request.UnreadOnly);
 
         var (notifications, totalCount) = await notificationsRepository.GetUserNotifications(
             currentUser.Id,
-            request.PageNumber,
-            request.PageSize,
+            pageNumber,
+            pageSize,
             request.UnreadOnly);
 
         var notificationDtos = mapper.Map<List<NotificationDto>>(notifications);
@@ -35,15 +37,15 @@ public class GetNotificationsQueryHandler(
         
         var unreadCount = await notificationsRepository.GetUnreadCount(currentUser.Id);
         
-        var totalPages = (int)Math.Ceiling(totalCount / (double)request.PageSize);
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
         return new NotificationListDto
         {
             Notifications = notificationDtos,
             TotalCount = totalCount,
             UnreadCount = unreadCount,
-            PageNumber = request.PageNumber,
-            PageSize = request.PageSize,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
             TotalPages = totalPages
         };
     }

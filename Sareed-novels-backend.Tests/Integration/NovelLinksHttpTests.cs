@@ -100,7 +100,7 @@ public class NovelLinksHttpTests(SardApiFactory api)
         var reader = await api.SignUp();
         var author = await api.SignUp();
         var novel = await api.AddNovel(author);
-        var gift = new Gift { Id = Guid.NewGuid(), Name = "وردة", ImageUrl = "https://files.test/rose.png", Cost = 5 };
+        var gift = new Gift { Id = Guid.NewGuid(), Name = "وردة", NameAr = "وردة", ImageUrl = "https://files.test/rose.png", Cost = 5 };
         await using (var db = api.Db())
         {
             db.Gifts.Add(gift);

@@ -1,28 +1,19 @@
-﻿using Application.Services;
-using Application.Users;
-using Application.Users.Commands.FollowUser;
+﻿using Application.Users.Commands.FollowUser;
 using Domain.Exceptions;
 using MediatR;
-using Microsoft.Extensions.Logging;
 
 namespace Application.Privileges.Commands.CancelSubscription;
 
-public class CancelSubscriptionCommandHandler(
-    ILogger<CancelSubscriptionCommandHandler> logger,
-    IUserContext userContext,
-    IPrivilegeService privilegeService) : IRequestHandler<CancelSubscriptionCommand, OperationResult>
+/// <summary>
+/// DELETE /api/novel/{id}/privilege/subscription. The owner's rule (#17): a privilege subscription is a permanent unlock
+/// and can't be cancelled, so this always answers 400 <see cref="CannotBeCancelledCode"/>. The route stays so that
+/// clients which still offer cancelling get a clear answer.
+/// </summary>
+public class CancelSubscriptionCommandHandler : IRequestHandler<CancelSubscriptionCommand, OperationResult>
 {
-    public async Task<OperationResult> Handle(CancelSubscriptionCommand request, CancellationToken cancellationToken)
-    {
-        logger.LogInformation("User cancelling privilege subscription for novel {NovelId}", request.NovelId);
-        
-        var currentUser = userContext.GetCurrentUser() 
-            ?? throw new ForbidException("User not signed in");
-        
-        var result = await privilegeService.CancelSubscriptionAsync(
-            request.NovelId, 
-            currentUser.Id);
-        
-        return result;
-    }
+    public const string CannotBeCancelledCode = "SubscriptionCannotBeCancelled";
+    public const string CannotBeCancelledMessage = "لا يمكن إلغاء الاشتراك في الامتياز: فهو يفتح فصول الرواية المقفلة لك بشكل دائم.";
+
+    public Task<OperationResult> Handle(CancelSubscriptionCommand request, CancellationToken cancellationToken) =>
+        throw new BadRequestException(CannotBeCancelledMessage, CannotBeCancelledCode);
 }

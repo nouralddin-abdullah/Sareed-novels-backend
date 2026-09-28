@@ -86,6 +86,22 @@ public class GetChapterReaderHandlerTests
     }
 
     [Fact]
+    public async Task A_locked_chapter_comes_without_its_text_and_says_why_in_arabic()
+    {
+        // The web shows lockMessage as it is (it used to swap this sentence's English for Arabic itself).
+        var chapter = ChapterOf(novel.Id, "Published");
+        Setup(chapter, currentUserId: "reader-1");
+        privileges.IsChapterLockedAsync(chapter.Id, "reader-1").Returns(true);
+
+        var result = await Handler().Handle(new GetChapterReaderQuery(novel.Id, chapter.Id), CancellationToken.None);
+
+        Assert.True(result.IsLocked);
+        Assert.Equal("هذا الفصل مقفل بنظام الامتيازات. اشترك لفتح جميع الفصول المقفلة!", result.LockMessage);
+        Assert.Empty(result.Paragraphs);
+        await paragraphs.DidNotReceive().GetChapterParagraphs(Arg.Any<Guid>());
+    }
+
+    [Fact]
     public async Task Readers_get_published_chapters_and_the_read_is_tracked()
     {
         var chapter = ChapterOf(novel.Id, "Published");

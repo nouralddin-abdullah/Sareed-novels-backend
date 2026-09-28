@@ -16,7 +16,7 @@ public class AddArticleCommandHandler(
 {
     public async Task<OperationResult> Handle(AddArticleCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
 
         var entity = await entityRepository.GetEntityByIdAsync(request.EntityId);
         if (entity == null)
@@ -24,6 +24,7 @@ public class AddArticleCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "EntityNotFound",
                 Message = "Entity not found"
             };
         }
@@ -34,6 +35,7 @@ public class AddArticleCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "NotOwner",
                 Message = "You don't have permission to add articles to this entity"
             };
         }

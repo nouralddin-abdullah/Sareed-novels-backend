@@ -2,6 +2,7 @@
 using System.Threading.RateLimiting;
 using Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Sareed_novels_backend.Middlewares;
@@ -11,6 +12,9 @@ namespace Sareed_novels_backend.Extensions;
 
 public static class WebApplicationBuilderExtensions
 {
+    /// <summary>The rate limiter's 429 message (code <see cref="ErrorHandlingMiddleware.TooManyRequests"/>).</summary>
+    public const string TooManyRequestsMessage = "طلبات كثيرة خلال وقت قصير. حاول مرة أخرى بعد بضع دقائق.";
+
     public static void AddPresentation(this WebApplicationBuilder builder)
     {
         builder.Services.AddCors(options =>
@@ -102,7 +106,9 @@ public static class WebApplicationBuilderExtensions
                 {
                     context.HttpContext.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
                 }
-                await context.HttpContext.Response.WriteAsync("Too many requests. Try again in a few minutes.", cancellationToken);
+                // The error middleware's shape: {code, message}.
+                await context.HttpContext.Response.WriteAsJsonAsync(
+                    new { code = ErrorHandlingMiddleware.TooManyRequests, message = TooManyRequestsMessage }, cancellationToken);
             };
             options.AddPolicy(RateLimitPolicies.Auth, context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -122,6 +128,11 @@ public static class WebApplicationBuilderExtensions
 
         // 2. Add MVC Controllers
         builder.Services.AddControllers();
+
+        // A refused request body (the validators' Arabic messages) keeps ASP.NET's validation problem shape, with
+        // {code, message} added like every other error: code ValidationFailed, message the first of the errors.
+        builder.Services.Configure<ApiBehaviorOptions>(options =>
+            options.InvalidModelStateResponseFactory = ValidationProblems.Respond);
 
         // 3. Configure Swagger/OpenAPI
         builder.Services.AddEndpointsApiExplorer();

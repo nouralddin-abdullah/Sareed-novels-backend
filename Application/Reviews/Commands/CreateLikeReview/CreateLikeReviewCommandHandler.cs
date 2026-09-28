@@ -19,13 +19,14 @@ internal class CreateLikeReviewCommandHandler(
     public async Task<OperationResult> Handle(CreateLikeReviewCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Liking a review {@review}", request);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-        var review = await reviewsRepository.GetReviewById(request.ReviewId) ?? throw new NotFoundException("Review not found");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var review = await reviewsRepository.GetReviewById(request.ReviewId) ?? throw new NotFoundException("Review not found", "ReviewNotFound");
         if (review.ReviewerId == currentUser.Id)
         {
             return new OperationResult
             {
                 Success = false,
+                Code = "CannotLikeOwnContent",
                 Message = "You cannot like your own review"
             };
         }
@@ -35,6 +36,7 @@ internal class CreateLikeReviewCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyLiked",
                 Message = "You already liked this review"
             };
         }

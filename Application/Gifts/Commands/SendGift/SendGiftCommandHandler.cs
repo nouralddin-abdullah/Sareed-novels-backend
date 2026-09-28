@@ -7,6 +7,7 @@ using Domain.Repositories;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Application.Wallet;
 
 namespace Application.Gifts.Commands.SendGift;
 
@@ -31,27 +32,29 @@ public class SendGiftCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "InvalidGiftCount",
                 Message = "Count must be between 1 and 100"
             };
         }
 
         var currentUser = userContext.GetCurrentUser()
-            ?? throw new ForbidException("User not authenticated");
+            ?? throw new ForbidException("User not authenticated", "NotSignedIn");
 
         var gift = await giftRepository.GetGiftById(request.GiftId)
-            ?? throw new NotFoundException("Gift not found");
+            ?? throw new NotFoundException("Gift not found", "GiftNotFound");
 
         if (!gift.IsActive)
         {
             return new OperationResult
             {
                 Success = false,
+                Code = "GiftUnavailable",
                 Message = "This gift is no longer available"
             };
         }
 
         var novel = await novelsRepository.GetOne(request.NovelId)
-            ?? throw new NotFoundException("Novel not found");
+            ?? throw new NotFoundException("Novel not found", "NovelNotFound");
 
         // Prevent users from gifting their own novels
         if (novel.AuthorId == currentUser.Id)
@@ -59,6 +62,7 @@ public class SendGiftCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "CannotGiftOwnNovel",
                 Message = "You cannot gift your own novel"
             };
         }
@@ -72,6 +76,7 @@ public class SendGiftCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "InsufficientBalance",
                 Message = "Insufficient points balance"
             };
         }
@@ -89,9 +94,10 @@ public class SendGiftCommandHandler(
                     amount: totalCost,
                     fromTransactionType: TransactionType.GiftSent,
                     toTransactionType: TransactionType.GiftReceived,
-                    fromDescription: $"Sent {request.Count}x {gift.Name} to {novel.Title}",
+                    fromDescription: TransactionDescriptions.GiftSent(gift.NameAr, request.Count, novel.Title),
                     // The author's wallet names the sender by display name: user names used to be email addresses.
-                    toDescription: $"Received {request.Count}x {gift.Name} from {currentUser.DisplayName} on {novel.Title}"
+                    toDescription: TransactionDescriptions.GiftReceived(gift.NameAr, request.Count, currentUser.DisplayName, novel.Title),
+                    details: new TransactionDetails(NovelId: novel.Id, GiftId: gift.Id, GiftCount: request.Count)
                 );
 
                 var record = new GiftTransaction
@@ -114,6 +120,7 @@ public class SendGiftCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "InsufficientBalance",
                 Message = "Insufficient points balance"
             };
         }
@@ -124,6 +131,7 @@ public class SendGiftCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "OperationFailed",
                 Message = "Failed to send gift. No points were deducted. Please try again."
             };
         }

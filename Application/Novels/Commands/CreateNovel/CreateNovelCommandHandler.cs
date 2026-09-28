@@ -24,7 +24,7 @@ public class CreateNovelCommandHandler(
     public async Task<CreateNovelResult> Handle(CreateNovelCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Creating new novel {Title}", request.Title);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         // Check the genres before anything is uploaded or saved, so a bad genre id can't leave a genre-less novel.
         var knownGenreIds = (await genresRepository.GetAllGenres()).Select(g => g.Id).ToHashSet();
@@ -33,6 +33,7 @@ public class CreateNovelCommandHandler(
             return new CreateNovelResult
             {
                 Success = false,
+                Code = "InvalidGenres",
                 Message = "Unknown genre"
             };
         }
@@ -59,6 +60,7 @@ public class CreateNovelCommandHandler(
                 return new CreateNovelResult
                 {
                     Success = false,
+                    Code = ex.Code,
                     Message = ex.Message,
                     ErrorCode = ex.Code
                 };
@@ -75,6 +77,7 @@ public class CreateNovelCommandHandler(
         {
             return new CreateNovelResult
             {
+                Code = "OperationFailed",
                 Message = "Error while creating novel",
                 Success = false
             };

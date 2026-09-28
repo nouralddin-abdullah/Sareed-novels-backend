@@ -38,6 +38,4 @@ public interface ICommentsRepository
     /// aren't counted, as the replies list leaves them out.
     /// </summary>
     Task<Dictionary<Guid, int>> GetRepliesCounts(IEnumerable<Guid> commentIds, string? viewerId = null);
-    /// <summary>Removes a paragraph's comments (with replies and likes) so the paragraph itself can be deleted.</summary>
-    Task DeleteParagraphComments(Guid paragraphId);
 }

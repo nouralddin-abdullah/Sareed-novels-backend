@@ -17,16 +17,18 @@ public class GetSiteWideRankingQueryHandler(
 {
     private static readonly string[] SiteWideTypes = [RankingTypes.Trending, RankingTypes.AllTime, RankingTypes.NewArrivals];
 
+    public const int MaxPageSize = 100;
+
     public async Task<PagedResult<NovelInRankingDto>> Handle(GetSiteWideRankingQuery request, CancellationToken cancellationToken)
     {
-        var pageSize = Math.Clamp(request.PageSize, 1, 100);
-        var pageNumber = Math.Max(1, request.PageNumber);
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, MaxPageSize);
 
         var rankingType = RankingTypes.Normalize(request.RankingType);
         if (rankingType == null || !SiteWideTypes.Contains(rankingType))
         {
             throw new NotFoundException(
-                $"Invalid ranking type '{request.RankingType}'. Valid types: {string.Join(", ", SiteWideTypes)}");
+                $"Invalid ranking type '{request.RankingType}'. Valid types: {string.Join(", ", SiteWideTypes)}",
+                "InvalidRankingType");
         }
 
         logger.LogInformation("Getting {RankingType} site-wide ranking", rankingType);

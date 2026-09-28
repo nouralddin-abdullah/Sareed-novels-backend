@@ -31,7 +31,7 @@ public class UnblockUserCommandHandler(
 {
     public async Task<BlockUserResult> Handle(UnblockUserCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         var target = await BlockTargets.FindAsync(userManager, currentUser, request.UserId);
 
         if (await blocksRepository.UnblockAsync(currentUser.Id, target.Id, cancellationToken))

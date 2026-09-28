@@ -17,15 +17,16 @@ public class UnFollowUserCommandHandler(
 {
     public async Task<OperationResult> Handle(UnFollowUserCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("The user is not authorized");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("The user is not authorized", "NotSignedIn");
         logger.LogInformation("User {UserId} trying to unfollow {UserId}", currentUser.Id, request.UserToUnFollowId);
-        var userToUnFollow = await userManager.FindByIdAsync(request.UserToUnFollowId) ?? throw new NotFoundException("User you trying to unfollow not found");
+        var userToUnFollow = await userManager.FindByIdAsync(request.UserToUnFollowId) ?? throw new NotFoundException("User you trying to unfollow not found", "UserNotFound");
 
         if (currentUser.Id == userToUnFollow.Id)
         {
             return new OperationResult
             {
                 Success = false,
+                Code = "CannotUnfollowSelf",
                 Message = "You cannot unfollow yourself",
             };
         }
@@ -36,6 +37,7 @@ public class UnFollowUserCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "NotFollowing",
                 Message = "You already not following this user",
             };
         }

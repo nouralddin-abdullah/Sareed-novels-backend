@@ -13,7 +13,7 @@ public class UpdateCompetitionCommandHandler(
     public async Task<CompetitionDetailDto> Handle(UpdateCompetitionCommand request, CancellationToken cancellationToken)
     {
         var competition = await competitionRepository.GetByIdWithParticipantsAsync(request.Id)
-            ?? throw new NotFoundException("Competition not found");
+            ?? throw new NotFoundException("Competition not found", "CompetitionNotFound");
 
         // Update only provided fields
         if (request.Name != null) competition.Name = request.Name;

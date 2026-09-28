@@ -167,28 +167,17 @@ public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxS
             .CountAsync(n => n.UserId == userId && !n.IsRead);
     }
 
-    public async Task<bool> MarkAsRead(Guid notificationId)
-    {
-        var notification = await dbContext.Notifications.FindAsync(notificationId);
-        if (notification == null) return false;
-        
-        notification.MarkAsRead();
-        return await dbContext.SaveChangesAsync() > 0;
-    }
+    public async Task<bool> MarkAsRead(Guid notificationId) =>
+        // One statement; SQL Server counts the row even when it was already read, so a repeat (or a race) succeeds.
+        await dbContext.Notifications
+            .Where(n => n.Id == notificationId)
+            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true)) > 0;
 
-    public async Task<bool> MarkAllAsRead(string userId)
-    {
-        var unreadNotifications = await dbContext.Notifications
+    public Task<int> MarkAllAsRead(string userId) =>
+        // One statement instead of loading and saving every unread row; nothing left to mark is not a failure.
+        dbContext.Notifications
             .Where(n => n.UserId == userId && !n.IsRead)
-            .ToListAsync();
-
-        foreach (var notification in unreadNotifications)
-        {
-            notification.MarkAsRead();
-        }
-
-        return await dbContext.SaveChangesAsync() > 0;
-    }
+            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
 
     public async Task<bool> DeleteNotification(Guid notificationId)
     {

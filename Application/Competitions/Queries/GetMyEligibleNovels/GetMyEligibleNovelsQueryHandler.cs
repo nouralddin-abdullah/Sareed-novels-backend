@@ -15,10 +15,10 @@ public class GetMyEligibleNovelsQueryHandler(
     public async Task<List<EligibleNovelDto>> Handle(GetMyEligibleNovelsQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser()
-            ?? throw new ForbidException("You must be logged in");
+            ?? throw new ForbidException("You must be logged in", "NotSignedIn");
 
         var competition = await competitionRepository.GetByIdAsync(request.CompetitionId)
-            ?? throw new NotFoundException("Competition not found");
+            ?? throw new NotFoundException("Competition not found", "CompetitionNotFound");
 
         // Get all author's novels (published and drafts)
         var (myNovels, _) = await novelsRepository.GetWorks(currentUser.Id, 1, 1000);

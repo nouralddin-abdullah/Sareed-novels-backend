@@ -68,6 +68,8 @@ public class AppConfigHttpTests(SardApiFactory api)
         var response = await misconfigured.CreateClient().GetAsync("/api/app/config");
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
-        Assert.Null(response.Headers.CacheControl);
+        // Never cached (errors say no-store), so a fixed configuration reaches the apps at once.
+        Assert.True(response.Headers.CacheControl?.NoStore);
+        Assert.Null(response.Headers.CacheControl?.MaxAge);
     }
 }

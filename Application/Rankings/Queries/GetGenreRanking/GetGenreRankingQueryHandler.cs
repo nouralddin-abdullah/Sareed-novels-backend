@@ -13,23 +13,25 @@ public class GetGenreRankingQueryHandler(IRankingRepository rankingRepository, I
 {
     private static readonly string[] GenreRankingTypes = [RankingTypes.Trending, RankingTypes.TopRated, RankingTypes.New];
 
+    public const int MaxPageSize = 100;
+
     public async Task<PagedResult<NovelInRankingDto>> Handle(GetGenreRankingQuery request, CancellationToken cancellationToken)
     {
-        var pageSize = Math.Clamp(request.PageSize, 1, 100);
-        var pageNumber = Math.Max(1, request.PageNumber);
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, MaxPageSize);
 
         // The web app sends "top_rated" / "trending" / "new"; stored names are "TopRated" / "Trending" / "New".
         var rankingType = RankingTypes.Normalize(request.RankingType);
         if (rankingType == null || !GenreRankingTypes.Contains(rankingType))
         {
             throw new NotFoundException(
-                $"Invalid ranking type '{request.RankingType}'. Valid types: {string.Join(", ", GenreRankingTypes)}");
+                $"Invalid ranking type '{request.RankingType}'. Valid types: {string.Join(", ", GenreRankingTypes)}",
+                "InvalidRankingType");
         }
 
         logger.LogInformation("Getting {RankingType} ranking for genre {GenreSlug}", rankingType, request.GenreSlug);
 
         var genre = await genresRepository.GetBySlug(request.GenreSlug)
-            ?? throw new NotFoundException($"Genre '{request.GenreSlug}' not found");
+            ?? throw new NotFoundException($"Genre '{request.GenreSlug}' not found", "GenreNotFound");
 
         // A genre with no qualifying novels simply has an empty list.
         var rankingList = await rankingRepository.GetRankingListByGenreAndType(genre.Id, rankingType);

@@ -3,6 +3,7 @@ using Domain.Repositories;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Domain.Entities;
+using Application.Common;
 
 namespace Application.Gifts.Queries.GetTopSupporters;
 
@@ -10,11 +11,15 @@ public class GetTopSupportersQueryHandler(
     IGiftTransactionRepository giftTransactionRepository,
     UserManager<User> userManager) : IRequestHandler<GetTopSupportersQuery, List<TopSupporterDto>>
 {
+    public const int MaxTopCount = 100;
+
     public async Task<List<TopSupporterDto>> Handle(GetTopSupportersQuery request, CancellationToken cancellationToken)
     {
+        // The web's supporters page asks for 100.
+        var (_, topCount) = Paging.Clamp(1, request.TopCount, MaxTopCount);
         var topSupporters = await giftTransactionRepository.GetTopSupportersForNovel(
             request.NovelId,
-            request.TopCount
+            topCount
         );
 
         var supporterDtos = new List<TopSupporterDto>();
