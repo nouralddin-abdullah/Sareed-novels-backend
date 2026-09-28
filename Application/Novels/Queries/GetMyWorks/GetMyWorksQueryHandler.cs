@@ -17,7 +17,7 @@ public class GetMyWorksQueryHandler(ILogger<GetMyWorksQueryHandler> logger, IUse
 
     public async Task<PagedResult<MyWorksDTO>> Handle(GetMyWorksQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("Getting all works for user {UserId}", currentUser.Id);
         // A size of 0 or less used to return every work.
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, MaxPageSize);

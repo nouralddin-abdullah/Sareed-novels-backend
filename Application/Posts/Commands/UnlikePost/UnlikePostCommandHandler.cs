@@ -15,7 +15,7 @@ public class UnlikePostCommandHandler(
 {
     public async Task<OperationResult> Handle(UnlikePostCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         var post = await postsRepository.GetPostById(request.PostId);
         if (post == null || post.IsDeleted)

@@ -16,7 +16,7 @@ public class RemoveGalleryImageCommandHandler(
 {
     public async Task<OperationResult> Handle(RemoveGalleryImageCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         // Get the image directly by ID
         var targetImage = await entityRepository.GetGalleryImageByIdAsync(request.ImageId);

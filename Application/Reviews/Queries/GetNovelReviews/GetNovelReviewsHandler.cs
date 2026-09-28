@@ -21,7 +21,7 @@ public class GetNovelReviewsHandler(
     {
         logger.LogInformation("Getting reviews for novel id: {id}", request.NovelId);
         var novel = await novelsRepository.GetOne(request.NovelId) 
-            ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
+            ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
         
         // Reviews by users the viewer blocked are left out. A size of 0 or less used to return every review.
         var currentUser = userContext.GetCurrentUser();

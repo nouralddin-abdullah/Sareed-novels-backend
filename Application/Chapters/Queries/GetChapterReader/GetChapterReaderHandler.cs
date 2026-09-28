@@ -28,8 +28,8 @@ public class GetChapterReaderHandler(
 
     public async Task<ChapterSingleReaderDTO> Handle(GetChapterReaderQuery request, CancellationToken cancellationToken)
     {
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
-        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("This chapter wasn't found", "ChapterNotFound");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
+        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
 
         var currentUser = userContext.GetCurrentUser();
         var isAuthor = currentUser != null && novel.AuthorId == currentUser.Id;
@@ -38,7 +38,7 @@ public class GetChapterReaderHandler(
         // (Authors can preview drafts of their own work.)
         if (chapter.NovelId != novel.Id || (!isAuthor && (novel.IsDraft || chapter.Status != PublishedStatus)))
         {
-            throw new NotFoundException("This chapter wasn't found", "ChapterNotFound");
+            throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
         }
 
         var chapterDTO = mapper.Map<ChapterSingleReaderDTO>(chapter);

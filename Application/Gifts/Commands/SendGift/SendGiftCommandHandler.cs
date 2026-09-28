@@ -38,10 +38,10 @@ public class SendGiftCommandHandler(
         }
 
         var currentUser = userContext.GetCurrentUser()
-            ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+            ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var gift = await giftRepository.GetGiftById(request.GiftId)
-            ?? throw new NotFoundException("Gift not found", "GiftNotFound");
+            ?? throw new NotFoundException("الهدية غير موجودة", "GiftNotFound");
 
         if (!gift.IsActive)
         {
@@ -54,7 +54,7 @@ public class SendGiftCommandHandler(
         }
 
         var novel = await novelsRepository.GetOne(request.NovelId)
-            ?? throw new NotFoundException("Novel not found", "NovelNotFound");
+            ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
 
         // Prevent users from gifting their own novels
         if (novel.AuthorId == currentUser.Id)

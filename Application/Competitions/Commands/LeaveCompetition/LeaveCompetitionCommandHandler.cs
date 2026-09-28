@@ -15,10 +15,10 @@ public class LeaveCompetitionCommandHandler(
     public async Task<bool> Handle(LeaveCompetitionCommand request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser()
-            ?? throw new ForbidException("You must be logged in", "NotSignedIn");
+            ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var competition = await competitionRepository.GetByIdAsync(request.CompetitionId)
-            ?? throw new NotFoundException("Competition not found", "CompetitionNotFound");
+            ?? throw new NotFoundException("المسابقة غير موجودة", "CompetitionNotFound");
 
         // Can only leave during participation phase
         if (competition.Status != CompetitionStatus.Participation && competition.Status != CompetitionStatus.Upcoming)
@@ -27,7 +27,7 @@ public class LeaveCompetitionCommandHandler(
         }
 
         var novel = await novelsRepository.GetOne(request.NovelId)
-            ?? throw new NotFoundException("Novel not found", "NovelNotFound");
+            ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
 
         // Verify ownership
         if (novel.AuthorId != currentUser.Id)

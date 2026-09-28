@@ -24,16 +24,16 @@ public class UserLoginCommandHandler(UserManager<User> userManager, ILogger<User
         }
 
         if (user == null)
-            throw new ForbidException("Invalid email or password", "InvalidCredentials");
+            throw new ForbidException("البريد أو اسم المستخدم أو كلمة المرور غير صحيحة", "InvalidCredentials");
 
         // Identity lockout: after MaxFailedAccessAttempts wrong passwords the account refuses sign-in for a while.
         if (await userManager.IsLockedOutAsync(user))
-            throw new TooManyRequestsException("Too many failed sign-in attempts. Try again in a few minutes.", "TooManySignInAttempts");
+            throw new TooManyRequestsException("توقف تسجيل الدخول مؤقتًا بعد محاولات خاطئة متكررة. حاول بعد 5 دقائق، أو أعد تعيين كلمة المرور.", "TooManySignInAttempts");
 
         if (!await userManager.CheckPasswordAsync(user, request.Password))
         {
             await userManager.AccessFailedAsync(user);
-            throw new ForbidException("Invalid email or password", "InvalidCredentials");
+            throw new ForbidException("البريد أو اسم المستخدم أو كلمة المرور غير صحيحة", "InvalidCredentials");
         }
 
         if (await userManager.GetAccessFailedCountAsync(user) > 0)

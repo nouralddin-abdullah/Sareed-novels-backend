@@ -16,7 +16,7 @@ public class GetMyGiftHistoryQueryHandler(
     public async Task<PagedResult<GiftHistoryItemDto>> Handle(GetMyGiftHistoryQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser()
-            ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+            ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         // Out-of-range paging used to throw (page 0) or divide by zero (size 0).
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, GiftPaging.MaxPageSize);

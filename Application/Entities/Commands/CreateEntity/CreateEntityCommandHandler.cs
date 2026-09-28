@@ -20,7 +20,7 @@ public class CreateEntityCommandHandler(
 {
     public async Task<OperationResult> Handle(CreateEntityCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         logger.LogInformation(
             "User {UserId} creating entity '{Name}' for novel {NovelId}",

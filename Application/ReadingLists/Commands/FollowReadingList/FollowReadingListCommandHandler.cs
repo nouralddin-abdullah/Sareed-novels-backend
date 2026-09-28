@@ -18,11 +18,11 @@ public class FollowReadingListCommandHandler(
 {
     public async Task<OperationResult> Handle(FollowReadingListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("User {UserId} trying to follow reading list {ListId}", currentUser.Id, request.ReadingListId);
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
+            ?? throw new NotFoundException("القائمة غير موجودة", "ReadingListNotFound");
 
         if (!readingList.IsPublic)
         {

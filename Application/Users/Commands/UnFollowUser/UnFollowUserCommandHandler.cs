@@ -17,9 +17,9 @@ public class UnFollowUserCommandHandler(
 {
     public async Task<OperationResult> Handle(UnFollowUserCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("The user is not authorized", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("User {UserId} trying to unfollow {UserId}", currentUser.Id, request.UserToUnFollowId);
-        var userToUnFollow = await userManager.FindByIdAsync(request.UserToUnFollowId) ?? throw new NotFoundException("User you trying to unfollow not found", "UserNotFound");
+        var userToUnFollow = await userManager.FindByIdAsync(request.UserToUnFollowId) ?? throw new NotFoundException("المستخدم غير موجود", "UserNotFound");
 
         if (currentUser.Id == userToUnFollow.Id)
         {
@@ -27,7 +27,7 @@ public class UnFollowUserCommandHandler(
             {
                 Success = false,
                 Code = "CannotUnfollowSelf",
-                Message = "You cannot unfollow yourself",
+                Message = "لا يمكنك إلغاء متابعة نفسك",
             };
         }
         var isFollowing = await usersRepository.IsFollowingAsync(currentUser.Id, userToUnFollow.Id);
@@ -38,13 +38,13 @@ public class UnFollowUserCommandHandler(
             {
                 Success = false,
                 Code = "NotFollowing",
-                Message = "You already not following this user",
+                Message = "أنت لا تتابع هذا المستخدم",
             };
         }
 
         var result = await usersRepository.UnFollowUser(currentUser.Id, userToUnFollow.Id);
 
-        string message = result ? $"You are now not following {userToUnFollow.DisplayName}" : "Failed to unfollow the user";
+        string message = result ? $"ألغيت متابعة {userToUnFollow.DisplayName}" : "تعذّر إلغاء المتابعة. حاول مرة أخرى.";
         return new OperationResult
         {
             Success = result,

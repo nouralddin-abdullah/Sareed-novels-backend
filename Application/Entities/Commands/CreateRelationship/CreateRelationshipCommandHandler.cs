@@ -16,7 +16,7 @@ public class CreateRelationshipCommandHandler(
 {
     public async Task<OperationResult> Handle(CreateRelationshipCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var sourceEntity = await entityRepository.GetEntityByIdAsync(request.SourceEntityId);
         if (sourceEntity == null)

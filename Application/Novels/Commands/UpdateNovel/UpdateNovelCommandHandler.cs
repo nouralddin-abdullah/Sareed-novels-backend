@@ -21,12 +21,12 @@ public class UpdateNovelCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateNovelCommand request, CancellationToken cancellationToken)
     {
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel was not found", "NovelNotFound");
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("This user not signed in", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("Updating data for novel {NovelId}", novel.Id);
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("Forbidden", "NotOwner");
+            throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         }
 
         // Validate the genres before changing anything, so a bad genre list can't leave a half-applied update.

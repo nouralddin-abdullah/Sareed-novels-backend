@@ -24,7 +24,7 @@ public class CreateReportCommandHandler(
 
     public async Task<CreateReportResult> Handle(CreateReportCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         // CreateReportCommandValidator has checked all three.
         EnumNames.TryParse<ReportTargetType>(request.TargetType, out var targetType);

@@ -49,7 +49,7 @@ namespace Sareed_novels_backend.Controllers
         public async Task<IActionResult> SendConfirmationLink(SendConfirmEmailCommand command)
         {
             await mediator.Send(command);
-            return Ok("Email was sent.");
+            return Ok("إن كان هناك حساب غير مؤكَّد يستخدم هذا البريد فستصله رسالة فيها رابط لتأكيده.");
         }
 
         [HttpPost("Login")]

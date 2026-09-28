@@ -15,7 +15,7 @@ public class RejectRechargeCommandHandler(
 {
     public async Task<OperationResult> Handle(RejectRechargeCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var rechargeRequest = await rechargeRepository.GetByIdAsync(request.RequestId);
         if (rechargeRequest == null)

@@ -19,9 +19,9 @@ public class FollowUserCommandHandler(
 {
     public async Task<OperationResult> Handle(FollowUserCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("The user is not authorized", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("User {UserId} trying to follow {UserId}", currentUser.Id, request.UserIdToFollow);
-        var userToFollow = await userManager.FindByIdAsync(request.UserIdToFollow) ?? throw new NotFoundException("User you trying to follow not found", "UserNotFound");
+        var userToFollow = await userManager.FindByIdAsync(request.UserIdToFollow) ?? throw new NotFoundException("المستخدم غير موجود", "UserNotFound");
 
         if (currentUser.Id == userToFollow.Id)
         {
@@ -29,7 +29,7 @@ public class FollowUserCommandHandler(
             {
                 Success = false,
                 Code = "CannotFollowSelf",
-                Message = "You cannot follow yourself",
+                Message = "لا يمكنك متابعة نفسك",
             };
         }
         // Blocking removed any follow between the two, and neither can follow the other while it lasts.
@@ -51,7 +51,7 @@ public class FollowUserCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyFollowing",
-                Message = "You already following this user",
+                Message = "أنت تتابع هذا المستخدم بالفعل",
             };
         }
 
@@ -64,7 +64,7 @@ public class FollowUserCommandHandler(
             
         }
 
-        var message = result ? $"Successfully followed {userToFollow.DisplayName}" : "Failed to follow user";
+        var message = result ? $"أنت تتابع {userToFollow.DisplayName} الآن" : "تعذّرت المتابعة. حاول مرة أخرى.";
         return new OperationResult
         {
             Success = result,

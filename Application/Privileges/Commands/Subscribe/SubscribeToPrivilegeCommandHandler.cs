@@ -17,7 +17,7 @@ public class SubscribeToPrivilegeCommandHandler(
         logger.LogInformation("User subscribing to privilege for novel {NovelId}", request.NovelId);
         
         var currentUser = userContext.GetCurrentUser() 
-            ?? throw new ForbidException("User not signed in", "NotSignedIn");
+            ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         var result = await privilegeService.SubscribeToPrivilegeAsync(
             request.NovelId, 

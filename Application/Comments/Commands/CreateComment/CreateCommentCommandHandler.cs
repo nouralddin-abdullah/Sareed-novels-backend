@@ -27,7 +27,7 @@ public class CreateCommentCommandHandler(
 {
     public async Task<CreateCommentResult> Handle(CreateCommentCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         Guid? chapterId = null;
         Guid? postId = null;
@@ -35,20 +35,20 @@ public class CreateCommentCommandHandler(
         if (request.ParagraphId.HasValue)
         {
             logger.LogInformation("Creating comment for paragraph {ParagraphId}", request.ParagraphId);
-            var paragraph = await paragraphsRepository.GetParagraphById(request.ParagraphId.Value) ?? throw new NotFoundException("Paragraph not found", "ParagraphNotFound");
+            var paragraph = await paragraphsRepository.GetParagraphById(request.ParagraphId.Value) ?? throw new NotFoundException("الفقرة غير موجودة، ربما عدّلها الكاتب. أعد فتح الفصل.", "ParagraphNotFound");
             chapterId = paragraph.ChapterId;
         }
         else if (request.ChapterId.HasValue)
         {
             logger.LogInformation("Creating comment for chapter {ChapterId}", request.ChapterId);
-            var chapter = await chaptersRepository.GetChapterById(request.ChapterId.Value) ?? throw new NotFoundException("Chapter not found", "ChapterNotFound");
+            var chapter = await chaptersRepository.GetChapterById(request.ChapterId.Value) ?? throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
             chapterId = chapter.Id;
         }
         else if (request.PostId.HasValue)
         {
             logger.LogInformation("Creating comment for post {PostId}", request.PostId);
             // The query filter hides deleted posts, so they are "not found" too.
-            var post = await postsRepository.GetPostById(request.PostId.Value) ?? throw new NotFoundException("Post not found", "PostNotFound");
+            var post = await postsRepository.GetPostById(request.PostId.Value) ?? throw new NotFoundException("هذا المنشور لم يعد موجودًا", "PostNotFound");
             postId = post.Id;
 
             // A post's author who blocked someone gets no comments (or replies) from them on it.
@@ -69,7 +69,7 @@ public class CreateCommentCommandHandler(
         
         if (request.ParentCommentId.HasValue)
         {
-            var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId.Value) ?? throw new NotFoundException("Parent comment not found!", "ParentCommentNotFound");
+            var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId.Value) ?? throw new NotFoundException("التعليق الذي تردّ عليه لم يعد موجودًا", "ParentCommentNotFound");
 
             // Nor replies to their comments.
             if (parentComment.UserId != currentUser.Id && await blocksRepository.IsBlockedAsync(parentComment.UserId, currentUser.Id, cancellationToken))

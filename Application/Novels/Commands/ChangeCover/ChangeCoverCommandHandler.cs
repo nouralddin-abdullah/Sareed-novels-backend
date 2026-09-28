@@ -12,11 +12,11 @@ namespace Application.Novels.Commands.ChangeCover
     {
         public async Task<ChangeCoverResult> Handle(ChangerCoverCommand request, CancellationToken cancellationToken)
         {
-            var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
-            var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("Novel was not found", "NovelNotFound");
+            var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
+            var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
             if (novel.AuthorId != currentUser.Id)
             {
-                throw new ForbidException("Forbidden", "NotOwner");
+                throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
             }
             logger.LogInformation("Changing the cover for {NovelId}", novel.Id);
 

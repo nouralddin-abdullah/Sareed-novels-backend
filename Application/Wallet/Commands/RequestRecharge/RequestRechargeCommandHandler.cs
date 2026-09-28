@@ -19,7 +19,7 @@ public class RequestRechargeCommandHandler(
 {
     public async Task<OperationResult> Handle(RequestRechargeCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         // Validate minimum points
         if (request.PointsRequested < PointsConstants.MinimumRecharge)

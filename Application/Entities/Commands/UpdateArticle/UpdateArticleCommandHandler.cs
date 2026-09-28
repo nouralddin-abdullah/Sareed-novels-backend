@@ -15,7 +15,7 @@ public class UpdateArticleCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateArticleCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var article = await entityRepository.GetArticleByIdAsync(request.ArticleId);
         if (article == null)

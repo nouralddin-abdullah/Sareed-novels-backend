@@ -16,7 +16,7 @@ public class DeleteRelationshipCommandHandler(
 {
     public async Task<OperationResult> Handle(DeleteRelationshipCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var relationship = await entityRepository.GetRelationshipByIdAsync(request.RelationshipId);
         if (relationship == null)

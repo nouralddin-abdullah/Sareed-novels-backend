@@ -19,7 +19,7 @@ public class CreateReadingListCommandHandler(
 {
     public async Task<CreateReadingListResult> Handle(CreateReadingListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("Creating new reading list for {user}: ", currentUser.UserName);
 
         if (await readingListsRepository.IsNameTakenByUserAsync(currentUser.Id, request.Name))

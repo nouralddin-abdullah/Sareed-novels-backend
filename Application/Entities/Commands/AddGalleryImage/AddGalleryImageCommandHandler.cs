@@ -17,7 +17,7 @@ public class AddGalleryImageCommandHandler(
 {
     public async Task<OperationResult> Handle(AddGalleryImageCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var entity = await entityRepository.GetEntityByIdAsync(request.EntityId);
         if (entity == null)

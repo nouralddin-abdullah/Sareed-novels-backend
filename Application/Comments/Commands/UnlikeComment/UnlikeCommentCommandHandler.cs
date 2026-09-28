@@ -32,7 +32,7 @@ public class UnlikeCommentCommandHandler : IRequestHandler<UnlikeCommentCommand,
         _logger.LogInformation("Unliking comment {CommentId}", request.CommentId);
 
         var currentUser = _userContext.GetCurrentUser()
-            ?? throw new ForbidException("User not signed in", "NotSignedIn");
+            ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var result = await _commentLikesRepository.UnLikeComment(currentUser.Id, request.CommentId);
         if (!result)

@@ -1,4 +1,5 @@
 ﻿using Application.Services;
+using Application.Common;
 using Application.Users.Commands.FollowUser;
 using AutoMapper;
 using Domain.Entities;
@@ -18,9 +19,9 @@ public class UpdateMeCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateMeCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("The user is not authorized", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("Updating data for user {username}", currentUser.UserName);
-        var user = await userManager.FindByIdAsync(currentUser.Id) ?? throw new NotFoundException("This user was not found", "UserNotFound");
+        var user = await userManager.FindByIdAsync(currentUser.Id) ?? throw new NotFoundException("المستخدم غير موجود", "UserNotFound");
 
         //if username is provided and not null test if it was taken before? or available
         if (!string.IsNullOrEmpty(request.UserName) && request.UserName != user.UserName)
@@ -32,7 +33,7 @@ public class UpdateMeCommandHandler(
                 {
                     Success = false,
                     Code = "UserNameTaken",
-                    Message = "Username is already taken"
+                    Message = "اسم المستخدم مستخدم بالفعل، اختر اسمًا آخر"
                 };
             }
         }
@@ -58,7 +59,7 @@ public class UpdateMeCommandHandler(
                 {
                     Success = false,
                     Code = "UploadFailed",
-                    Message = "Failed to upload profile photo"
+                    Message = "تعذّر رفع الصورة الشخصية. حاول مرة أخرى."
                 };
             }
         }
@@ -82,7 +83,7 @@ public class UpdateMeCommandHandler(
                 {
                     Success = false,
                     Code = "UploadFailed",
-                    Message = "Failed to upload profile banner"
+                    Message = "تعذّر رفع صورة الغلاف. حاول مرة أخرى."
                 };
             }
         }
@@ -112,14 +113,14 @@ public class UpdateMeCommandHandler(
             {
                 Success = false,
                 Code = "OperationFailed",
-                Message = $"Failed to update user: {errors}"
+                Message = ArabicText.Sentences(["تعذّر تحديث الملف الشخصي", .. updatedResult.Errors.Select(e => e.Description)])
             };
         }
 
         return new OperationResult
         {
             Success = true,
-            Message = "Profile updated successfully"
+            Message = "تم تحديث الملف الشخصي"
         };
     }
 

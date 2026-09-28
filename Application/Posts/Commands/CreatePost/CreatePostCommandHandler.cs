@@ -19,7 +19,7 @@ public class CreatePostCommandHandler(
 {
     public async Task<CreatePostResult> Handle(CreatePostCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         if (request.NovelId.HasValue)
         {

@@ -39,6 +39,6 @@ public class ForgotPasswordCommandHandler(ILogger<ForgotPasswordCommandHandler> 
     private static OperationResult Sent => new()
     {
         Success = true,
-        Message = "If an account uses this email, a password reset link has been sent to it."
+        Message = "إن كان هناك حساب يستخدم هذا البريد فستصله رسالة فيها رابط لتعيين كلمة مرور جديدة."
     };
 }

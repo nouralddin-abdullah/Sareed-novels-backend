@@ -19,7 +19,7 @@ public class RequestWithdrawalCommandHandler(
 {
     public async Task<OperationResult> Handle(RequestWithdrawalCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         // Validate minimum points
         if (request.PointsRequested < PointsConstants.MinimumWithdrawal)

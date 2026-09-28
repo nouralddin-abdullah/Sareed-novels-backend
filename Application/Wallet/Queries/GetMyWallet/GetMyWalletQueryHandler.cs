@@ -14,7 +14,7 @@ public class GetMyWalletQueryHandler(
 {
     public async Task<WalletDto> Handle(GetMyWalletQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         var wallet = await walletService.GetOrCreateWalletAsync(currentUser.Id);
         

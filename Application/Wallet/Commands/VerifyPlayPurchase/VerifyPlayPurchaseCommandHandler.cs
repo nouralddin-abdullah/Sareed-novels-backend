@@ -12,7 +12,7 @@ public class VerifyPlayPurchaseCommandHandler(
 {
     public Task<PlayPurchaseResult> Handle(VerifyPlayPurchaseCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         return playBilling.VerifyPurchaseAsync(currentUser.Id, request.ProductId, request.PurchaseToken, request.OrderId, cancellationToken);
     }

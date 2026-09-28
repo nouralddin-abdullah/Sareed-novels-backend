@@ -11,9 +11,9 @@ public class ChangePasswordCommandHandler(ILogger<ChangePasswordCommandHandler> 
 {
     public async Task<IdentityResult> Handle(ChangePasswordCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("The user is not authorized", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("Updating password for user {UserId}", currentUser.Id);
-        var user = await userManager.FindByIdAsync(currentUser.Id) ?? throw new NotFoundException("This user was not found", "UserNotFound");
+        var user = await userManager.FindByIdAsync(currentUser.Id) ?? throw new NotFoundException("المستخدم غير موجود", "UserNotFound");
         var result = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
         return result;
     }

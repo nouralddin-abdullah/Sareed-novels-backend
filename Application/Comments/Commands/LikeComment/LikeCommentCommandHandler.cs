@@ -36,10 +36,10 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
         _logger.LogInformation("Liking comment {CommentId}", request.CommentId);
 
         var currentUser = _userContext.GetCurrentUser()
-            ?? throw new ForbidException("User not signed in", "NotSignedIn");
+            ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var comment = await _commentsRepository.GetCommentById(request.CommentId)
-            ?? throw new NotFoundException("Comment not found", "CommentNotFound");
+            ?? throw new NotFoundException("هذا التعليق لم يعد موجودًا", "CommentNotFound");
 
         if (comment.UserId == currentUser.Id)
         {

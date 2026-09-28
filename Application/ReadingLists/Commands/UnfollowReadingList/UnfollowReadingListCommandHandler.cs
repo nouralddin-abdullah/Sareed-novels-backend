@@ -15,11 +15,11 @@ public class UnfollowReadingListCommandHandler(
 {
     public async Task<OperationResult> Handle(UnfollowReadingListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("User {UserId} trying to unfollow reading list {ListId}", currentUser.Id, request.ReadingListId);
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
+            ?? throw new NotFoundException("القائمة غير موجودة", "ReadingListNotFound");
 
         if (readingList.UserId == currentUser.Id)
         {

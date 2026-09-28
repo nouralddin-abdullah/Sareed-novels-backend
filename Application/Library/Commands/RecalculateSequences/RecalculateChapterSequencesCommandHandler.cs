@@ -16,14 +16,14 @@ public class RecalculateChapterSequencesCommandHandler(
 {
     public async Task<OperationResult> Handle(RecalculateChapterSequencesCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         var novel = await novelsRepository.GetOne(request.NovelId) 
-            ?? throw new NotFoundException("Novel not found", "NovelNotFound");
+            ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
         
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("Only the author can recalculate chapter sequences", "NotOwner");
+            throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         }
         
         logger.LogInformation(

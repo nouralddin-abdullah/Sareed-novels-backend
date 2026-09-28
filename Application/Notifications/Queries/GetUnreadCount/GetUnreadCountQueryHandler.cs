@@ -13,7 +13,7 @@ public class GetUnreadCountQueryHandler(
 {
     public async Task<int> Handle(GetUnreadCountQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         logger.LogDebug("Getting unread notifications count for user {UserId}", currentUser.Id);
 

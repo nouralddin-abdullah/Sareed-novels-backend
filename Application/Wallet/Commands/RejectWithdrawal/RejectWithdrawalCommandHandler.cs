@@ -15,7 +15,7 @@ public class RejectWithdrawalCommandHandler(
 {
     public async Task<OperationResult> Handle(RejectWithdrawalCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var withdrawalRequest = await withdrawalRepository.GetByIdAsync(request.RequestId);
         if (withdrawalRequest == null)

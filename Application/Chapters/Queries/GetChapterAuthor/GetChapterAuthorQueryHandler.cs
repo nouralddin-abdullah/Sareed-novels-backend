@@ -11,14 +11,14 @@ public class GetChapterAuthorQueryHandler(IChaptersRepository chaptersRepository
 {
     public async Task<ChapterSingleAuthorDTO> Handle(GetChapterAuthorQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
-        if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel", "NotOwner");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
+        if (novel.AuthorId != currentUser.Id) throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         
-        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("Chapter not found", "ChapterNotFound");
+        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
 
         // Only chapters of the caller's own novel; otherwise any author could read any draft.
-        if (chapter.NovelId != novel.Id) throw new NotFoundException("Chapter not found", "ChapterNotFound");
+        if (chapter.NovelId != novel.Id) throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
         
         // Load paragraphs from database
         var paragraphs = await paragraphsRepository.GetChapterParagraphs(chapter.Id);

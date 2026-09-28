@@ -26,7 +26,7 @@ public class GetUserPublicReadingListsQueryHandler(
         // Old profile links: a name the member used before still finds them (a live user with it always wins).
         var user = await userManager.FindByNameAsync(request.UserName)
             ?? await usersRepository.GetByPreviousUserNameAsync(request.UserName, cancellationToken)
-            ?? throw new NotFoundException("User not found", "UserNotFound");
+            ?? throw new NotFoundException("المستخدم غير موجود", "UserNotFound");
 
         // As the profile: a user who blocked the viewer isn't found; the lists of a user the viewer blocked are left out.
         var currentUser = userContext.GetCurrentUser();
@@ -35,7 +35,7 @@ public class GetUserPublicReadingListsQueryHandler(
             var relation = await blocksRepository.GetRelationAsync(currentUser.Id, user.Id, cancellationToken);
             if (relation.OtherBlockedViewer)
             {
-                throw new NotFoundException("User not found", "UserNotFound");
+                throw new NotFoundException("المستخدم غير موجود", "UserNotFound");
             }
             if (relation.ViewerBlockedOther)
             {

@@ -17,14 +17,14 @@ public class AddNovelToListCommandHandler(
 {
     public async Task<OperationResult> Handle(AddNovelToListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
+            ?? throw new NotFoundException("القائمة غير موجودة", "ReadingListNotFound");
 
         if (readingList.UserId != currentUser.Id)
         {
-            throw new ForbidException("You don't own this reading list", "NotOwner");
+            throw new ForbidException("هذا الإجراء متاح لصاحب القائمة فقط", "NotOwner");
         }
 
         var refusal = await NovelForReadingList.WhyNotAddable(novelsRepository, request.NovelId);

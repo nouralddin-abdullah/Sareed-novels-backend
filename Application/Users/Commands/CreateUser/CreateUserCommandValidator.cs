@@ -8,9 +8,10 @@ public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
     public CreateUserCommandValidator()
     {
         RuleFor(dto => dto.UserName)
-            .Length(3, 20)
             .NotEmpty()
-            .WithMessage("A user should have valid user name");
+            .WithMessage("اختر اسم مستخدم")
+            .Length(3, 20)
+            .WithMessage("يجب أن يكون اسم المستخدم من 3 إلى 20 حرفًا");
 
         RuleFor(dto => dto.UserName)
             .Must(UserNameRules.HasNoAtSign)
@@ -22,21 +23,22 @@ public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
 
         RuleFor(dto => dto.Email)
             .EmailAddress()
-            .WithMessage("A user should have a valid email");
+            .WithMessage("البريد الإلكتروني غير صالح");
 
         RuleFor(dto => dto.DisplayName)
             .NotEmpty()
+            .WithMessage("اكتب الاسم الذي سيظهر للقرّاء")
             .Length(3, 20)
-            .WithMessage("A user should have a valid display name - minimum length is 3 and maximum is 20");
+            .WithMessage("يجب أن يكون الاسم المعروض من 3 إلى 20 حرفًا");
 
         RuleFor(dto => dto.Password)
             .MinimumLength(6)
-            .WithMessage("A user should have password with minimum 8 characters");
+            .WithMessage("يجب أن تحتوي كلمة المرور على 6 أحرف على الأقل");
         
         RuleFor(dto => dto.ProfilePhoto)
             .Must(ImageValidationUtils.IsValidImageFile)
             .When(dto => dto.ProfilePhoto!= null)
-            .WithMessage("Profile photo must be a valid image file (JPEG, PNG, WebP) and less than 5MB");
+            .WithMessage("الصورة الشخصية يجب أن تكون بصيغة JPEG أو PNG أو WebP، وحجمها 5 ميغابايت أو أقل");
 
     }
 

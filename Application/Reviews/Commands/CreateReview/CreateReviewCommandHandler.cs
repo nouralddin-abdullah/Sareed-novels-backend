@@ -24,8 +24,8 @@ public class CreateReviewCommandHandler(
     public async Task<CreateReviewResult> Handle(CreateReviewCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Creating new review {@review}", request);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
         if (novel.AuthorId == currentUser.Id)
         {
             return new CreateReviewResult

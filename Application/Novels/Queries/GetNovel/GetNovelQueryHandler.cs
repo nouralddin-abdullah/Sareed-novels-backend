@@ -29,7 +29,7 @@ public class GetNovelQueryHandler(
         var isAuthor = novel != null && userContext.GetCurrentUser()?.Id == novel.AuthorId;
         if (novel == null || (novel.IsDraft && !isAuthor))
         {
-            throw new NotFoundException("This novel was not found", "NovelNotFound");
+            throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
         }
 
         var novelDto = mapper.Map<NovelsDTO>(novel);

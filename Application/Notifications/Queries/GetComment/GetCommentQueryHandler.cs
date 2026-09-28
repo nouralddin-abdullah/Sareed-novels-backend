@@ -29,11 +29,11 @@ public class GetCommentQueryHandler(
         logger.LogInformation("Getting comment {CommentId} with context", request.CommentId);
 
         var comment = await commentsRepository.GetCommentById(request.CommentId)
-            ?? throw new NotFoundException("Comment not found", "CommentNotFound");
+            ?? throw new NotFoundException("هذا التعليق لم يعد موجودًا", "CommentNotFound");
 
         if (comment.IsDeleted)
         {
-            throw new NotFoundException("Comment not found", "CommentNotFound");
+            throw new NotFoundException("هذا التعليق لم يعد موجودًا", "CommentNotFound");
         }
 
         var commentDto = mapper.Map<CommentDto>(comment);
@@ -55,7 +55,7 @@ public class GetCommentQueryHandler(
         if (comment.ParagraphId.HasValue)
         {
             var paragraph = await paragraphsRepository.GetParagraphById(comment.ParagraphId.Value)
-                ?? throw new NotFoundException("Paragraph not found", "ParagraphNotFound");
+                ?? throw new NotFoundException("الفقرة غير موجودة، ربما عدّلها الكاتب. أعد فتح الفصل.", "ParagraphNotFound");
 
             var (chapter, novel) = await SetChapter(context, paragraph.ChapterId);
             context.ParagraphId = paragraph.Id;
@@ -73,7 +73,7 @@ public class GetCommentQueryHandler(
         else if (comment.PostId.HasValue)
         {
             var post = await postsRepository.GetPostById(comment.PostId.Value)
-                ?? throw new NotFoundException("Post not found", "PostNotFound");
+                ?? throw new NotFoundException("هذا المنشور لم يعد موجودًا", "PostNotFound");
 
             context.PostId = post.Id;
             context.TotalComments = post.CommentsCount;
@@ -126,10 +126,10 @@ public class GetCommentQueryHandler(
     private async Task<(Chapter Chapter, Novel Novel)> SetChapter(CommentLocationDto context, Guid chapterId)
     {
         var chapter = await chaptersRepository.GetChapterById(chapterId)
-            ?? throw new NotFoundException("Chapter not found", "ChapterNotFound");
+            ?? throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
 
         var novel = await novelsRepository.GetOne(chapter.NovelId)
-            ?? throw new NotFoundException("Novel not found", "NovelNotFound");
+            ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
 
         context.ChapterId = chapter.Id;
         context.ChapterTitle = chapter.Title;

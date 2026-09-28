@@ -16,10 +16,10 @@ public class TrackReadingProgressCommandHandler(
 {
     public async Task<OperationResult> Handle(TrackReadingProgressCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var chapter = await chaptersRepository.GetChapterById(request.ChapterId)
-            ?? throw new NotFoundException("Chapter not found", "ChapterNotFound");
+            ?? throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
 
         if (chapter.Status != "Published")
         {
