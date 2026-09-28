@@ -74,7 +74,10 @@ public class UpdateChapterCommandHandler(
             
             await sequenceService.RecalculateSequencesForNovelAsync(request.NovelId);
             await sequenceService.UpdateReadingProgressForNovelAsync(request.NovelId);
-            
+
+            // The novel's ChapterCount counts published chapters, so publishing or unpublishing one changes it.
+            await novelsRepository.RefreshChapterCountAsync(request.NovelId);
+
             // Trigger privilege update if status changed to Published
             if (request.Status == "Published" && oldStatus != "Published")
             {

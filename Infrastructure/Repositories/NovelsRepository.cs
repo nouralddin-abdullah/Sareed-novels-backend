@@ -1,4 +1,5 @@
-﻿using Domain.Entities;
+﻿using Domain.Constants;
+using Domain.Entities;
 using Domain.Repositories;
 using Domain.Seo;
 using Infrastructure.Persistence;
@@ -123,16 +124,18 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
 
     public async Task RefreshChapterCountAsync(Guid novelId, DateTime? lastUpdatedAt = null)
     {
+        // Published chapters only, as the chapter list, search and recommendations count them (drafts are the author's).
         var novel = dbContext.Novels.Where(n => n.Id == novelId);
         if (lastUpdatedAt is { } updatedAt)
         {
             await novel.ExecuteUpdateAsync(s => s
-                .SetProperty(n => n.ChapterCount, n => n.Chapters.Count())
+                .SetProperty(n => n.ChapterCount, n => n.Chapters.Count(c => c.Status == ChapterStatuses.Published))
                 .SetProperty(n => n.LastUpdatedAt, updatedAt));
         }
         else
         {
-            await novel.ExecuteUpdateAsync(s => s.SetProperty(n => n.ChapterCount, n => n.Chapters.Count()));
+            await novel.ExecuteUpdateAsync(s => s
+                .SetProperty(n => n.ChapterCount, n => n.Chapters.Count(c => c.Status == ChapterStatuses.Published)));
         }
 
         // A tracked copy would otherwise write its stale count back on the next SaveChanges.

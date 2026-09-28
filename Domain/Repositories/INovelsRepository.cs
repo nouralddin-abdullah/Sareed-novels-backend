@@ -18,7 +18,10 @@ public interface INovelsRepository
     /// there is no such novel or it was already deleted.
     /// </summary>
     Task<bool> SoftDeleteAsync(Guid novelId);
-    /// <summary>Sets ChapterCount to the novel's current number of chapters in one SQL statement (no read-modify-write).</summary>
+    /// <summary>
+    /// Sets ChapterCount to the novel's current number of published chapters (what readers can open; drafts don't count)
+    /// in one SQL statement (no read-modify-write).
+    /// </summary>
     Task RefreshChapterCountAsync(Guid novelId, DateTime? lastUpdatedAt = null);
     Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber);
     Task<(IEnumerable<Novel?>, int)> GetWorks(string userId, int PageNumber, int PageSize);
