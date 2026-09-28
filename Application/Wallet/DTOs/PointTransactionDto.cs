@@ -27,4 +27,10 @@ public class PointTransactionDto
     /// <summary>The gift of a GiftSent/GiftReceived entry and how many; null otherwise and before #17.</summary>
     public Guid? GiftId { get; set; }
     public int? GiftCount { get; set; }
+
+    /// <summary>
+    /// The Arabic name of <see cref="GiftId"/>'s gift (#25), retired gifts included (the public catalog lists only
+    /// active ones, so an entry about a retired gift couldn't be named); null when there is no GiftId.
+    /// </summary>
+    public string? GiftNameAr { get; set; }
 }

@@ -93,12 +93,46 @@ public class GiftWalletHttpTests(SardApiFactory api)
         if (giftId is null)
         {
             Assert.Equal(JsonValueKind.Null, entry.GetProperty("giftId").ValueKind);
+            Assert.Equal(JsonValueKind.Null, entry.GetProperty("giftNameAr").ValueKind);
             Assert.Equal(JsonValueKind.Null, entry.GetProperty("giftCount").ValueKind);
         }
         else
         {
             Assert.Equal(giftId, entry.GetProperty("giftId").GetGuid());
+            Assert.False(string.IsNullOrWhiteSpace(entry.GetProperty("giftNameAr").GetString()));
             Assert.Equal(count, entry.GetProperty("giftCount").GetInt32());
+        }
+    }
+
+    [Fact]
+    public async Task Wallet_entries_name_their_gift_in_arabic_even_once_it_is_retired()
+    {
+        // The public catalog lists only active gifts, so the app couldn't name an entry about a retired one (#25).
+        var reader = await api.SignUp();
+        var author = await api.SignUp();
+        var novel = await api.AddNovel(author);
+        var lantern = new Gift { Id = Guid.NewGuid(), Name = "Lantern", NameAr = "فانوس", ImageUrl = "https://files.test/lantern.png", Cost = 10 };
+        await using (var db = api.Db())
+        {
+            db.Gifts.Add(lantern);
+            await db.SaveChangesAsync();
+        }
+        await Fund(reader, 100);
+        (await SendGift(reader, novel.Id, 2, lantern.Id)).EnsureSuccessStatusCode();
+
+        await using (var db = api.Db())
+        {
+            await db.Gifts.Where(g => g.Id == lantern.Id).ExecuteUpdateAsync(s => s.SetProperty(g => g.IsActive, false));
+        }
+        var catalog = await (await api.Get("/api/gift?pageSize=100")).OkJson();
+        Assert.DoesNotContain(catalog.GetProperty("items").EnumerateArray(), g => g.GetProperty("id").GetGuid() == lantern.Id);
+
+        foreach (var user in new[] { reader, author })
+        {
+            var entry = Assert.Single(await Transactions(user));
+            Assert.Equal(lantern.Id, entry.GetProperty("giftId").GetGuid());
+            Assert.Equal("فانوس", entry.GetProperty("giftNameAr").GetString());
+            Assert.Equal(2, entry.GetProperty("giftCount").GetInt32());
         }
     }
 
