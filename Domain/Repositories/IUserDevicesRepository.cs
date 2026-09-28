@@ -12,4 +12,10 @@ public interface IUserDevicesRepository
 
     /// <summary>Removes the token if it belongs to <paramref name="userId"/>; does nothing otherwise.</summary>
     Task Remove(string userId, string token);
+
+    /// <summary>
+    /// Removes the token whoever registered it: for a phone that signed out without a valid session (an expired or
+    /// revoked token, or offline). Knowing the token is the proof; it only stops pushes to that phone.
+    /// </summary>
+    Task RemoveToken(string token);
 }
