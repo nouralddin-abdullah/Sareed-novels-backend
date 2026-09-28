@@ -14,4 +14,8 @@ public static class TransactionType
     
     // Refunds
     public const string Refund = "Refund"; // General refund
+
+    // Google Play point packs
+    public const string PlayPurchase = "PlayPurchase"; // Points bought in the Android app through Google Play Billing
+    public const string PlayRefund = "PlayRefund"; // Google voided a Play purchase (refund, chargeback): its points taken back, even below zero
 }

@@ -247,6 +247,14 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         return result > 0;
     }
 
+    public async Task<bool> SoftDeleteAsync(Guid novelId) =>
+        // The query filter leaves out a novel that is already deleted.
+        await dbContext.Novels
+            .Where(n => n.Id == novelId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(n => n.IsDeleted, true)
+                .SetProperty(n => n.IsEligibleForRanking, false)) > 0;
+
     public async Task<int> GetPublishedChaptersCountAsync(Guid novelId)
     {
         return await dbContext.Chapters

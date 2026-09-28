@@ -19,4 +19,10 @@ public interface IUserWalletRepository
     /// so concurrent debits can't overdraw). Returns the new balance, or null if the balance was too low.
     /// Call inside a transaction so the returned balance is the one this change produced.</summary>
     Task<decimal?> TryDebitAsync(string userId, decimal amount);
+
+    /// <summary>Atomically subtracts <paramref name="amount"/> even if that takes the balance below zero, and returns the
+    /// new balance. Only for taking back points that were never paid for in the end (a voided Google Play purchase);
+    /// spending goes through <see cref="TryDebitAsync"/>, which a negative balance always refuses. The wallet must exist.
+    /// Call inside a transaction so the returned balance is the one this change produced.</summary>
+    Task<decimal> DebitAllowingNegativeAsync(string userId, decimal amount);
 }

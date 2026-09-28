@@ -1,5 +1,6 @@
 using Application.Common;
 using Application.ReadingLists.DTOs;
+using Application.Users;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
@@ -13,7 +14,9 @@ public class GetUserPublicReadingListsQueryHandler(
     ILogger<GetUserPublicReadingListsQueryHandler> logger,
     IReadingListsRepository readingListsRepository,
     UserManager<User> userManager,
-    IUsersRepository usersRepository) : IRequestHandler<GetUserPublicReadingListsQuery, PagedResult<ReadingListPreviewDTO>>
+    IUsersRepository usersRepository,
+    IUserBlocksRepository blocksRepository,
+    IUserContext userContext) : IRequestHandler<GetUserPublicReadingListsQuery, PagedResult<ReadingListPreviewDTO>>
 {
     public async Task<PagedResult<ReadingListPreviewDTO>> Handle(GetUserPublicReadingListsQuery request, CancellationToken cancellationToken)
     {
@@ -24,6 +27,21 @@ public class GetUserPublicReadingListsQueryHandler(
         var user = await userManager.FindByNameAsync(request.UserName)
             ?? await usersRepository.GetByPreviousUserNameAsync(request.UserName, cancellationToken)
             ?? throw new NotFoundException("User not found");
+
+        // As the profile: a user who blocked the viewer isn't found; the lists of a user the viewer blocked are left out.
+        var currentUser = userContext.GetCurrentUser();
+        if (currentUser != null && currentUser.Id != user.Id)
+        {
+            var relation = await blocksRepository.GetRelationAsync(currentUser.Id, user.Id, cancellationToken);
+            if (relation.OtherBlockedViewer)
+            {
+                throw new NotFoundException("User not found");
+            }
+            if (relation.ViewerBlockedOther)
+            {
+                return new PagedResult<ReadingListPreviewDTO>([], 0, pageSize, pageNumber);
+            }
+        }
 
         var (lists, totalCount) = await readingListsRepository.GetUserPublicReadingListsWithPreviewAsync(
             user.Id,

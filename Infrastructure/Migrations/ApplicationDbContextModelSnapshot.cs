@@ -1297,6 +1297,104 @@ namespace Infrastructure.Migrations
                     b.ToTable("NovelViews");
                 });
 
+            modelBuilder.Entity("Domain.Entities.PlayPurchase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("ConsumeAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsTestPurchase")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LastConsumeError")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("NextConsumeAttemptAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("OrderId")
+                        .HasMaxLength(100)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<int>("Points")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProductId")
+                        .HasMaxLength(150)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(150)");
+
+                    b.Property<string>("PurchaseToken")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<DateTime?>("PurchasedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("Credited");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime?>("VoidedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("VoidedReason")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("VoidedSource")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NextConsumeAttemptAt")
+                        .HasDatabaseName("IX_PlayPurchases_NextConsumeAttemptAt");
+
+                    b.HasIndex("PurchaseToken")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PlayPurchases_PurchaseToken_Unique");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("PlayPurchases");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PlaySyncCursor", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime>("SyncedUntil")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Name");
+
+                    b.ToTable("PlaySyncCursors");
+                });
+
             modelBuilder.Entity("Domain.Entities.PointTransaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1691,6 +1789,79 @@ namespace Infrastructure.Migrations
                     b.ToTable("RechargeRequests");
                 });
 
+            modelBuilder.Entity("Domain.Entities.Report", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Details")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("ReporterId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Resolution")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ResolvedById")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TargetExcerpt")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TargetOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TargetOwnerId");
+
+                    b.HasIndex("ReporterId", "CreatedAt");
+
+                    b.HasIndex("Status", "CreatedAt");
+
+                    b.HasIndex("ReporterId", "TargetType", "TargetId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Reports_Reporter_Target_Open")
+                        .HasFilter("[Status] = N'Open'");
+
+                    b.HasIndex("TargetType", "TargetId", "Status");
+
+                    b.ToTable("Reports");
+                });
+
             modelBuilder.Entity("Domain.Entities.Review", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1924,6 +2095,9 @@ namespace Infrastructure.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime?>("SuspendedUntil")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime?>("TokensValidAfter")
                         .HasColumnType("datetime2");
 
@@ -1953,6 +2127,24 @@ namespace Infrastructure.Migrations
                     b.HasIndex("SearchName");
 
                     b.ToTable("AspNetUsers", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.UserBlock", b =>
+                {
+                    b.Property<string>("BlockerId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("BlockedId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("BlockerId", "BlockedId");
+
+                    b.HasIndex("BlockedId");
+
+                    b.ToTable("UserBlocks");
                 });
 
             modelBuilder.Entity("Domain.Entities.UserDevice", b =>
@@ -2711,6 +2903,16 @@ namespace Infrastructure.Migrations
                     b.Navigation("Novel");
                 });
 
+            modelBuilder.Entity("Domain.Entities.PlayPurchase", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Domain.Entities.PointTransaction", b =>
                 {
                     b.HasOne("Domain.Entities.User", "User")
@@ -2855,6 +3057,15 @@ namespace Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Domain.Entities.Report", b =>
+                {
+                    b.HasOne("Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReporterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Domain.Entities.Review", b =>
                 {
                     b.HasOne("Domain.Entities.Novel", "ReviewedNovel")
@@ -2891,6 +3102,21 @@ namespace Infrastructure.Migrations
                     b.Navigation("Review");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.UserBlock", b =>
+                {
+                    b.HasOne("Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("BlockedId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("BlockerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Domain.Entities.UserDevice", b =>

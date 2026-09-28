@@ -11,7 +11,8 @@ public interface IReviewsRepository
     Task<bool> DeleteReview(Review review);
     /// <summary>Recomputes ReviewCount and the score averages of a novel from its reviews in one SQL statement.</summary>
     Task RefreshNovelReviewStats(Guid novelId);
-    Task<(IEnumerable<Review>, int)> GetNovelReviews(Guid novelId, int PageSize, int PageNumber, string sorting);
+    /// <summary>A page of the novel's reviews; reviews by users the viewer blocked are left out (and not counted).</summary>
+    Task<(IEnumerable<Review>, int)> GetNovelReviews(Guid novelId, int PageSize, int PageNumber, string sorting, string? viewerId = null);
     Task<Review?> GetReviewById(Guid reviewId);
     /// <summary>
     /// A review with its reviewer, read from the database as <see cref="GetNovelReviews"/> reads them (untracked), so a

@@ -18,6 +18,7 @@ using Microsoft.Extensions.Logging;
 using Infrastructure.BackgroundJobs;
 using Infrastructure.Services.Search;
 using Infrastructure.Services.Covers;
+using Infrastructure.PlayBilling;
 
 namespace Infrastructure.Extensions;
 
@@ -85,6 +86,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationService, NotificationService>();
         services.AddPushNotifications(configuration);
         services.AddScoped<ITransactionManager, TransactionManager>();
+
+        // Moderation: reports, blocks, suspensions.
+        services.AddScoped<IReportsRepository, ReportsRepository>();
+        services.AddScoped<IUserBlocksRepository, UserBlocksRepository>();
+        services.AddScoped<IAccountSuspensionService, AccountSuspensionService>();
         
         // Wallet System
         services.AddScoped<IUserWalletRepository, UserWalletRepository>();
@@ -93,6 +99,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPointTransactionRepository, PointTransactionRepository>();
         services.AddScoped<IPointCalculationService, PointCalculationService>();
         services.AddScoped<IWalletService, WalletService>();
+        services.AddPlayBilling(configuration); // point packs bought in the Android app (Infrastructure/PlayBilling)
         
         // Gift System
         services.AddScoped<IGiftRepository, GiftRepository>();

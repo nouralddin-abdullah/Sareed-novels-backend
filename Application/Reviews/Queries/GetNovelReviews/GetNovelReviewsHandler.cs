@@ -23,13 +23,15 @@ public class GetNovelReviewsHandler(
         var novel = await novelsRepository.GetOne(request.NovelId) 
             ?? throw new NotFoundException("This novel wasn't found");
         
+        // Reviews by users the viewer blocked are left out.
+        var currentUser = userContext.GetCurrentUser();
         var (reviewsRaw, totalCount) = await reviewsRepository.GetNovelReviews(
             novel.Id, 
             request.PageSize, 
             request.PageNumber, 
-            request.Sorting);
+            request.Sorting,
+            currentUser?.Id);
         
-        var currentUser = userContext.GetCurrentUser();
         var reviewsDto = await ReviewListDtos.Build(reviewsRaw, mapper, reviewLikesRepository, currentUser);
 
         // Get current user's review (if authenticated)

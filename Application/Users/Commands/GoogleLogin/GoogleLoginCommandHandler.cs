@@ -2,6 +2,7 @@
 using Application.Users.Commands.UserLogin;
 using Domain.Entities;
 using Domain.Exceptions;
+using Domain.Moderation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,6 +44,13 @@ namespace Application.Users.Commands.GoogleLogin
                 // Find or create user
                 var user = await userManager.FindByEmailAsync(payload.Email);
                 var passwordReset = false;
+
+                // A moderator suspended the account: no sign-in, and nothing about it changes.
+                if (user != null && Suspension.IsActive(user.SuspendedUntil, time.GetUtcNow().UtcDateTime))
+                {
+                    logger.LogInformation("Google sign-in refused: user {UserId} is suspended", user.Id);
+                    throw new AccountSuspendedException(user.SuspendedUntil!.Value);
+                }
 
                 if (user == null)
                 {

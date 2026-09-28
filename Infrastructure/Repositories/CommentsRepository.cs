@@ -38,10 +38,25 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
         return true;
     }
 
-    public async Task<(IEnumerable<Comments>, int)> GetChapterComments(Guid chapterId, int pageNumber, int pageSize, string sorting = "recent")
+    public async Task<bool> RemoveCommentAsync(Guid commentId)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        // A comment its author deleted (soft) goes too, with the replies still under it.
+        if (!await dbContext.Comments.IgnoreQueryFilters().AnyAsync(c => c.Id == commentId))
+        {
+            return false;
+        }
+
+        await SocialCounters.DeleteCommentTree(dbContext, commentId);
+        await transaction.CommitAsync();
+        return true;
+    }
+
+    public async Task<(IEnumerable<Comments>, int)> GetChapterComments(Guid chapterId, int pageNumber, int pageSize, string sorting = "recent", string? viewerId = null)
     {
         IQueryable<Comments> query = dbContext.Comments
             .Where(c => c.ChapterId == chapterId && c.ParentCommentId == null)
+            .VisibleTo(dbContext, viewerId)
             .Include(c => c.User);
         query = sorting.ToLower() switch
         {
@@ -73,15 +88,16 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
             .Include(c => c.User)
             .FirstOrDefaultAsync(c => c.Id == commentId);
 
-    public Task<int> CountCommentsAheadAsync(Comments comment)
+    public Task<int> CountCommentsAheadAsync(Comments comment, string? viewerId = null)
     {
         // The same filters as GetCommentReplies and the Get*Comments lists.
+        var comments = dbContext.Comments.VisibleTo(dbContext, viewerId);
         if (comment.ParentCommentId is { } parentId)
         {
-            return dbContext.Comments.CountAsync(c => c.ParentCommentId == parentId && c.CreatedAt < comment.CreatedAt);
+            return comments.CountAsync(c => c.ParentCommentId == parentId && c.CreatedAt < comment.CreatedAt);
         }
 
-        var newerTopLevel = dbContext.Comments.Where(c => c.ParentCommentId == null && c.CreatedAt > comment.CreatedAt);
+        var newerTopLevel = comments.Where(c => c.ParentCommentId == null && c.CreatedAt > comment.CreatedAt);
         if (comment.ParagraphId is { } paragraphId)
         {
             return newerTopLevel.CountAsync(c => c.ParagraphId == paragraphId);
@@ -102,10 +118,11 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
         return dbContext.Comments.CountAsync(c => c.ChapterId == chapterId && c.ParentCommentId == null);
     }
 
-    public async Task<(IEnumerable<Comments>, int)> GetCommentReplies(Guid parentCommentId, int pageNumber, int PageSize, string sorting = "recent")
+    public async Task<(IEnumerable<Comments>, int)> GetCommentReplies(Guid parentCommentId, int pageNumber, int PageSize, string sorting = "recent", string? viewerId = null)
     {
         IQueryable<Comments> query = dbContext.Comments
             .Where(c => c.ParentCommentId == parentCommentId)
+            .VisibleTo(dbContext, viewerId)
             .Include(c => c.User);
 
         query = sorting.ToLower() switch
@@ -126,7 +143,7 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
         return (replies, totalCount);
     }
 
-    public async Task<Dictionary<Guid, int>> GetRepliesCounts(IEnumerable<Guid> commentIds)
+    public async Task<Dictionary<Guid, int>> GetRepliesCounts(IEnumerable<Guid> commentIds, string? viewerId = null)
     {
         var ids = commentIds.ToList();
         if (ids.Count == 0)
@@ -136,15 +153,17 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
 
         return await dbContext.Comments
             .Where(c => c.ParentCommentId != null && ids.Contains(c.ParentCommentId.Value))
+            .VisibleTo(dbContext, viewerId)
             .GroupBy(c => c.ParentCommentId!.Value)
             .Select(g => new { ParentId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.ParentId, x => x.Count);
     }
 
-    public async Task<(IEnumerable<Comments>, int)> GetParagraphComments(Guid paragraphId, int pageNumber, int pageSize, string sorting = "recent")
+    public async Task<(IEnumerable<Comments>, int)> GetParagraphComments(Guid paragraphId, int pageNumber, int pageSize, string sorting = "recent", string? viewerId = null)
     {
         IQueryable<Comments> query = dbContext.Comments
             .Where(c => c.ParagraphId == paragraphId && c.ParentCommentId == null)
+            .VisibleTo(dbContext, viewerId)
             .Include(c => c.User);
 
         query = sorting.ToLower() switch
@@ -165,11 +184,12 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
         return (comments, totalCount);
     }
 
-    public async Task<(IEnumerable<Comments>, int)> GetPostComments(Guid postId, int pageNumber, int pageSize, string sorting = "recent")
+    public async Task<(IEnumerable<Comments>, int)> GetPostComments(Guid postId, int pageNumber, int pageSize, string sorting = "recent", string? viewerId = null)
     {
         IQueryable<Comments> query = dbContext.Comments
             .AsNoTracking()
             .Where(c => c.PostId == postId && c.ParentCommentId == null)
+            .VisibleTo(dbContext, viewerId)
             .Include(c => c.User);
 
         query = sorting.ToLower() switch

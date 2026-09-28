@@ -115,16 +115,6 @@ public sealed class FakeFcmTokens : IFcmAccessTokenSource
         Failure is null ? Task.FromResult(Token) : Task.FromException<string>(Failure);
 }
 
-/// <summary>A clock tests move forward.</summary>
-public sealed class MutableClock(DateTime utcNow) : TimeProvider
-{
-    public DateTime UtcNow { get; set; } = utcNow;
-
-    public void Advance(TimeSpan by) => UtcNow += by;
-
-    public override DateTimeOffset GetUtcNow() => new(DateTime.SpecifyKind(UtcNow, DateTimeKind.Utc));
-}
-
 internal static class PushTesting
 {
     public static FcmPushService Service(FakeFcm fcm, FakeFcmTokens? tokens = null) =>

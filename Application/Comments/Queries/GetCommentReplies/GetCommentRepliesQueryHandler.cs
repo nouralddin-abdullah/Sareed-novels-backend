@@ -16,9 +16,10 @@ public class GetCommentRepliesQueryHandler(ILogger<GetCommentRepliesQueryHandler
         logger.LogInformation("Getting replies for comment {ParentCommentId}", request.ParentCommentId);
         var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId) ?? throw new NotFoundException("Parent comment not found");
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
-        var (replies, totalCount) = await commentsRepository.GetCommentReplies(request.ParentCommentId, pageNumber, pageSize, request.Sorting);
-        var replyDtos = mapper.Map<List<CommentReplyDTO>>(replies);
+        // Replies by users the viewer blocked are left out.
         var currentUser = userContext.GetCurrentUser();
+        var (replies, totalCount) = await commentsRepository.GetCommentReplies(request.ParentCommentId, pageNumber, pageSize, request.Sorting, currentUser?.Id);
+        var replyDtos = mapper.Map<List<CommentReplyDTO>>(replies);
         if (currentUser != null && replyDtos.Any())
         {
             var replyIds = replyDtos.Select(r => r.Id);

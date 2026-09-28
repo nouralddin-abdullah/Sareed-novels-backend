@@ -21,13 +21,16 @@ public class GetPostCommentsQueryHandler(
             request.PostId, request.PageNumber, request.Sorting);
 
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
+        // Comments by users the viewer blocked are left out.
+        var currentUser = userContext.GetCurrentUser();
         var (comments, totalCount) = await commentsRepository.GetPostComments(
             request.PostId,
             pageNumber,
             pageSize,
-            request.Sorting);
+            request.Sorting,
+            currentUser?.Id);
 
-        var commentDtos = await CommentListDtos.Build(comments, mapper, commentsRepository, commentLikesRepository, userContext.GetCurrentUser());
+        var commentDtos = await CommentListDtos.Build(comments, mapper, commentsRepository, commentLikesRepository, currentUser);
 
         return new PagedResult<CommentsDTO>(
             commentDtos,

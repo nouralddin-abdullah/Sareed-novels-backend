@@ -73,9 +73,13 @@ public class ReviewsRepository(ApplicationDbContext dbContext) : IReviewsReposit
                           + (reviews.Where(r => r.NovelId == n.Id).Average(r => (decimal?)r.WorldBuildingScore) ?? 0)) / 4));
     }
 
-    public async Task<(IEnumerable<Review>, int)> GetNovelReviews(Guid novelId, int PageSize, int PageNumber, string sorting)
+    public async Task<(IEnumerable<Review>, int)> GetNovelReviews(Guid novelId, int PageSize, int PageNumber, string sorting, string? viewerId = null)
     {
-        var novelReviews = dbContext.Reviews.Include(r => r.ReviewOwner).Where(n => n.NovelId == novelId).AsQueryable();
+        var novelReviews = dbContext.Reviews
+            .Where(n => n.NovelId == novelId)
+            .VisibleTo(dbContext, viewerId)
+            .Include(r => r.ReviewOwner)
+            .AsQueryable();
         var totalCount = await novelReviews.CountAsync();
         if (PageNumber > 0 && PageSize > 0)
         {

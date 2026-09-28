@@ -81,7 +81,7 @@ public class GetCommentQueryHandler(
 
         // Within the list that shows the comment: its paragraph's, chapter's or post's, or for a reply its thread.
         var (_, pageSize) = Paging.Clamp(1, request.PageSize);
-        context.PageNumber = await commentsRepository.CountCommentsAheadAsync(comment) / pageSize + 1;
+        context.PageNumber = await commentsRepository.CountCommentsAheadAsync(comment, currentUser?.Id) / pageSize + 1;
 
         // Get parent comment if this is a reply
         CommentDto? parentCommentDto = null;
@@ -97,7 +97,7 @@ public class GetCommentQueryHandler(
         // Get first few replies
         var replies = new List<CommentReplyDto>();
         var (commentReplies, _) = await commentsRepository.GetCommentReplies(
-            comment.Id, 1, 3, "oldest");
+            comment.Id, 1, 3, "oldest", currentUser?.Id);
         replies = mapper.Map<List<CommentReplyDto>>(commentReplies);
 
         if (currentUser != null && replies.Any())

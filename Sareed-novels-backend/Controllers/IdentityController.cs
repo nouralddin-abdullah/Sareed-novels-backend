@@ -1,4 +1,5 @@
-﻿using Application.Services;
+﻿using System.Globalization;
+using Application.Services;
 using Application.Users.Commands;
 using Application.Users.Commands.ConfirmEmail;
 using Application.Users.Commands.CreateUser;
@@ -7,6 +8,7 @@ using Application.Users.Commands.GoogleCallback;
 using Application.Users.Commands.GoogleLogin;
 using Application.Users.Commands.SendConfirmEmail;
 using Application.Users.Commands.UserLogin;
+using Domain.Exceptions;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -92,6 +94,14 @@ namespace Sareed_novels_backend.Controllers
                 // passwordReset=1: this sign-in removed a password set before the email was verified (the web says so).
                 var passwordReset = result.PasswordReset ? "&passwordReset=1" : "";
                 return Redirect($"{frontendUrl}/auth/success#token={Uri.EscapeDataString(result.AccessToken)}{passwordReset}");
+            }
+            catch (AccountSuspendedException suspended)
+            {
+                // The web says so in Arabic: until a date (yyyy-MM-dd, UTC) or for good.
+                var until = suspended.Permanent
+                    ? "permanent=1"
+                    : "until=" + suspended.SuspendedUntil.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                return Redirect($"{frontendUrl}/auth/error?error=account_suspended&{until}");
             }
             catch (Exception)
             {
