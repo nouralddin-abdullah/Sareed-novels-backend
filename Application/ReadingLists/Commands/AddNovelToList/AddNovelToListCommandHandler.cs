@@ -45,7 +45,7 @@ public class AddNovelToListCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyInList",
-                Message = "Novel is already in this reading list"
+                Message = "هذه الرواية موجودة في القائمة بالفعل"
             };
         }
 
@@ -68,7 +68,7 @@ public class AddNovelToListCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = "Novel added to reading list"
+                Message = $"أُضيفت الرواية إلى «{readingList.Name}»"
             };
         }
 
@@ -76,7 +76,7 @@ public class AddNovelToListCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Failed to add novel to reading list"
+            Message = "تعذّرت إضافة الرواية إلى القائمة. حاول مرة أخرى."
         };
     }
 }

@@ -9,19 +9,19 @@ public class CreateReadingListCommandValidator : AbstractValidator<CreateReading
     {
         RuleFor(x => x.Name)
             .NotEmpty()
-            .WithMessage("Reading list name is required")
+            .WithMessage("اكتب اسم القائمة")
             .Length(1, 100)
-            .WithMessage("Reading list name must be between 1 and 100 characters");
+            .WithMessage("يجب أن يكون اسم القائمة من 1 إلى 100 حرف");
 
         RuleFor(x => x.Description)
             .MaximumLength(1000)
-            .WithMessage("Reading list description cannot exceed 1000 characters")
+            .WithMessage("يجب ألا يتجاوز وصف القائمة 1000 حرف")
             .When(x => !string.IsNullOrWhiteSpace(x.Description));
 
         // Validate image file if provided
         RuleFor(x => x.CoverImage)
             .Must(ImageValidationUtils.IsValidImageFile)
-            .WithMessage("Invalid image file. Allowed types: JPEG, PNG, WebP. Max size: 5MB")
+            .WithMessage("صورة القائمة يجب أن تكون بصيغة JPEG أو PNG أو WebP، وحجمها 5 ميغابايت أو أقل")
             .When(x => x.CoverImage != null);
     }
 }

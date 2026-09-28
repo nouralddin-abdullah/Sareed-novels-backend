@@ -33,7 +33,7 @@ public class DeleteReadingListCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = "Reading list deleted successfully"
+                Message = "حُذفت القائمة"
             };
         }
 
@@ -41,7 +41,7 @@ public class DeleteReadingListCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Failed to delete reading list"
+            Message = "تعذّر حذف القائمة. حاول مرة أخرى."
         };
     }
 }

@@ -27,7 +27,7 @@ public class TrackReadingProgressCommandHandler(
             {
                 Success = false,
                 Code = "ChapterNotPublished",
-                Message = "Cannot track progress for unpublished chapters"
+                Message = "يُحفظ تقدّم القراءة في الفصول المنشورة فقط"
             };
         }
 
@@ -40,7 +40,7 @@ public class TrackReadingProgressCommandHandler(
             {
                 Success = false,
                 Code = "NovelNotPublished",
-                Message = "Cannot track progress for unpublished novels"
+                Message = "يُحفظ تقدّم القراءة في الروايات المنشورة فقط"
             };
         }
 
@@ -64,7 +64,7 @@ public class TrackReadingProgressCommandHandler(
                 {
                     Success = false,
                     Code = "ChapterNotPublished",
-                    Message = "Chapter not found in published chapters"
+                    Message = "هذا الفصل ليس بين فصول الرواية المنشورة"
                 };
             }
         }
@@ -85,7 +85,7 @@ public class TrackReadingProgressCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Reading progress tracked successfully"
+            Message = "حُفظ تقدّمك في القراءة"
         };
     }
 }

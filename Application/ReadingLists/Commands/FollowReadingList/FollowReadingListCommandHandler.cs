@@ -30,7 +30,7 @@ public class FollowReadingListCommandHandler(
             {
                 Success = false,
                 Code = "ReadingListPrivate",
-                Message = "Cannot follow a private reading list"
+                Message = "هذه القائمة خاصة"
             };
         }
 
@@ -40,7 +40,7 @@ public class FollowReadingListCommandHandler(
             {
                 Success = false,
                 Code = "CannotFollowOwnList",
-                Message = "You cannot follow your own reading list"
+                Message = "هذه قائمتك، فلا يمكنك متابعتها"
             };
         }
 
@@ -52,7 +52,7 @@ public class FollowReadingListCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyFollowing",
-                Message = "You are already following this reading list"
+                Message = "أنت تتابع هذه القائمة بالفعل"
             };
         }
 
@@ -77,7 +77,7 @@ public class FollowReadingListCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = $"Successfully followed '{readingList.Name}'"
+                Message = $"أنت تتابع «{readingList.Name}» الآن"
             };
         }
 
@@ -85,7 +85,7 @@ public class FollowReadingListCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Failed to follow reading list"
+            Message = "تعذّرت متابعة القائمة. حاول مرة أخرى."
         };
     }
     

@@ -36,7 +36,7 @@ public class UpdateReadingListCommandHandler(
                 {
                     Success = false,
                     Code = "DuplicateListName",
-                    Message = $"You already have a reading list named '{request.Name}'"
+                    Message = $"لديك قائمة قراءة باسم «{request.Name}» بالفعل"
                 };
             }
             readingList.Name = request.Name;
@@ -74,7 +74,7 @@ public class UpdateReadingListCommandHandler(
                 {
                     Success = false,
                     Code = "UploadFailed",
-                    Message = "Failed to upload cover image"
+                    Message = "تعذّر رفع صورة القائمة. حاول مرة أخرى."
                 };
             }
         }
@@ -87,7 +87,7 @@ public class UpdateReadingListCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = "Reading list updated successfully"
+                Message = "حُفظت التغييرات"
             };
         }
 
@@ -95,7 +95,7 @@ public class UpdateReadingListCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Failed to update reading list"
+            Message = "تعذّر حفظ التغييرات على القائمة. حاول مرة أخرى."
         };
     }
 }

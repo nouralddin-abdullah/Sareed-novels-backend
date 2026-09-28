@@ -36,7 +36,7 @@ public class RecalculateChapterSequencesCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Chapter sequences recalculated successfully"
+            Message = "أُعيد حساب أرقام الفصول المنشورة"
         };
     }
 }

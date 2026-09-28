@@ -32,7 +32,7 @@ public class RemoveNovelFromListCommandHandler(
             {
                 Success = false,
                 Code = "NotInList",
-                Message = "Novel is not in this reading list"
+                Message = "هذه الرواية ليست في القائمة"
             };
         }
         var result = await readingListNovelsRepository.RemoveNovelAsync(request.ReadingListId, request.NovelId);
@@ -45,7 +45,7 @@ public class RemoveNovelFromListCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = "Novel removed from reading list"
+                Message = "أُزيلت الرواية من القائمة"
             };
         }
 
@@ -53,7 +53,7 @@ public class RemoveNovelFromListCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Failed to remove novel from reading list"
+            Message = "تعذّرت إزالة الرواية من القائمة. حاول مرة أخرى."
         };
     }
 }

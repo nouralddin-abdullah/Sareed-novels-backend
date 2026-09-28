@@ -27,7 +27,7 @@ public class UnfollowReadingListCommandHandler(
             {
                 Success = false,
                 Code = "CannotUnfollowOwnList",
-                Message = "You cannot unfollow your own reading list"
+                Message = "هذه قائمتك، فلا يمكنك إلغاء متابعتها"
             };
         }
 
@@ -39,7 +39,7 @@ public class UnfollowReadingListCommandHandler(
             {
                 Success = false,
                 Code = "NotFollowing",
-                Message = "You are not following this reading list"
+                Message = "أنت لا تتابع هذه القائمة"
             };
         }
 
@@ -54,7 +54,7 @@ public class UnfollowReadingListCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = $"Successfully unfollowed '{readingList.Name}'"
+                Message = $"ألغيت متابعة «{readingList.Name}»"
             };
         }
 
@@ -62,7 +62,7 @@ public class UnfollowReadingListCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Failed to unfollow reading list"
+            Message = "تعذّر إلغاء متابعة القائمة. حاول مرة أخرى."
         };
     }
 }
