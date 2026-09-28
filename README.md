@@ -196,3 +196,39 @@ credited.
   day of overlap; Google keeps 30 days) and applies each once. Real-time developer notifications (Pub/Sub) aren't
   needed; if they are added later, their voided-purchase notification calls the same `ApplyVoidAsync`.
 - The app pool can idle or recycle on shared hosting: the worker picks up where it left off at the next start.
+
+### Account deletion: `DELETE /api/User/me`
+
+Both stores require in-app account deletion; the web has the same at `https://www.sardnovels.com/delete-account`, the
+URL Google Play lists. The member confirms it's them again, with the `Authorization: Bearer <token>` of their session:
+
+| Body | For |
+|---|---|
+| `{ "password": "..." }` | accounts with a password (`GET /api/User/my-profile` says `"hasPassword": true`) |
+| `{ "googleIdToken": "..." }` | an ID token from signing in with Google just now, whose subject is the account's Google sign-in: any account with one, and the way for accounts without a password |
+| none (or `{}`) | only an account without a password whose access token is from a sign-in in the last 10 minutes (the web has the member sign in with Google again, then confirm) |
+
+Errors are `{ "code": "...", "message": "<Arabic, for the user>" }`:
+
+| HTTP | `code` | Meaning | The app |
+|---|---|---|---|
+| 204 | | deleted | sign out (below) |
+| 401 | | not signed in, or the account is deleted already (its tokens are refused) | sign out |
+| 403 | `ReauthenticationFailed` | wrong password, an invalid Google token, or another Google account | show `message`, let them try again |
+| 403 | `ReauthenticationRequired` | nothing sent where a password is needed, or the sign-in isn't recent enough | ask for the password, or a fresh Google sign-in |
+| 403 | `AdminCannotDeleteAccount` | an admin account (the team removes those) | show `message` |
+| 429 | `TooManyDeletionAttempts` | 5 attempts an hour per account | show `message` |
+
+After 204 every token of the account is refused: delete the stored token, clear what the app cached about the user and
+show the signed-out app (the server already removed the account's push devices, so there's nothing to unregister). If
+the response was lost and the retry gets 401, the deletion went through. Suspended members can't sign in, so they
+email `support@sardnovels.com` instead.
+
+What deletion does (`IAccountDeletionService`, one transaction): the user row stays, anonymized, so comments, reviews
+and posts keep an author shown as «مستخدم محذوف» (user name `deleted-<id>`); email, phone, bio, links, photo and banner
+(also from storage, after the commit), password, external sign-ins and old user names are removed. Their novels are
+soft-deleted. Library, reading lists (with others' follows of them), follows, notifications to them, likes (counters
+adjusted), privilege subscriptions, devices, preferences and blocks are deleted; notifications they caused lose their
+name and photo. Open reports about them close as `AccountDeleted`. The wallet balance is forfeited (set to zero, ledger
+type `BalanceForfeited`) and pending withdrawals are cancelled; the ledger and Play purchases stay. Deleted accounts
+have no profile (404) and are left out of search, supporters and follower lists.

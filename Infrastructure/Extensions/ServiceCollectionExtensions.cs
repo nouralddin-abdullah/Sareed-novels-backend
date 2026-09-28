@@ -194,5 +194,8 @@ public static class ServiceCollectionExtensions
         // Sign-out everywhere: checked on every authenticated request (AccessTokens.RejectRevokedAsync).
         services.AddSingleton<TokenCutoffCache>();
         services.AddScoped<ITokenRevocationService, TokenRevocationService>();
+
+        // Members deleting their own account (DELETE /api/User/me).
+        services.AddScoped<IAccountDeletionService, AccountDeletionService>();
     }
 }
