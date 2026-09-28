@@ -39,9 +39,9 @@ public class User : IdentityUser
     public DateTime? SuspendedUntil { get; set; }
 
     /// <summary>
-    /// When the member deleted their account (UTC); null for a live account. The row stays, anonymized
-    /// (<see cref="Constants.DeletedAccounts"/>), so their comments, reviews and posts keep an author; it can't sign in,
-    /// its access tokens are refused and it has no profile. Set through IAccountDeletionService.
+    /// When the account was deleted (UTC), by the member or by an admin; null for a live account. The row stays,
+    /// anonymized (<see cref="Constants.DeletedAccounts"/>), so their comments, reviews and posts keep an author; it
+    /// can't sign in, its access tokens are refused and it has no profile. Set through IAccountDeletionService.
     /// </summary>
     public DateTime? DeletedAt { get; set; }
 
