@@ -16,26 +16,26 @@ public class RemoveGalleryImageCommandHandler(
 {
     public async Task<OperationResult> Handle(RemoveGalleryImageCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
 
         // Get the image directly by ID
         var targetImage = await entityRepository.GetGalleryImageByIdAsync(request.ImageId);
         
         if (targetImage == null)
         {
-            return new OperationResult { Success = false, Message = "Gallery image not found" };
+            return new OperationResult { Success = false, Code = "GalleryImageNotFound", Message = "Gallery image not found" };
         }
 
         var entity = await entityRepository.GetEntityByIdAsync(targetImage.EntityId);
         if (entity == null)
         {
-            return new OperationResult { Success = false, Message = "Entity not found" };
+            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "Entity not found" };
         }
 
         var novel = await novelsRepository.GetOne(entity.NovelId);
         if (novel == null || novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
         }
 
         await entityRepository.DeleteGalleryImageAsync(request.ImageId);

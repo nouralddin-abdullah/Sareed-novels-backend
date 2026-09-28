@@ -19,10 +19,12 @@ public class GetFollowersListQueryHandler(
 {
     public async Task<PagedResult<FollowerDto>> Handle(GetFollowersListQuery request, CancellationToken cancellationToken)
     {
-        var user = await userManager.FindByIdAsync(request.UserId) ?? throw new NotFoundException("This user is not found");
+        var user = await userManager.FindByIdAsync(request.UserId) ?? throw new NotFoundException("This user is not found", "UserNotFound");
         logger.LogInformation("Getting followers list for user {username}", user.DisplayName);
         
-        var (followers, totalCount) = await usersRepository.GetFollowersList(user.Id, request.PageSize, request.PageNumber);
+        // A size of 0 or less used to return every row.
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
+        var (followers, totalCount) = await usersRepository.GetFollowersList(user.Id, pageSize, pageNumber);
         var followersList = followers.Select(f => new FollowerDto
         {
             UserId = f.Follower.Id,
@@ -44,7 +46,7 @@ public class GetFollowersListQueryHandler(
             }
         }
         
-        var result = new PagedResult<FollowerDto>(followersList, totalCount, request.PageSize, request.PageNumber);
+        var result = new PagedResult<FollowerDto>(followersList, totalCount, pageSize, pageNumber);
         return result;
     }
 }

@@ -11,7 +11,7 @@ public class GiftLeaderboardTests(SqlServerDatabase database) : IClassFixture<Sq
     {
         var (steady, recent, oldWhale, author) = (Seed.User(), Seed.User(), Seed.User(), Seed.User());
         var novel = Seed.Novel(author, "رواية " + Seed.Marker());
-        var gift = new Gift { Id = Guid.NewGuid(), Name = "Rose", ImageUrl = "https://example.test/rose.png", Cost = 100 };
+        var gift = new Gift { Id = Guid.NewGuid(), Name = "Rose", NameAr = "وردة", ImageUrl = "https://example.test/rose.png", Cost = 100 };
 
         GiftTransaction Sent(User sender, int count, int daysAgo) => new()
         {

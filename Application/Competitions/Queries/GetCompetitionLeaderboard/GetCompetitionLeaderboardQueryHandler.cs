@@ -3,6 +3,7 @@ using AutoMapper;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
+using Application.Common;
 
 namespace Application.Competitions.Queries.GetCompetitionLeaderboard;
 
@@ -15,10 +16,12 @@ public class GetCompetitionLeaderboardQueryHandler(
     {
         if (!await competitionRepository.ExistsAsync(request.CompetitionId))
         {
-            throw new NotFoundException("Competition not found");
+            throw new NotFoundException("Competition not found", "CompetitionNotFound");
         }
 
-        var topParticipants = await participantRepository.GetTopParticipantsAsync(request.CompetitionId, request.Top);
+        // top is a page size: 1..50, whatever the query string says.
+        var (_, top) = Paging.Clamp(1, request.Top);
+        var topParticipants = await participantRepository.GetTopParticipantsAsync(request.CompetitionId, top);
 
         return mapper.Map<List<CompetitionLeaderboardEntryDto>>(topParticipants);
     }

@@ -71,16 +71,9 @@ public interface IPrivilegeService
     /// <summary>
     /// User subscribes to a novel's privilege.
     /// Deducts points from wallet.
-    /// Subscription is PERMANENT.
+    /// A subscription is a permanent unlock: it can't be cancelled (the owner's rule, #17).
     /// </summary>
     Task<OperationResult> SubscribeToPrivilegeAsync(
-        Guid novelId, 
-        string userId);
-    
-    /// <summary>
-    /// User cancels their privilege subscription (no refund)
-    /// </summary>
-    Task<OperationResult> CancelSubscriptionAsync(
         Guid novelId, 
         string userId);
     

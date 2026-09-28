@@ -16,7 +16,7 @@ public class ReorderGalleryImagesCommandHandler(
     {
         logger.LogInformation("Reordering gallery images for entity {EntityId}", request.EntityId);
         
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
         
         var entity = await entityRepository.GetEntityByIdAsync(request.EntityId);
         if (entity == null)
@@ -28,7 +28,7 @@ public class ReorderGalleryImagesCommandHandler(
         var novel = await novelsRepository.GetOne(entity.NovelId);
         if (novel == null || novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("User doesn't own this novel");
+            throw new ForbidException("User doesn't own this novel", "NotOwner");
         }
         
         var result = await entityRepository.ReorderGalleryImagesAsync(request.EntityId, request.OrderedImageIds);

@@ -1,4 +1,5 @@
 ﻿using Application.Users;
+using Application.Users.Commands.DeleteAccount;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,5 +20,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserContext, UserContext>();
         services.AddScoped<IVisitorContext, VisitorContext>();
         services.AddHttpContextAccessor();
+
+        // The per-account limit on deleting one's account (counts live for the whole process).
+        services.AddSingleton<AccountDeletionAttempts>();
     }
 }

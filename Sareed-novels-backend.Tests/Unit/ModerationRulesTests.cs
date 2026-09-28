@@ -15,7 +15,8 @@ public class ModerationRulesTests
         // The mobile app and the web send and read these names: renaming one breaks them.
         Assert.Equal(["Comment", "Review", "Post", "User", "Novel", "ReadingList"], Enum.GetNames<ReportTargetType>());
         Assert.Equal(["Spam", "Harassment", "Sexual", "Violence", "HateSpeech", "Spoiler", "Other"], Enum.GetNames<ReportReason>());
-        Assert.Equal(["Dismiss", "RemoveContent", "SuspendUser"], Enum.GetNames<ReportAction>());
+        // AccountDeleted is read only (the reports that deleting an account closed); admins can't send it.
+        Assert.Equal(["Dismiss", "RemoveContent", "SuspendUser", "AccountDeleted"], Enum.GetNames<ReportAction>());
         Assert.Equal(["Open", "Resolved", "Dismissed"], Enum.GetNames<ReportStatus>());
     }
 

@@ -13,10 +13,10 @@ internal class DeleteCommentCommandHandler(
 {
     public async Task<bool> Handle(DeleteCommentCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not found!");
-        var comment = await commentsRepository.GetCommentById(request.CommentId) ?? throw new NotFoundException("This comment wasn't found!");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not found!", "NotSignedIn");
+        var comment = await commentsRepository.GetCommentById(request.CommentId) ?? throw new NotFoundException("This comment wasn't found!", "CommentNotFound");
         if (currentUser.Id != comment.UserId)
-            throw new ForbidException("Not comment owner!");
+            throw new ForbidException("Not comment owner!", "NotOwner");
 
         // Soft-deletes the comment and lowers the user's and the post/chapter/paragraph's counters in one transaction.
         var deleted = await commentsRepository.DeleteComment(comment.Id);

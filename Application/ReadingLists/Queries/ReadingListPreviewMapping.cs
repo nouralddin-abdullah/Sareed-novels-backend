@@ -1,14 +1,16 @@
 using Application.ReadingLists.DTOs;
 using Domain.ReadingLists;
+using Application.Common;
 
 namespace Application.ReadingLists.Queries;
 
 internal static class ReadingListPreviewMapping
 {
+    /// <summary>The web's new-post dialog lists up to 100 of the user's reading lists.</summary>
     public const int MaxPageSize = 100;
 
     public static (int PageNumber, int PageSize) ClampPage(int pageNumber, int pageSize) =>
-        (Math.Max(1, pageNumber), Math.Clamp(pageSize, 1, MaxPageSize));
+        Paging.Clamp(pageNumber, pageSize, MaxPageSize);
 
     public static ReadingListPreviewDTO ToPreviewDto(this ReadingListSummary summary, bool isOwner, bool isFollowing) => new()
     {

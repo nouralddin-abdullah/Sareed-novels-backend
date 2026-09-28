@@ -14,7 +14,7 @@ public class DeletePostCommandHandler(
 {
     public async Task<OperationResult> Handle(DeletePostCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         
         var post = await postsRepository.GetPostById(request.PostId);
         if (post == null || post.IsDeleted)
@@ -22,13 +22,14 @@ public class DeletePostCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "PostNotFound",
                 Message = "Post not found"
             };
         }
 
         if (post.UserId != currentUser.Id)
         {
-            throw new ForbidException("You can only delete your own posts");
+            throw new ForbidException("You can only delete your own posts", "NotOwner");
         }
         
         await postsRepository.DeletePost(request.PostId);

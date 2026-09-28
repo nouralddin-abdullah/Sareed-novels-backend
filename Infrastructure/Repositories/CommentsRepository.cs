@@ -209,13 +209,4 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
 
         return (comments, totalCount);
     }
-    
-    public async Task DeleteParagraphComments(Guid paragraphId)
-    {
-        // The paragraph row is deleted right after this, and comments reference it without a cascade (as likes and
-        // replies reference comments), so a soft delete would leave it undeletable.
-        await using var transaction = await dbContext.Database.BeginTransactionAsync();
-        await SocialCounters.DeleteParagraphComments(dbContext, paragraphId);
-        await transaction.CommitAsync();
-    }
 }

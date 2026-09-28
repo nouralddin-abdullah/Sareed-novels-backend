@@ -18,6 +18,8 @@ public class WalletProfile : Profile
             .ForMember(dest => dest.UserDisplayName, opt => opt.MapFrom(src => src.User != null ? src.User.DisplayName : null))
             .ForMember(dest => dest.UserEmail, opt => opt.MapFrom(src => src.User != null ? src.User.Email : null));
         
-        CreateMap<PointTransaction, PointTransactionDto>();
+        CreateMap<PointTransaction, PointTransactionDto>()
+            .ForMember(dest => dest.NovelSlug, opt => opt.Ignore())
+            .ForMember(dest => dest.NovelTitle, opt => opt.Ignore());
     }
 }

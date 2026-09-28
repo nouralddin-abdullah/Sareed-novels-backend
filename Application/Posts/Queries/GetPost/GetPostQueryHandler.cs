@@ -17,7 +17,7 @@ public class GetPostQueryHandler(
 {
     public async Task<PostDTO> Handle(GetPostQuery request, CancellationToken cancellationToken)
     {
-        var post = await postsRepository.GetPostById(request.PostId) ?? throw new NotFoundException("Post not found");
+        var post = await postsRepository.GetPostById(request.PostId) ?? throw new NotFoundException("Post not found", "PostNotFound");
         
         var postDto = mapper.Map<PostDTO>(post);
         

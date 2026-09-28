@@ -11,7 +11,7 @@ public class ResetPasswordCommandHandler(ILogger<ResetPasswordCommandHandler> lo
     public async Task<IdentityResult> Handle(ResetPasswordCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Resetting password for user id: {userid}", request.UserId);
-        var user = await userManager.FindByIdAsync(request.UserId) ?? throw new NotFoundException("The user was not found!");
+        var user = await userManager.FindByIdAsync(request.UserId) ?? throw new NotFoundException("The user was not found!", "UserNotFound");
         var result = await userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
         return result;
     }

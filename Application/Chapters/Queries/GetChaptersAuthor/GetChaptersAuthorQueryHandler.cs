@@ -14,9 +14,9 @@ public class GetChaptersAuthorQueryHandler(ILogger<GetChaptersAuthorQueryHandler
     public async Task<IEnumerable<ChaptersDTO>> Handle(GetChaptersAuthorQuery request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Getting author view chapters for {@novel}", request);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found");
-        if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
+        if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel", "NotOwner");
         var chapters = await chaptersRepository.GetChaptersAuthorView(request.NovelId);
         var result = mapper.Map<IEnumerable<ChaptersDTO>>(chapters);
         return result;

@@ -16,7 +16,7 @@ public class DeleteEntityCommandHandler(
 {
     public async Task<OperationResult> Handle(DeleteEntityCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
 
         var entity = await entityRepository.GetEntityByIdAsync(request.EntityId);
         if (entity == null)
@@ -24,6 +24,7 @@ public class DeleteEntityCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "EntityNotFound",
                 Message = "Entity not found"
             };
         }
@@ -35,6 +36,7 @@ public class DeleteEntityCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "NotOwner",
                 Message = "You don't have permission to delete this entity"
             };
         }

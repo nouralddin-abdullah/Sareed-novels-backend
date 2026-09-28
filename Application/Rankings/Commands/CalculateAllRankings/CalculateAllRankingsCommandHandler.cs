@@ -32,6 +32,7 @@ internal class CalculateAllRankingsCommandHandler(IRankingService rankingService
             return new CalculateAllRankingsResult
             {
                 Success = false,
+                Code = "OperationFailed",
                 Message = "Failed to calculate rankings",
                 ExecutionTimeMs = 0,
                 Timestamp = DateTime.UtcNow,

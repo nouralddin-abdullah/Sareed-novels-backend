@@ -21,6 +21,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Application.Common;
 
 namespace Sareed_novels_backend.Controllers;
 
@@ -81,7 +82,7 @@ public class EntityController(IMediator mediator) : ControllerBase
     {
         var query = new GetEntityByIdQuery(entityId);
         var result = await mediator.Send(query);
-        if (result == null) return NotFound();
+        if (result == null) return NotFound(new ApiError("EntityNotFound", "Entity not found"));
         return Ok(result);
     }
 
@@ -153,7 +154,7 @@ public class EntityController(IMediator mediator) : ControllerBase
             OrderedArticleIds = request.OrderedArticleIds
         };
         var result = await mediator.Send(command);
-        if (!result) return BadRequest("Failed to reorder articles");
+        if (!result) return BadRequest(new ApiError("OperationFailed", "Failed to reorder articles"));
         return Ok();
     }
 
@@ -225,7 +226,7 @@ public class EntityController(IMediator mediator) : ControllerBase
             OrderedImageIds = request.OrderedImageIds
         };
         var result = await mediator.Send(command);
-        if (!result) return BadRequest("Failed to reorder gallery images");
+        if (!result) return BadRequest(new ApiError("OperationFailed", "Failed to reorder gallery images"));
         return Ok();
     }
 }

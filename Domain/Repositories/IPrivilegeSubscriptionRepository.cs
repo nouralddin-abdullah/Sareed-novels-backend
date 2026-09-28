@@ -41,6 +41,9 @@ public interface IPrivilegeSubscriptionRepository
     /// Check if user has active subscription for a novel
     /// </summary>
     Task<bool> HasActiveSubscriptionAsync(Guid novelId, string userId);
+
+    /// <summary>When the user's active subscription to the novel began; null without one.</summary>
+    Task<DateTime?> GetActiveSubscriptionDateAsync(Guid novelId, string userId);
     
     /// <summary>
     /// Get expired subscriptions that need cleanup

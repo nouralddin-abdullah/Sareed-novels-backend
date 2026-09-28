@@ -1159,6 +1159,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .IsRequired()
                 .HasMaxLength(100);
 
+            entity.Property(g => g.NameAr)
+                .IsRequired()
+                .HasMaxLength(100);
+
             entity.Property(g => g.ImageUrl)
                 .IsRequired()
                 .HasMaxLength(500);

@@ -17,8 +17,7 @@ public class UserSearchService(ApplicationDbContext dbContext) : IUserSearchServ
         SearchUsersRequest request,
         CancellationToken cancellationToken = default)
     {
-        var pageNumber = Math.Clamp(request.PageNumber, 1, NovelSearchService.MaxPageNumber);
-        var pageSize = Math.Clamp(request.PageSize, 1, NovelSearchService.MaxPageSize);
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, NovelSearchService.MaxPageSize);
         var tokens = SearchText.Tokens(request.Query);
         if (SearchText.HasNothingSearchable(request.Query, tokens))
         {
@@ -29,7 +28,8 @@ public class UserSearchService(ApplicationDbContext dbContext) : IUserSearchServ
         var wordStart = " " + phrase;
         var rawQuery = request.Query?.Trim() ?? string.Empty;
 
-        var query = dbContext.Users.AsNoTracking();
+        // Deleted accounts all have the same name and no profile to open.
+        var query = dbContext.Users.AsNoTracking().Where(u => u.DeletedAt == null);
         foreach (var token in tokens)
         {
             query = query.Where(u => u.SearchName.Contains(token));

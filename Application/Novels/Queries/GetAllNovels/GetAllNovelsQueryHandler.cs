@@ -15,8 +15,7 @@ public class GetAllNovelsQueryHandler(
     public async Task<PagedResult<NovelBasicDTO>> Handle(GetAllNovelsQuery request, CancellationToken cancellationToken)
     {
         // pageNumber 0 used to reach SQL as a negative OFFSET (500); pageSize 0 reported int.MaxValue pages.
-        var pageNumber = Math.Max(1, request.PageNumber);
-        var pageSize = Math.Clamp(request.PageSize, 1, MaxPageSize);
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, MaxPageSize);
         logger.LogInformation("Getting all novels page {Page} size {Size}", pageNumber, pageSize);
 
         var (novels, totalCount) = await novelsRepository.GetAllNovelsBasicAsync(pageNumber, pageSize);

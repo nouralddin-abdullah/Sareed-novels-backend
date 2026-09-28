@@ -22,7 +22,7 @@ public class ResolveReportCommandHandler(
 {
     public async Task<ResolveReportResult> Handle(ResolveReportCommand request, CancellationToken cancellationToken)
     {
-        var admin = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var admin = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         var report = await reportsRepository.GetByIdAsync(request.ReportId, cancellationToken)
             ?? throw new NotFoundException("البلاغ غير موجود", "ReportNotFound");
 

@@ -4,6 +4,7 @@ using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Application.Common;
 
 namespace Application.Privileges.Queries.GetMySubscriptions;
 
@@ -20,20 +21,21 @@ public class GetMySubscriptionsQueryHandler(
         logger.LogDebug("Getting subscriptions for current user");
         
         var currentUser = userContext.GetCurrentUser() 
-            ?? throw new ForbidException("User not signed in");
+            ?? throw new ForbidException("User not signed in", "NotSignedIn");
         
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         var (subscriptions, totalCount) = await subscriptionRepository.GetUserSubscriptionsAsync(
             currentUser.Id, 
-            request.PageNumber, 
-            request.PageSize,
+            pageNumber, 
+            pageSize,
             includeExpired: false);
         
         var dtos = subscriptions.Select(s => new PrivilegeSubscriptionDto
         {
             Id = s.Id,
             NovelId = s.NovelId,
-            NovelSlug = s.Novel?.Slug,
-            NovelTitle = s.Novel?.Title ?? "Unknown",
+            NovelSlug = s.Novel.Slug,
+            NovelTitle = s.Novel.Title,
             NovelCoverImageUrl = s.Novel?.CoverImageUrl,
             IsActive = s.IsActive,
             SubscribedAt = s.SubscribedAt,

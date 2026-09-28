@@ -16,14 +16,14 @@ public class RemoveNovelFromListCommandHandler(
 {
     public async Task<OperationResult> Handle(RemoveNovelFromListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found");
+            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
 
         if (readingList.UserId != currentUser.Id)
         {
-            throw new ForbidException("You don't own this reading list");
+            throw new ForbidException("You don't own this reading list", "NotOwner");
         }
 
         if (!await readingListNovelsRepository.IsNovelInListAsync(request.ReadingListId, request.NovelId))
@@ -31,6 +31,7 @@ public class RemoveNovelFromListCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "NotInList",
                 Message = "Novel is not in this reading list"
             };
         }
@@ -51,6 +52,7 @@ public class RemoveNovelFromListCommandHandler(
         return new OperationResult
         {
             Success = false,
+            Code = "OperationFailed",
             Message = "Failed to remove novel from reading list"
         };
     }

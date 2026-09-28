@@ -31,7 +31,7 @@ public class WalletService(
         return (await walletRepository.GetByUserIdAsync(userId))!;
     }
 
-    public async Task AddPointsAsync(string userId, decimal amount, string transactionType, string description, Guid? relatedRequestId = null)
+    public async Task AddPointsAsync(string userId, decimal amount, string transactionType, string description, Guid? relatedRequestId = null, TransactionDetails? details = null)
     {
         EnsurePositive(amount);
 
@@ -39,7 +39,7 @@ public class WalletService(
         {
             await walletRepository.EnsureExistsAsync(userId);
             var after = await walletRepository.CreditAsync(userId, amount);
-            await RecordAsync(userId, amount, after, transactionType, description, relatedRequestId);
+            await RecordAsync(userId, amount, after, transactionType, description, relatedRequestId, details);
             return after;
         });
 
@@ -47,7 +47,7 @@ public class WalletService(
             amount, userId, balanceAfter);
     }
 
-    public async Task DeductPointsAsync(string userId, decimal amount, string transactionType, string description, Guid? relatedRequestId = null)
+    public async Task DeductPointsAsync(string userId, decimal amount, string transactionType, string description, Guid? relatedRequestId = null, TransactionDetails? details = null)
     {
         EnsurePositive(amount);
 
@@ -55,7 +55,7 @@ public class WalletService(
         {
             await walletRepository.EnsureExistsAsync(userId);
             var after = await DebitOrThrowAsync(userId, amount);
-            await RecordAsync(userId, -amount, after, transactionType, description, relatedRequestId);
+            await RecordAsync(userId, -amount, after, transactionType, description, relatedRequestId, details);
             return after;
         });
 
@@ -105,7 +105,8 @@ public class WalletService(
         string toTransactionType,
         string fromDescription,
         string toDescription,
-        Guid? relatedRequestId = null)
+        Guid? relatedRequestId = null,
+        TransactionDetails? details = null)
     {
         EnsurePositive(amount);
         if (fromUserId == toUserId)
@@ -133,8 +134,8 @@ public class WalletService(
                 fromAfter = await DebitOrThrowAsync(fromUserId, amount); // throwing rolls the credit back
             }
 
-            await RecordAsync(fromUserId, -amount, fromAfter, fromTransactionType, fromDescription, relatedRequestId);
-            await RecordAsync(toUserId, amount, toAfter, toTransactionType, toDescription, relatedRequestId);
+            await RecordAsync(fromUserId, -amount, fromAfter, fromTransactionType, fromDescription, relatedRequestId, details);
+            await RecordAsync(toUserId, amount, toAfter, toTransactionType, toDescription, relatedRequestId, details);
         });
 
         logger.LogInformation(
@@ -146,7 +147,8 @@ public class WalletService(
         await walletRepository.TryDebitAsync(userId, amount)
         ?? throw new InsufficientBalanceException(amount);
 
-    private Task RecordAsync(string userId, decimal signedAmount, decimal balanceAfter, string type, string description, Guid? relatedRequestId) =>
+    private Task RecordAsync(string userId, decimal signedAmount, decimal balanceAfter, string type, string description, Guid? relatedRequestId,
+        TransactionDetails? details) =>
         transactionRepository.CreateAsync(new PointTransaction
         {
             Id = Guid.NewGuid(),
@@ -157,6 +159,9 @@ public class WalletService(
             BalanceAfter = balanceAfter,
             Description = description,
             RelatedRequestId = relatedRequestId,
+            NovelId = details?.NovelId,
+            GiftId = details?.GiftId,
+            GiftCount = details?.GiftCount,
             CreatedAt = DateTime.UtcNow
         });
 

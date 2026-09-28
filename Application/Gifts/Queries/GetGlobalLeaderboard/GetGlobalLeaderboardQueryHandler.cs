@@ -2,6 +2,7 @@
 using AutoMapper;
 using Domain.Repositories;
 using MediatR;
+using Application.Common;
 
 namespace Application.Gifts.Queries.GetGlobalLeaderboard;
 
@@ -11,11 +12,8 @@ public class GetGlobalLeaderboardQueryHandler(
 {
     public async Task<GlobalLeaderboardDto> Handle(GetGlobalLeaderboardQuery request, CancellationToken cancellationToken)
     {
-        var (supporters, totalCount) = await leaderboardRepository.GetLeaderboard(
-            request.Period,
-            Math.Max(1, request.PageNumber),
-            Math.Clamp(request.PageSize, 1, 100)
-        );
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, GiftPaging.MaxPageSize);
+        var (supporters, totalCount) = await leaderboardRepository.GetLeaderboard(request.Period, pageNumber, pageSize);
 
         var supporterDtos = mapper.Map<List<TopSupporterDto>>(supporters);
 

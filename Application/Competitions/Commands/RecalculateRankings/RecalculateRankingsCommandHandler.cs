@@ -14,7 +14,7 @@ public class RecalculateRankingsCommandHandler(
     public async Task<List<CompetitionLeaderboardEntryDto>> Handle(RecalculateRankingsCommand request, CancellationToken cancellationToken)
     {
         var competition = await competitionRepository.GetByIdAsync(request.CompetitionId)
-            ?? throw new NotFoundException("Competition not found");
+            ?? throw new NotFoundException("Competition not found", "CompetitionNotFound");
 
         // Get all participants with novels loaded
         var participants = await participantRepository.GetByCompetitionIdAsync(request.CompetitionId);

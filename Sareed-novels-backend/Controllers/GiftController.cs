@@ -73,7 +73,7 @@ public class GiftController(IMediator mediator) : ControllerBase
     {
         if (period != "Weekly" && period != "AllTime")
         {
-            return BadRequest(new { message = "Period must be 'Weekly' or 'AllTime'" });
+            return BadRequest(new ApiError("InvalidPeriod", "Period must be 'Weekly' or 'AllTime'"));
         }
 
         var query = new GetGlobalLeaderboardQuery(period, pageNumber, pageSize);
@@ -81,9 +81,13 @@ public class GiftController(IMediator mediator) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// The gifts the signed-in user sent, newest first, each with its novel's id, slug, title and cover (gifts to novels
+    /// deleted since are left out).
+    /// </summary>
     [HttpGet("my-history")]
     [Authorize]
-    public async Task<ActionResult<PagedResult<GiftTransactionDto>>> GetMyGiftHistory(
+    public async Task<ActionResult<PagedResult<GiftHistoryItemDto>>> GetMyGiftHistory(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -111,7 +115,7 @@ public class GiftController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command);
         if (!result)
         {
-            return NotFound(new { message = "Gift not found" });
+            return NotFound(new ApiError("GiftNotFound", "Gift not found"));
         }
         return Ok(new { success = true, message = "Gift updated successfully" });
     }
@@ -124,7 +128,7 @@ public class GiftController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command);
         if (!result)
         {
-            return NotFound(new { message = "Gift not found" });
+            return NotFound(new ApiError("GiftNotFound", "Gift not found"));
         }
         return Ok(new { success = true, message = "Gift deleted successfully" });
     }

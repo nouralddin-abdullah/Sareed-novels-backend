@@ -25,4 +25,10 @@ public class UserIsProfile
     // Following/Followers totals only
     public int TotalFollowing { get; set; }
     public int TotalFollowers { get; set; }
+
+    /// <summary>
+    /// Whether the account has a password (false: it signs in with Google only). Says how to confirm deleting the
+    /// account: with the password, or with Google.
+    /// </summary>
+    public bool HasPassword { get; set; }
 }

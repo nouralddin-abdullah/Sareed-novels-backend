@@ -14,7 +14,7 @@ public class GetCommentRepliesQueryHandler(ILogger<GetCommentRepliesQueryHandler
     public async Task<PagedResult<CommentReplyDTO>> Handle(GetCommentRepliesQuery request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Getting replies for comment {ParentCommentId}", request.ParentCommentId);
-        var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId) ?? throw new NotFoundException("Parent comment not found");
+        var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId) ?? throw new NotFoundException("Parent comment not found", "ParentCommentNotFound");
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         // Replies by users the viewer blocked are left out.
         var currentUser = userContext.GetCurrentUser();

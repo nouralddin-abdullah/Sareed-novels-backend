@@ -74,25 +74,6 @@ internal static class SocialCounters
             new SqlParameter("@id", chapterId));
 
     /// <summary>
-    /// Same as <see cref="DeleteChapterComments"/> for one paragraph that is about to be removed; the chapter's
-    /// TotalCommentsCount loses the paragraph's visible top-level comments.
-    /// </summary>
-    public static Task DeleteParagraphComments(ApplicationDbContext db, Guid paragraphId) =>
-        db.Database.ExecuteSqlRawAsync(
-            DoomedComments("c.ParagraphId = @id")
-            + """
-              UPDATE ch SET TotalCommentsCount = CASE WHEN ch.TotalCommentsCount > n.Cnt THEN ch.TotalCommentsCount - n.Cnt ELSE 0 END
-              FROM Chapters ch
-              JOIN ChapterParagraphs p ON p.ChapterId = ch.Id AND p.Id = @id
-              CROSS APPLY (SELECT COUNT(*) AS Cnt FROM Comments c
-                           WHERE c.ParagraphId = @id AND c.ParentCommentId IS NULL AND c.IsDeleted = 0) n
-              WHERE n.Cnt > 0;
-
-              """
-            + DeleteDoomed,
-            new SqlParameter("@id", paragraphId));
-
-    /// <summary>
     /// Same as <see cref="DeleteChapterComments"/> for the paragraphs a chapter edit removes, which the caller has
     /// marked with a negative OrderIndex inside its transaction: their comments go with replies, likes and
     /// notifications, and the chapter's TotalCommentsCount loses their visible top-level comments.

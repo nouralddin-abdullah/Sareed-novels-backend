@@ -16,6 +16,11 @@ public class GiftProfile : Profile
             .ForMember(dest => dest.SenderDisplayName, opt => opt.MapFrom(src => src.Sender.DisplayName))
             .ForMember(dest => dest.SenderProfilePhoto, opt => opt.MapFrom(src => src.Sender.ProfilePhoto));
         
+        CreateMap<GiftTransaction, GiftHistoryItemDto>()
+            .ForMember(dest => dest.NovelSlug, opt => opt.MapFrom(src => src.Novel.Slug))
+            .ForMember(dest => dest.NovelTitle, opt => opt.MapFrom(src => src.Novel.Title))
+            .ForMember(dest => dest.NovelCoverImageUrl, opt => opt.MapFrom(src => src.Novel.CoverImageUrl));
+
         CreateMap<GlobalSupporterLeaderboard, TopSupporterDto>()
             .ForMember(dest => dest.UserName, opt => opt.MapFrom(src => src.User.UserName))
             .ForMember(dest => dest.DisplayName, opt => opt.MapFrom(src => src.User.DisplayName))

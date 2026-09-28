@@ -14,7 +14,7 @@ public class RegisterDeviceCommandHandler(
 {
     public async Task Handle(RegisterDeviceCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("يجب تسجيل الدخول أولًا");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("يجب تسجيل الدخول أولًا", "NotSignedIn");
 
         var now = DateTime.UtcNow;
         var platform = request.Platform.Trim().ToLowerInvariant();

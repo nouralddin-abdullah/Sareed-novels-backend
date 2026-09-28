@@ -29,7 +29,13 @@ public class PrivilegeInfoDto
     public int? PrivilegeStartSequence { get; set; } // NEW: Which sequence privilege starts from
     public int TotalPublishedChapters { get; set; }
     public bool IsSubscribed { get; set; } // Does current user have subscription?
+    /// <summary>When the signed-in reader's subscription began (UTC); null when not subscribed.</summary>
     public DateTime? SubscribedAt { get; set; }
+    /// <summary>
+    /// Always false: a subscription is a permanent unlock and can't be cancelled (the owner's rule, #17); the cancel
+    /// endpoint answers 400 SubscriptionCannotBeCancelled.
+    /// </summary>
+    public bool CanCancel => false;
 }
 
 /// <summary>
@@ -39,7 +45,7 @@ public class PrivilegeSubscriptionDto
 {
     public Guid Id { get; set; }
     public Guid NovelId { get; set; }
-    /// <summary>The novel's current slug; null if the novel was deleted.</summary>
+    /// <summary>The novel's current slug (subscriptions to deleted novels aren't listed).</summary>
     public string? NovelSlug { get; set; }
     public string NovelTitle { get; set; } = default!;
     public string? NovelCoverImageUrl { get; set; }

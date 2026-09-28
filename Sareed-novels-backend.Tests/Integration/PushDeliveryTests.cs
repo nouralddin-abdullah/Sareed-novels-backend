@@ -108,7 +108,7 @@ public class PushDeliveryTests(SqlServerDatabase database) : IClassFixture<SqlSe
         var reviewOfMyNovel = new Review { Id = Guid.NewGuid(), ReviewerId = actor.Id, NovelId = novel.Id, Content = "رائعة" };
         var myReview = new Review { Id = Guid.NewGuid(), ReviewerId = me.Id, NovelId = otherNovel.Id, Content = "جيدة" };
         var readingList = new ReadingList { Id = Guid.NewGuid(), UserId = me.Id, Name = "قائمتي" };
-        var gift = new Gift { Id = Guid.NewGuid(), Name = "وردة", ImageUrl = "https://example.test/rose.png", Cost = 10 };
+        var gift = new Gift { Id = Guid.NewGuid(), Name = "وردة", NameAr = "وردة", ImageUrl = "https://example.test/rose.png", Cost = 10 };
         db.AddRange(novel, chapter, paragraph, otherNovel, post, onMyChapter, mine, replyToMine, mineOnParagraph, onMyPost,
             reviewOfMyNovel, myReview, readingList, gift);
         await db.SaveChangesAsync();

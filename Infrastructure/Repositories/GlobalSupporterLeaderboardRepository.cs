@@ -9,8 +9,9 @@ public class GlobalSupporterLeaderboardRepository(ApplicationDbContext dbContext
 {
     public async Task<(IEnumerable<GlobalSupporterLeaderboard> supporters, int totalCount)> GetLeaderboard(string period, int pageNumber, int pageSize)
     {
+        // Account deletion removes the member's rows; this also covers a board computed while it ran.
         var query = dbContext.GlobalSupporterLeaderboards
-            .Where(l => l.Period == period)
+            .Where(l => l.Period == period && l.User.DeletedAt == null)
             .Include(l => l.User)
             .OrderBy(l => l.Rank);
 
@@ -30,7 +31,8 @@ public class GlobalSupporterLeaderboardRepository(ApplicationDbContext dbContext
 
     private async Task Recalculate(string period, DateTime? since)
     {
-        var gifts = dbContext.GiftTransactions.AsQueryable();
+        // Deleted accounts aren't ranked.
+        var gifts = dbContext.GiftTransactions.Where(t => t.Sender.DeletedAt == null);
         if (since.HasValue)
         {
             gifts = gifts.Where(t => t.CreatedAt >= since.Value);

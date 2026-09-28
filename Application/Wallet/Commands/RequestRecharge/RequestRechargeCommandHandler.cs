@@ -19,7 +19,7 @@ public class RequestRechargeCommandHandler(
 {
     public async Task<OperationResult> Handle(RequestRechargeCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         // Validate minimum points
         if (request.PointsRequested < PointsConstants.MinimumRecharge)
@@ -27,6 +27,7 @@ public class RequestRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "BelowMinimumRecharge",
                 Message = $"Minimum recharge is {PointsConstants.MinimumRecharge} points"
             };
         }
@@ -39,6 +40,7 @@ public class RequestRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "InvalidPaymentMethod",
                 Message = "Invalid payment method. Use VodafoneCash, InstaPay, or PayPal"
             };
         }
@@ -49,6 +51,7 @@ public class RequestRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "PaymentProofRequired",
                 Message = "Payment proof is required"
             };
         }
@@ -59,6 +62,7 @@ public class RequestRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "PaymentProofTooLarge",
                 Message = "Payment proof must be less than 5MB"
             };
         }
@@ -70,6 +74,7 @@ public class RequestRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "InvalidPaymentProofType",
                 Message = "Payment proof must be JPG, PNG, or PDF"
             };
         }
@@ -94,6 +99,7 @@ public class RequestRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "UploadFailed",
                 Message = "Failed to upload payment proof. Please try again."
             };
         }

@@ -37,8 +37,9 @@ public class ReportsRepository(ApplicationDbContext dbContext) : IReportsReposit
 
             case ReportTargetType.User:
                 var userId = targetId.ToString();
+                // A deleted account has no profile to report.
                 var user = await dbContext.Users.AsNoTracking()
-                    .Where(u => u.Id == userId)
+                    .Where(u => u.Id == userId && u.DeletedAt == null)
                     .Select(u => new { u.Id, u.UserName, u.DisplayName })
                     .FirstOrDefaultAsync(cancellationToken);
                 return user is null ? null : new ReportTarget(user.Id, Excerpt($"{user.DisplayName} (@{user.UserName})"));
@@ -188,8 +189,9 @@ public class ReportsRepository(ApplicationDbContext dbContext) : IReportsReposit
         var userIds = IdsOf(ReportTargetType.User).Select(id => id.ToString()).ToList();
         if (userIds.Count > 0)
         {
+            // A deleted account counts as gone, like deleted content.
             var users = await dbContext.Users.AsNoTracking()
-                .Where(u => userIds.Contains(u.Id))
+                .Where(u => userIds.Contains(u.Id) && u.DeletedAt == null)
                 .Select(u => new { u.Id, u.UserName, u.DisplayName })
                 .ToListAsync(cancellationToken);
             foreach (var u in users)

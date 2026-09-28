@@ -15,7 +15,7 @@ public class RejectRechargeCommandHandler(
 {
     public async Task<OperationResult> Handle(RejectRechargeCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         var rechargeRequest = await rechargeRepository.GetByIdAsync(request.RequestId);
         if (rechargeRequest == null)
@@ -23,6 +23,7 @@ public class RejectRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "RequestNotFound",
                 Message = "Recharge request not found"
             };
         }
@@ -32,6 +33,7 @@ public class RejectRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyProcessed",
                 Message = $"Request already {rechargeRequest.Status.ToLower()}"
             };
         }
@@ -41,6 +43,7 @@ public class RejectRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "RejectionReasonRequired",
                 Message = "Rejection reason is required"
             };
         }
@@ -50,6 +53,7 @@ public class RejectRechargeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyProcessed",
                 Message = "Request was already processed"
             };
         }

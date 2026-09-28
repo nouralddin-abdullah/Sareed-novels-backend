@@ -188,7 +188,7 @@ public class WalletFlowTests(SqlServerDatabase database) : IClassFixture<SqlServ
 
     private async Task<(Gift Gift, Novel Novel)> SeedGiftAndNovel(User author, decimal cost)
     {
-        var gift = new Gift { Id = Guid.NewGuid(), Name = "Crown", ImageUrl = "https://example.test/crown.png", Cost = cost };
+        var gift = new Gift { Id = Guid.NewGuid(), Name = "Crown", NameAr = "تاج", ImageUrl = "https://example.test/crown.png", Cost = cost };
         var novel = Seed.Novel(author, "رواية " + Seed.Marker());
         await using var db = database.CreateContext();
         db.Gifts.Add(gift);
@@ -252,8 +252,13 @@ public class WalletFlowTests(SqlServerDatabase database) : IClassFixture<SqlServ
 
         Assert.True(result.Success);
         var received = Assert.Single(await Ledger(author.Id));
-        Assert.Equal($"Received 2x {gift.Name} from قارئ كريم on {novel.Title}", received.Description);
+        Assert.Equal($"استلمت تاج ×2 من قارئ كريم على رواية «{novel.Title}»", received.Description);
         Assert.DoesNotContain(sender.UserName!, received.Description);
+        // What the entry was about, for clients to link and label it.
+        Assert.Equal((novel.Id, gift.Id, 2), (received.NovelId, received.GiftId, received.GiftCount));
+        var sent = Assert.Single(await Ledger(sender.Id));
+        Assert.Equal($"أرسلت تاج ×2 إلى رواية «{novel.Title}»", sent.Description);
+        Assert.Equal((novel.Id, gift.Id, 2), (sent.NovelId, sent.GiftId, sent.GiftCount));
     }
 
     [Fact]

@@ -2,11 +2,14 @@
 
 namespace Application.Services;
 
+/// <summary>What a ledger row was about, beyond its type: the novel, the gift and how many (PointTransaction's columns).</summary>
+public sealed record TransactionDetails(Guid? NovelId = null, Guid? GiftId = null, int? GiftCount = null);
+
 public interface IWalletService
 {
     Task<UserWallet> GetOrCreateWalletAsync(string userId);
-    Task AddPointsAsync(string userId, decimal amount, string transactionType, string description, Guid? relatedRequestId = null);
-    Task DeductPointsAsync(string userId, decimal amount, string transactionType, string description, Guid? relatedRequestId = null);
+    Task AddPointsAsync(string userId, decimal amount, string transactionType, string description, Guid? relatedRequestId = null, TransactionDetails? details = null);
+    Task DeductPointsAsync(string userId, decimal amount, string transactionType, string description, Guid? relatedRequestId = null, TransactionDetails? details = null);
     Task<bool> HasSufficientBalanceAsync(string userId, decimal amount);
     Task SyncUserBalanceAsync(string userId);
     
@@ -22,5 +25,6 @@ public interface IWalletService
         string toTransactionType,
         string fromDescription,
         string toDescription,
-        Guid? relatedRequestId = null);
+        Guid? relatedRequestId = null,
+        TransactionDetails? details = null);
 }

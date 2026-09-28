@@ -1,5 +1,6 @@
 ﻿using Application.Users.Commands.BlockUser;
 using Application.Users.Commands.ChangePassword;
+using Application.Users.Commands.DeleteAccount;
 using Application.Users.Commands.FollowUser;
 using Application.Users.Commands.UnblockUser;
 using Application.Users.Commands.UnFollowUser;
@@ -12,6 +13,7 @@ using Application.Users.Queries.GetUserProfile;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Sareed_novels_backend.Controllers
 {
@@ -34,41 +36,47 @@ namespace Sareed_novels_backend.Controllers
             var result = await mediator.Send(command);
             if (!result.Success)
             {
-                return BadRequest(result.Message);
+                return BadRequest(result);
             }
             return Ok(result);
         }
 
+        /// <summary>
+        /// Changes the caller's password. A refusal is 400 {code, message, errors}: code is ASP.NET Identity's for the first
+        /// problem (PasswordMismatch for a wrong current password, PasswordTooShort...), message its Arabic description.
+        /// </summary>
         [HttpPatch("update-password")]
         public async Task<IActionResult> UpdatePassword(ChangePasswordCommand command)
         {
             var result = await mediator.Send(command);
             if (!result.Succeeded)
             {
-                return BadRequest(result.Errors);
+                return BadRequest(IdentityErrors.Body(result));
             }
             return Ok(result);
         }
 
+        /// <summary>Follows a user; 400 AlreadyFollowing when the caller already does (and CannotFollowSelf).</summary>
         [HttpPost("follow")]
         public async Task<IActionResult> FollowUser(FollowUserCommand command)
         {
             var result = await mediator.Send(command);
             if (!result.Success)
             {
-                return BadRequest(result.Message);
+                return BadRequest(result);
             }
 
             return Ok(result);
         }
 
+        /// <summary>Unfollows a user; 400 NotFollowing when the caller doesn't follow them (and CannotUnfollowSelf).</summary>
         [HttpDelete("unfollow")]
         public async Task<IActionResult> FollowUser(UnFollowUserCommand command)
         {
             var result = await mediator.Send(command);
             if (!result.Success)
             {
-                return BadRequest(result.Message);
+                return BadRequest(result);
             }
 
             return Ok(result);
@@ -94,6 +102,20 @@ namespace Sareed_novels_backend.Controllers
         [HttpGet("blocked")]
         public async Task<IActionResult> GetBlockedUsers([FromQuery] int? pageNumber, [FromQuery] int? pageSize) =>
             Ok(await mediator.Send(new GetBlockedUsersQuery(pageNumber ?? 1, pageSize ?? 20)));
+
+        /// <summary>
+        /// Deletes the signed-in member's account for good (IAccountDeletionService): 204 when done; every token of the
+        /// account is refused from then on (401). The body confirms it's them: {"password"} for an account with a
+        /// password, {"googleIdToken"} from a fresh Google sign-in, or nothing for an account without a password whose
+        /// token comes from a sign-in in the last 10 minutes. 403 ReauthenticationFailed, ReauthenticationRequired or
+        /// AdminCannotDeleteAccount; 429 TooManyDeletionAttempts (5 attempts an hour per account).
+        /// </summary>
+        [HttpDelete("me")]
+        public async Task<IActionResult> DeleteMe([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] DeleteAccountCommand? command)
+        {
+            await mediator.Send(command ?? new DeleteAccountCommand());
+            return NoContent();
+        }
 
         [HttpGet("followers-list/{userId}")]
         [AllowAnonymous]

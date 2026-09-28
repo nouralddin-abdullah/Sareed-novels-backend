@@ -32,7 +32,7 @@ public class UnlikeCommentCommandHandler : IRequestHandler<UnlikeCommentCommand,
         _logger.LogInformation("Unliking comment {CommentId}", request.CommentId);
 
         var currentUser = _userContext.GetCurrentUser()
-            ?? throw new ForbidException("User not signed in");
+            ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         var result = await _commentLikesRepository.UnLikeComment(currentUser.Id, request.CommentId);
         if (!result)
@@ -40,6 +40,7 @@ public class UnlikeCommentCommandHandler : IRequestHandler<UnlikeCommentCommand,
             return new OperationResult
             {
                 Success = false,
+                Code = "NotLiked",
                 Message = "You haven't liked this comment or it doesn't exist"
             };
         }

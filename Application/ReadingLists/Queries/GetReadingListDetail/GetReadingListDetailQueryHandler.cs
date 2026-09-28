@@ -19,11 +19,11 @@ public class GetReadingListDetailQueryHandler(
         logger.LogInformation("Getting details for reading list {ListId}", request.ReadingListId);
 
         var readingList = await readingListsRepository.GetByIdWithDetailsAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found");
+            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
 
         if (!readingList.IsPublic && (currentUser == null || readingList.UserId != currentUser.Id))
         {
-            throw new ForbidException("This reading list is private");
+            throw new ForbidException("This reading list is private", "ReadingListPrivate");
         }
 
         var dto = new ReadingListDetailDTO

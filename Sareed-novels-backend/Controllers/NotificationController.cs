@@ -46,28 +46,20 @@ public class NotificationController(IMediator mediator) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Marks one of the caller's notifications read; 204 again when it already is.</summary>
     [HttpPatch("{notificationId}/read")]
     public async Task<IActionResult> MarkAsRead([FromRoute] Guid notificationId)
     {
-        var command = new MarkNotificationAsReadCommand(notificationId);
-        var result = await mediator.Send(command);
-        if (result)
-        {
-            return NoContent();
-        }
-        return BadRequest("Failed to mark notification as read");
+        await mediator.Send(new MarkNotificationAsReadCommand(notificationId));
+        return NoContent();
     }
 
+    /// <summary>Marks all of the caller's notifications read: 204, also when none was unread.</summary>
     [HttpPatch("read-all")]
     public async Task<IActionResult> MarkAllAsRead()
     {
-        var command = new MarkAllNotificationsAsReadCommand();
-        var result = await mediator.Send(command);
-        if (result)
-        {
-            return NoContent();
-        }
-        return BadRequest("Failed to mark all notifications as read");
+        await mediator.Send(new MarkAllNotificationsAsReadCommand());
+        return NoContent();
     }
 
     /// <summary>Registers the app's FCM token for push notifications (after sign-in and on token refresh).</summary>

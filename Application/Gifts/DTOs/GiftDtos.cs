@@ -4,6 +4,8 @@ public class GiftDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = default!;
+    /// <summary>The gift's Arabic name (وردة, بيتزا...).</summary>
+    public string NameAr { get; set; } = default!;
     public string ImageUrl { get; set; } = default!;
     public decimal Cost { get; set; }
     public bool IsActive { get; set; }
@@ -21,6 +23,24 @@ public class GiftTransactionDto
     public string SenderUserName { get; set; } = default!;
     public string SenderDisplayName { get; set; } = default!;
     public string SenderProfilePhoto { get; set; } = default!;
+    public int Count { get; set; }
+    public decimal TotalCost { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// A gift the signed-in user sent (GET /api/gift/my-history): what, how many, and the novel it went to. The sender is
+/// the user, so there are no sender fields (they were always null here).
+/// </summary>
+public class GiftHistoryItemDto
+{
+    public Guid Id { get; set; }
+    public GiftDto Gift { get; set; } = default!;
+    public Guid NovelId { get; set; }
+    /// <summary>The novel's current slug, title and cover.</summary>
+    public string NovelSlug { get; set; } = default!;
+    public string NovelTitle { get; set; } = default!;
+    public string? NovelCoverImageUrl { get; set; }
     public int Count { get; set; }
     public decimal TotalCost { get; set; }
     public DateTime CreatedAt { get; set; }

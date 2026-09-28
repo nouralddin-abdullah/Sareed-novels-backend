@@ -14,15 +14,15 @@ public class DeleteReadingListCommandHandler(
 {
     public async Task<OperationResult> Handle(DeleteReadingListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         logger.LogInformation("Deleting reading list {ListId} for user {UserId}", request.ReadingListId, currentUser.Id);
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found");
+            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
 
         if (readingList.UserId != currentUser.Id)
         {
-            throw new ForbidException("You don't own this reading list");
+            throw new ForbidException("You don't own this reading list", "NotOwner");
         }
 
         var result = await readingListsRepository.DeleteAsync(request.ReadingListId);
@@ -40,6 +40,7 @@ public class DeleteReadingListCommandHandler(
         return new OperationResult
         {
             Success = false,
+            Code = "OperationFailed",
             Message = "Failed to delete reading list"
         };
     }

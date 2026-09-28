@@ -15,7 +15,7 @@ public class BlockUserCommandHandler(
 {
     public async Task<BlockUserResult> Handle(BlockUserCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         var target = await BlockTargets.FindAsync(userManager, currentUser, request.UserId);
 
         // Also removes any follow between the two and what the blocked user caused this one to be notified of.

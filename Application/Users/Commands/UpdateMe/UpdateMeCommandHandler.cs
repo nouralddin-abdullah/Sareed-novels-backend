@@ -18,9 +18,9 @@ public class UpdateMeCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateMeCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("The user is not authorized");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("The user is not authorized", "NotSignedIn");
         logger.LogInformation("Updating data for user {username}", currentUser.UserName);
-        var user = await userManager.FindByIdAsync(currentUser.Id) ?? throw new NotFoundException("This user was not found");
+        var user = await userManager.FindByIdAsync(currentUser.Id) ?? throw new NotFoundException("This user was not found", "UserNotFound");
 
         //if username is provided and not null test if it was taken before? or available
         if (!string.IsNullOrEmpty(request.UserName) && request.UserName != user.UserName)
@@ -31,6 +31,7 @@ public class UpdateMeCommandHandler(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "UserNameTaken",
                     Message = "Username is already taken"
                 };
             }
@@ -56,6 +57,7 @@ public class UpdateMeCommandHandler(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "UploadFailed",
                     Message = "Failed to upload profile photo"
                 };
             }
@@ -79,6 +81,7 @@ public class UpdateMeCommandHandler(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "UploadFailed",
                     Message = "Failed to upload profile banner"
                 };
             }
@@ -108,6 +111,7 @@ public class UpdateMeCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "OperationFailed",
                 Message = $"Failed to update user: {errors}"
             };
         }

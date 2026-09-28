@@ -2,6 +2,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Application.Common;
 
 namespace Sareed_novels_backend.Controllers;
 
@@ -18,6 +19,8 @@ public class PrivilegeSubscriptionController(IMediator mediator) : ControllerBas
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10)
     {
+        // The page it answers (and totalPages) are the clamped ones: pageSize=0 used to divide by zero.
+        (pageNumber, pageSize) = Paging.Clamp(pageNumber, pageSize);
         var query = new GetMySubscriptionsQuery
         {
             PageNumber = pageNumber,

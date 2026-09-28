@@ -15,24 +15,24 @@ public class UpdateRelationshipCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateRelationshipCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
 
         var relationship = await entityRepository.GetRelationshipByIdAsync(request.RelationshipId);
         if (relationship == null)
         {
-            return new OperationResult { Success = false, Message = "Relationship not found" };
+            return new OperationResult { Success = false, Code = "RelationshipNotFound", Message = "Relationship not found" };
         }
 
         var sourceEntity = await entityRepository.GetEntityByIdAsync(relationship.SourceEntityId);
         if (sourceEntity == null)
         {
-            return new OperationResult { Success = false, Message = "Source entity not found" };
+            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "Source entity not found" };
         }
 
         // Verify user owns the novel (using included Novel)
         if (sourceEntity.Novel == null || sourceEntity.Novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
         }
 
         // Update only provided fields

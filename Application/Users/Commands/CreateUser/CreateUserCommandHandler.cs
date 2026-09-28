@@ -49,6 +49,8 @@ namespace Application.Users.Commands.CreateUser
                 {
                     Result = new FollowUser.OperationResult
                     {
+                        // ASP.NET Identity's code for the first problem: DuplicateUserName, DuplicateEmail, InvalidUserName...
+                        Code = result.Errors.FirstOrDefault()?.Code ?? "OperationFailed",
                         Message = $"User creation failed: {string.Join("; ", result.Errors.Select(e => e.Description))}",
                         Success = false
                     }
