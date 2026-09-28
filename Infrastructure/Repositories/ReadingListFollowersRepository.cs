@@ -15,18 +15,21 @@ public class ReadingListFollowersRepository(ApplicationDbContext dbContext) : IR
 
     public async Task<bool> FollowAsync(ReadingListFollower follower)
     {
-        dbContext.ReadingListFollowers.Add(follower);
-        return await dbContext.SaveChangesAsync() > 0;
+        // A concurrent duplicate is a no-op (the key lock), not a primary key violation (500).
+        var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO ReadingListFollowers (ReadingListId, UserId, FollowedAt)
+            SELECT {follower.ReadingListId}, {follower.UserId}, {follower.FollowedAt}
+            WHERE NOT EXISTS (SELECT 1 FROM ReadingListFollowers WITH (UPDLOCK, HOLDLOCK)
+                              WHERE ReadingListId = {follower.ReadingListId} AND UserId = {follower.UserId})
+            """);
+        return inserted == 1;
     }
 
-    public async Task<bool> UnfollowAsync(Guid readingListId, string userId)
-    {
-        var follower = await GetAsync(readingListId, userId);
-        if (follower == null) return false;
-
-        dbContext.ReadingListFollowers.Remove(follower);
-        return await dbContext.SaveChangesAsync() > 0;
-    }
+    public async Task<bool> UnfollowAsync(Guid readingListId, string userId) =>
+        // One statement: a concurrent unfollow deletes nothing instead of failing on the row the other one removed.
+        await dbContext.ReadingListFollowers
+            .Where(rlf => rlf.ReadingListId == readingListId && rlf.UserId == userId)
+            .ExecuteDeleteAsync() > 0;
 
     public async Task<bool> IsFollowingAsync(Guid readingListId, string userId)
     {

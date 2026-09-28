@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Sareed_novels_backend.Tests.Integration;
 
-/// <summary>GET /api/app/config: the mobile app's minimum version and maintenance flag, from configuration.</summary>
+/// <summary>GET /api/app/config: the mobile apps' minimum versions (Android, iOS) and maintenance flag, from configuration.</summary>
 [Collection(ReaderApiCollection.Name)]
 public class AppConfigHttpTests(SardApiFactory api)
 {
@@ -23,6 +23,8 @@ public class AppConfigHttpTests(SardApiFactory api)
         var config = await response.OkJson();
         Assert.Equal("1.0.0", config.GetProperty("android").GetProperty("minVersion").GetString());
         Assert.Equal("1.0.0", config.GetProperty("android").GetProperty("latestVersion").GetString());
+        Assert.Equal("1.0.0", config.GetProperty("ios").GetProperty("minVersion").GetString());
+        Assert.Equal("1.0.0", config.GetProperty("ios").GetProperty("latestVersion").GetString());
         Assert.False(config.GetProperty("maintenance").GetProperty("enabled").GetBoolean());
         Assert.Equal(JsonValueKind.Null, config.GetProperty("maintenance").GetProperty("messageAr").ValueKind);
         Assert.True(response.Headers.CacheControl?.Public);
@@ -36,6 +38,8 @@ public class AppConfigHttpTests(SardApiFactory api)
         {
             ["AppConfig:Android:MinVersion"] = "1.2.0",
             ["AppConfig:Android:LatestVersion"] = "1.3.10",
+            ["AppConfig:Ios:MinVersion"] = "1.1.0",
+            ["AppConfig:Ios:LatestVersion"] = "2.0.1",
             ["AppConfig:Maintenance:Enabled"] = "true",
             ["AppConfig:Maintenance:MessageAr"] = "سرد في صيانة قصيرة، نعود خلال ساعة"
         });
@@ -44,6 +48,8 @@ public class AppConfigHttpTests(SardApiFactory api)
 
         Assert.Equal("1.2.0", config.GetProperty("android").GetProperty("minVersion").GetString());
         Assert.Equal("1.3.10", config.GetProperty("android").GetProperty("latestVersion").GetString());
+        Assert.Equal("1.1.0", config.GetProperty("ios").GetProperty("minVersion").GetString());
+        Assert.Equal("2.0.1", config.GetProperty("ios").GetProperty("latestVersion").GetString());
         Assert.True(config.GetProperty("maintenance").GetProperty("enabled").GetBoolean());
         Assert.Equal("سرد في صيانة قصيرة، نعود خلال ساعة", config.GetProperty("maintenance").GetProperty("messageAr").GetString());
 
@@ -54,15 +60,17 @@ public class AppConfigHttpTests(SardApiFactory api)
     }
 
     [Theory]
-    [InlineData("latest", "1.0.0")]
-    [InlineData("1.2", "1.3.0")]
-    [InlineData("2.0.0", "1.9.9")] // minimum above the latest
-    public async Task A_misconfigured_version_is_an_error_not_a_wrong_answer(string minVersion, string latestVersion)
+    [InlineData("Android", "latest", "1.0.0")]
+    [InlineData("Android", "1.2", "1.3.0")]
+    [InlineData("Android", "2.0.0", "1.9.9")] // minimum above the latest
+    [InlineData("Ios", "1.0", "1.0.0")]
+    [InlineData("Ios", "3.0.0", "2.9.9")]
+    public async Task A_misconfigured_version_is_an_error_not_a_wrong_answer(string platform, string minVersion, string latestVersion)
     {
         await using var misconfigured = With(new()
         {
-            ["AppConfig:Android:MinVersion"] = minVersion,
-            ["AppConfig:Android:LatestVersion"] = latestVersion
+            [$"AppConfig:{platform}:MinVersion"] = minVersion,
+            [$"AppConfig:{platform}:LatestVersion"] = latestVersion
         });
 
         var response = await misconfigured.CreateClient().GetAsync("/api/app/config");

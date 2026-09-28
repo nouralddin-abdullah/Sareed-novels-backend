@@ -26,34 +26,20 @@ public class RemoveNovelFromListCommandHandler(
             throw new ForbidException("هذا الإجراء متاح لصاحب القائمة فقط", "NotOwner");
         }
 
-        if (!await readingListNovelsRepository.IsNovelInListAsync(request.ReadingListId, request.NovelId))
+        // Not in the list, or a concurrent removal got there first: the same answer.
+        if (!await readingListNovelsRepository.RemoveNovelAsync(request.ReadingListId, request.NovelId))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotInList",
-                Message = "هذه الرواية ليست في القائمة"
-            };
+            return OperationResult.AlreadyDone("NotInList", "هذه الرواية ليست في القائمة");
         }
-        var result = await readingListNovelsRepository.RemoveNovelAsync(request.ReadingListId, request.NovelId);
-        if (result)
-        {
-            await readingListsRepository.AdjustNovelsCountAsync(request.ReadingListId, -1);
 
-            logger.LogInformation("Novel {NovelId} removed from reading list {ListId}", request.NovelId, request.ReadingListId);
+        await readingListsRepository.AdjustNovelsCountAsync(request.ReadingListId, -1);
 
-            return new OperationResult
-            {
-                Success = true,
-                Message = "أُزيلت الرواية من القائمة"
-            };
-        }
+        logger.LogInformation("Novel {NovelId} removed from reading list {ListId}", request.NovelId, request.ReadingListId);
 
         return new OperationResult
         {
-            Success = false,
-            Code = "OperationFailed",
-            Message = "تعذّرت إزالة الرواية من القائمة. حاول مرة أخرى."
+            Success = true,
+            Message = "أُزيلت الرواية من القائمة"
         };
     }
 }

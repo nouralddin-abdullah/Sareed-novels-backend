@@ -46,15 +46,20 @@ namespace Application.Users.Commands.CreateUser
                     await fileUploadService.DeleteImageAsync(userMapped.ProfilePhoto);
                 }
 
+                // ASP.NET Identity's code for the first problem: DuplicateUserName, DuplicateEmail, InvalidUserName...
+                var code = result.Errors.FirstOrDefault()?.Code ?? "OperationFailed";
+                var message = ArabicText.Sentences(["تعذّر إنشاء الحساب", .. result.Errors.Select(e => e.Description)]);
                 return new CreateUserResponse
                 {
                     Result = new FollowUser.OperationResult
                     {
-                        // ASP.NET Identity's code for the first problem: DuplicateUserName, DuplicateEmail, InvalidUserName...
-                        Code = result.Errors.FirstOrDefault()?.Code ?? "OperationFailed",
-                        Message = ArabicText.Sentences(["تعذّر إنشاء الحساب", .. result.Errors.Select(e => e.Description)]),
+                        Code = code,
+                        Message = message,
                         Success = false
-                    }
+                    },
+                    Code = code,
+                    Message = message,
+                    Errors = result.Errors.ToList()
                 };
             };
             

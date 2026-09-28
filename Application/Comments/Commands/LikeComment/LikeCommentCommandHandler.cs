@@ -54,12 +54,7 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
         // Inserts the like and bumps LikesCount in one transaction; a concurrent duplicate is a no-op here.
         if (!await _commentLikesRepository.LikeComment(currentUser.Id, request.CommentId))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "AlreadyLiked",
-                Message = "سبق أن أعجبت بهذا التعليق"
-            };
+            return OperationResult.AlreadyDone("AlreadyLiked", "سبق أن أعجبت بهذا التعليق");
         }
 
         // Fire-and-forget: Send notification

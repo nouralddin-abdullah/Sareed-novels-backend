@@ -56,31 +56,13 @@ namespace Sareed_novels_backend.Controllers
             return Ok(result);
         }
 
-        /// <summary>Follows a user; 400 AlreadyFollowing when the caller already does (and CannotFollowSelf).</summary>
+        /// <summary>Follows a user; 204 when the caller already does (it was 400 AlreadyFollowing); 400 CannotFollowSelf.</summary>
         [HttpPost("follow")]
-        public async Task<IActionResult> FollowUser(FollowUserCommand command)
-        {
-            var result = await mediator.Send(command);
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
+        public async Task<IActionResult> FollowUser(FollowUserCommand command) => this.Answer(await mediator.Send(command));
 
-            return Ok(result);
-        }
-
-        /// <summary>Unfollows a user; 400 NotFollowing when the caller doesn't follow them (and CannotUnfollowSelf).</summary>
+        /// <summary>Unfollows a user; 204 when the caller doesn't follow them (it was 400 NotFollowing); 400 CannotUnfollowSelf.</summary>
         [HttpDelete("unfollow")]
-        public async Task<IActionResult> FollowUser(UnFollowUserCommand command)
-        {
-            var result = await mediator.Send(command);
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
-        }
+        public async Task<IActionResult> FollowUser(UnFollowUserCommand command) => this.Answer(await mediator.Send(command));
 
         /// <summary>
         /// Blocks a user (idempotent): their comments, replies, reviews and posts leave the caller's lists, follows

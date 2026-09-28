@@ -83,12 +83,13 @@ public class ReviewsRepository(ApplicationDbContext dbContext) : IReviewsReposit
         var totalCount = await novelReviews.CountAsync();
         if (PageNumber > 0 && PageSize > 0)
         {
+            // A total order, so pages never repeat or skip a review: equal like counts (every review has 0 likes at
+            // first) go newest first, and the id breaks the last ties.
             novelReviews = sorting?.ToLower() switch
             {
-                "newest" => novelReviews.OrderByDescending(r => r.CreatedAt),
-                "oldest" => novelReviews.OrderBy(r => r.CreatedAt),
-                "likes" => novelReviews.OrderByDescending(r => r.LikeCount),
-                _ => novelReviews.OrderByDescending(r => r.LikeCount)
+                "newest" => novelReviews.OrderByDescending(r => r.CreatedAt).ThenBy(r => r.Id),
+                "oldest" => novelReviews.OrderBy(r => r.CreatedAt).ThenBy(r => r.Id),
+                _ => novelReviews.OrderByDescending(r => r.LikeCount).ThenByDescending(r => r.CreatedAt).ThenBy(r => r.Id)
             };
 
             novelReviews = novelReviews.Skip(PageSize * (PageNumber - 1)).Take(PageSize);

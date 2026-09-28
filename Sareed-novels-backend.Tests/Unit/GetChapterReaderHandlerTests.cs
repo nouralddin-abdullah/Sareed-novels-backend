@@ -113,4 +113,18 @@ public class GetChapterReaderHandlerTests
         Assert.NotNull(result);
         visitorContext.Received(1).GetVisitorKey();
     }
+
+    [Fact]
+    public async Task A_prefetch_gets_the_whole_chapter_without_counting_a_read()
+    {
+        var chapter = ChapterOf(novel.Id, "Published");
+        Setup(chapter, currentUserId: "reader-1");
+        visitorContext.GetVisitorKey().Returns("u:reader-1");
+
+        var result = await Handler().Handle(new GetChapterReaderQuery(novel.Id, chapter.Id) { TrackView = false }, CancellationToken.None);
+
+        Assert.False(result.IsLocked);
+        await paragraphs.Received(1).GetChapterParagraphs(chapter.Id);
+        visitorContext.DidNotReceive().GetVisitorKey();
+    }
 }

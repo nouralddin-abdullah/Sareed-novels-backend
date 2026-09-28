@@ -16,12 +16,7 @@ public class DeleteReviewLikeCommandHandler(ILogger<DeleteReviewLikeCommandHandl
         var review = await reviewsRepository.GetReviewById(request.ReviewId) ?? throw new NotFoundException("المراجعة غير موجودة", "ReviewNotFound");
         if (!await reviewLikesRepository.UnLikeReview(currentUser.Id, request.ReviewId))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotLiked",
-                Message = "لم تُبدِ إعجابك بهذه المراجعة"
-            };
+            return OperationResult.AlreadyDone("NotLiked", "لم تُبدِ إعجابك بهذه المراجعة");
         }
 
         return new OperationResult

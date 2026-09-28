@@ -17,6 +17,17 @@ public class GenresRepository(ApplicationDbContext dbContext) : IGenresRepositor
         return await dbContext.Genres.FirstOrDefaultAsync(g => g.Slug == slug);
     }
 
+    public async Task<bool> AreAllGenresAsync(IReadOnlyCollection<string> namesOrSlugs, CancellationToken cancellationToken = default)
+    {
+        // How many of the values some genre has as its name or slug: one query, with the database's comparison.
+        var known = await dbContext.Genres
+            .AsNoTracking()
+            .SelectMany(g => namesOrSlugs.Where(value => value == g.Name || value == g.Slug))
+            .Distinct()
+            .CountAsync(cancellationToken);
+        return known == namesOrSlugs.Count;
+    }
+
     public async Task<Genre?> GetGenreBySlug(string slug)
     {
         return await dbContext.Genres.FirstOrDefaultAsync(g => g.Slug == slug);

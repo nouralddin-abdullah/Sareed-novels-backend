@@ -7,6 +7,15 @@ namespace Infrastructure.Repositories;
 
 public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepository
 {
+    public async Task<Dictionary<Guid, string>> GetTitlesAsync(IReadOnlyCollection<Guid> chapterIds) =>
+        chapterIds.Count == 0
+            ? []
+            : await dbContext.Chapters
+                .AsNoTracking()
+                .Where(c => chapterIds.Contains(c.Id))
+                .Select(c => new { c.Id, c.Title })
+                .ToDictionaryAsync(c => c.Id, c => c.Title);
+
     public async Task<bool> CreateChapter(Chapter chapter)
     {
         await dbContext.AddAsync(chapter);
