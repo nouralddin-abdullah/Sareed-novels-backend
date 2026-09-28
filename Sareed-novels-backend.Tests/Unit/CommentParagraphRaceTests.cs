@@ -24,9 +24,12 @@ public class CommentParagraphRaceTests
     {
         var sql = SqlErrors.Exception(number);
 
-        // SaveChanges wraps it; the counter updates (ExecuteUpdate) throw it as is.
+        // SaveChanges wraps it; the counter updates (ExecuteUpdate) throw it as is; and EF's execution strategy wraps
+        // a transient error (a deadlock) once more, in an InvalidOperationException around the DbUpdateException.
         Assert.True(CommentsRepository.LostItsParagraph(OnParagraph(), new DbUpdateException("save failed", sql)));
         Assert.True(CommentsRepository.LostItsParagraph(OnParagraph(), sql));
+        Assert.True(CommentsRepository.LostItsParagraph(OnParagraph(),
+            new InvalidOperationException("transient failure", new DbUpdateException("save failed", sql))));
     }
 
     [Theory]

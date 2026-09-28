@@ -40,8 +40,25 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
 
     /// <summary>Whether <paramref name="ex"/> saving <paramref name="comment"/> means its paragraph was removed meanwhile.</summary>
     internal static bool LostItsParagraph(Comments comment, Exception ex) =>
-        comment.ParagraphId is not null
-        && (ex as SqlException ?? ex.InnerException as SqlException)?.Number is ForeignKeyViolation or DeadlockVictim;
+        comment.ParagraphId is not null && SqlErrorNumber(ex) is ForeignKeyViolation or DeadlockVictim;
+
+    /// <summary>
+    /// The number of the first <see cref="SqlException"/> in <paramref name="ex"/>'s chain. The depth varies: the
+    /// counter updates throw it as is, SaveChanges wraps it in a DbUpdateException, and EF's execution strategy wraps a
+    /// transient error (a deadlock) once more, in an InvalidOperationException.
+    /// </summary>
+    private static int? SqlErrorNumber(Exception? ex)
+    {
+        for (; ex is not null; ex = ex.InnerException)
+        {
+            if (ex is SqlException sql)
+            {
+                return sql.Number;
+            }
+        }
+
+        return null;
+    }
 
     public async Task<bool> DeleteComment(Guid commentId)
     {
