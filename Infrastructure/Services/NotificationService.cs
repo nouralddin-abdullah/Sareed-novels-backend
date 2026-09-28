@@ -1,4 +1,5 @@
 ﻿using Application.Services;
+using Application.Common;
 using Domain.Constants;
 using Domain.Entities;
 using Domain.Repositories;
@@ -57,7 +58,7 @@ public class NotificationService(
                 ActorId = commenter.Id,
                 ActorDisplayName = commenter.DisplayName,
                 ActorProfilePhoto = commenter.ProfilePhoto,
-                Message = $"{commenter.DisplayName} علق على فصلك '{chapter.Title}'",
+                Message = $"{commenter.DisplayName} علّق على فصلك «{chapter.Title}»",
                 ActionUrl = $"/novel/{novel.Slug}/chapter/{chapter.Id}",
                 IsRead = false,
                 RelatedEntityId = commentId,
@@ -89,7 +90,7 @@ public class NotificationService(
                 ActorId = commenter.Id,
                 ActorDisplayName = commenter.DisplayName,
                 ActorProfilePhoto = commenter.ProfilePhoto,
-                Message = $"{commenter.DisplayName} علق على منشورك",
+                Message = $"{commenter.DisplayName} علّق على منشورك",
                 ActionUrl = $"/profile/{postAuthorUsername}",
                 IsRead = false,
                 RelatedEntityId = commentId,
@@ -135,7 +136,7 @@ public class NotificationService(
                 ActorId = replier.Id,
                 ActorDisplayName = replier.DisplayName,
                 ActorProfilePhoto = replier.ProfilePhoto,
-                Message = $"{replier.DisplayName} رد على تعليقك",
+                Message = $"{replier.DisplayName} ردّ على تعليقك",
                 ActionUrl = actionUrl,
                 IsRead = false,
                 RelatedEntityId = replyId,  // Keep reply ID for reference
@@ -164,7 +165,7 @@ public class NotificationService(
                 ActorId = novel.Id.ToString(), // Use novel ID instead of author ID
                 ActorDisplayName = novel.Title, // Novel title instead of author name
                 ActorProfilePhoto = novel.CoverImageUrl, // Novel cover instead of author photo
-                Message = $"فصل جديد في '{novel.Title}': {chapter.Title}",
+                Message = $"فصل جديد في «{novel.Title}»: {chapter.Title}",
                 ActionUrl = $"/novel/{novel.Slug}/chapter/{chapter.Id}",
                 IsRead = false,
                 RelatedEntityId = chapter.Id,
@@ -198,7 +199,7 @@ public class NotificationService(
                 ActorId = reviewer.Id,
                 ActorDisplayName = reviewer.DisplayName,
                 ActorProfilePhoto = reviewer.ProfilePhoto,
-                Message = $"{reviewer.DisplayName} قيّم روايتك '{novel.Title}'",
+                Message = $"{reviewer.DisplayName} قيّم روايتك «{novel.Title}»",
                 ActionUrl = $"/novel/{novel.Slug}",
                 IsRead = false,
                 RelatedEntityId = reviewId,
@@ -319,7 +320,7 @@ public class NotificationService(
                 ActorId = liker.Id,
                 ActorDisplayName = liker.DisplayName,
                 ActorProfilePhoto = liker.ProfilePhoto,
-                Message = $"{liker.DisplayName} أعجب بتقييمك لرواية '{novel.Title}'",
+                Message = $"{liker.DisplayName} أعجب بتقييمك لرواية «{novel.Title}»",
                 ActionUrl = $"/novel/{novel.Slug}",
                 IsRead = false,
                 RelatedEntityId = reviewId,
@@ -356,7 +357,7 @@ public class NotificationService(
                 ActorId = follower.Id,
                 ActorDisplayName = follower.DisplayName,
                 ActorProfilePhoto = follower.ProfilePhoto,
-                Message = $"{follower.DisplayName} تابع قائمة القراءة '{readingListName}'",
+                Message = $"{follower.DisplayName} تابع قائمتك «{readingListName}»",
                 ActionUrl = $"/reading-list/{readingListId}",
                 IsRead = false,
                 RelatedEntityId = readingListId,
@@ -390,7 +391,7 @@ public class NotificationService(
                 ActorId = sender.Id,
                 ActorDisplayName = sender.DisplayName,
                 ActorProfilePhoto = sender.ProfilePhoto,
-                Message = $"{sender.DisplayName} أرسل لك {count}x {gift.NameAr} على رواية '{novel.Title}'",
+                Message = $"{sender.DisplayName} أرسل {(count == 1 ? gift.NameAr : $"{gift.NameAr} ×{count}")} إلى روايتك «{novel.Title}»",
                 ActionUrl = $"/novel/{novel.Slug}",
                 IsRead = false,
                 RelatedEntityId = novel.Id,
@@ -420,7 +421,7 @@ public class NotificationService(
                 ActorId = subscriber.Id,
                 ActorDisplayName = subscriber.DisplayName,
                 ActorProfilePhoto = subscriber.ProfilePhoto,
-                Message = $"{subscriber.DisplayName} اشترك في نظام الامتياز لرواية '{novel.Title}' ({cost} نقطة)",
+                Message = $"{subscriber.DisplayName} اشترك في الوصول المبكر لروايتك «{novel.Title}» ({Points.Format(cost)} نقطة)",
                 ActionUrl = $"/novel/{novel.Slug}",
                 IsRead = false,
                 RelatedEntityId = novel.Id,

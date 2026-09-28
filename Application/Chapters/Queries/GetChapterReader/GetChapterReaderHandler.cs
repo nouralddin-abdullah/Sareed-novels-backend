@@ -24,7 +24,7 @@ public class GetChapterReaderHandler(
     private const string PublishedStatus = "Published";
 
     /// <summary>What a reader is told about a privilege-locked chapter (clients show it as it is; isLocked is the flag).</summary>
-    public const string LockMessage = "هذا الفصل مقفل بنظام الامتيازات. اشترك لفتح جميع الفصول المقفلة!";
+    public const string LockMessage = "هذا الفصل ضمن الوصول المبكر. اشترك لتقرأ الفصول المقفلة كلها فور نشرها.";
 
     public async Task<ChapterSingleReaderDTO> Handle(GetChapterReaderQuery request, CancellationToken cancellationToken)
     {
