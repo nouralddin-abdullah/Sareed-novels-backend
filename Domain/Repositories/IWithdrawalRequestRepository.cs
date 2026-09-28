@@ -13,9 +13,9 @@ public interface IWithdrawalRequestRepository
     /// <summary>Points of the user's withdrawal requests still pending (reserved, not deducted until approval).</summary>
     Task<decimal> GetPendingPointsAsync(string userId);
 
-    /// <summary>Whose the request is and where it stands, as the database holds it now (never a tracked copy); null if
-    /// there is no such request.</summary>
-    Task<(string UserId, string Status, string? RejectionReason)?> GetStateAsync(Guid id);
+    /// <summary>Whose the request is, where it stands and who decided it, as the database holds it now (never a tracked
+    /// copy); null if there is no such request.</summary>
+    Task<(string UserId, string Status, string? ProcessedBy)?> GetStateAsync(Guid id);
 
     /// <summary>
     /// Moves a Pending request to <paramref name="newStatus"/> in one conditional UPDATE. Returns false if the request

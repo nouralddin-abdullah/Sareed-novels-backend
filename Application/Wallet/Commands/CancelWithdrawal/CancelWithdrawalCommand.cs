@@ -16,9 +16,11 @@ namespace Application.Wallet.Commands.CancelWithdrawal;
 public sealed record CancelWithdrawalCommand(Guid RequestId) : IRequest;
 
 /// <summary>
-/// Closes the request as Rejected with the reason «ألغاه صاحب الطلب», the way an account deletion cancels a member's
-/// requests, so every app shows it as it already shows those. 404 RequestNotFound for an unknown id or another member's
-/// request (whether it exists isn't theirs to know); 409 AlreadyProcessed once it was approved, rejected or cancelled.
+/// Closes the request as Rejected with the reason «ألغاه صاحب الطلب» and the member as ProcessedBy, the way an account
+/// deletion cancels a member's requests, so every app shows it as it already shows those. Cancelling a request the member
+/// cancelled already changes nothing and succeeds too (a repeat after a lost answer is done, as with the other idempotent
+/// writes, #25). 404 RequestNotFound for an unknown id or another member's request (whether it exists isn't theirs to
+/// know); 409 AlreadyProcessed once an admin approved or rejected it.
 /// </summary>
 public class CancelWithdrawalCommandHandler(
     ILogger<CancelWithdrawalCommandHandler> logger,
@@ -39,19 +41,19 @@ public class CancelWithdrawalCommandHandler(
             throw new NotFoundException(NotFoundMessage, NotFoundCode);
         }
 
-        if (found.Status != RequestStatus.Pending)
-        {
-            throw new ConflictException(WithdrawalMessages.NotCancellable(found.Status, found.RejectionReason), AlreadyProcessedCode);
-        }
-
         // One conditional UPDATE: a double tap, or an admin deciding it at the same moment, changes it once.
-        if (!await withdrawals.TryMarkProcessedAsync(request.RequestId, RequestStatus.Rejected, user.Id, WithdrawalMessages.CancelledByOwnerReason))
+        if (found.Status == RequestStatus.Pending
+            && await withdrawals.TryMarkProcessedAsync(request.RequestId, RequestStatus.Rejected, user.Id, WithdrawalMessages.CancelledByOwnerReason))
         {
-            var now = await withdrawals.GetStateAsync(request.RequestId);
-            throw new ConflictException(
-                WithdrawalMessages.NotCancellable(now?.Status ?? RequestStatus.Rejected, now?.RejectionReason), AlreadyProcessedCode);
+            logger.LogInformation("User {UserId} cancelled their withdrawal request {RequestId}", user.Id, request.RequestId);
+            return;
         }
 
-        logger.LogInformation("User {UserId} cancelled their withdrawal request {RequestId}", user.Id, request.RequestId);
+        var now = found.Status == RequestStatus.Pending ? await withdrawals.GetStateAsync(request.RequestId) ?? found : found;
+        if (WithdrawalMessages.IsCancelledByOwner(now.Status, now.ProcessedBy, user.Id))
+        {
+            return; // cancelled already: nothing left to do
+        }
+        throw new ConflictException(WithdrawalMessages.NotCancellable(now.Status), AlreadyProcessedCode);
     }
 }

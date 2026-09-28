@@ -86,8 +86,9 @@ public class WalletController(IMediator mediator) : ControllerBase
     }
 
     /// <summary>
-    /// The member cancels their own pending withdrawal request (#27): 204. 404 RequestNotFound for an unknown id or another
-    /// member's request; 409 AlreadyProcessed once it was approved, rejected or cancelled (the Arabic message says which).
+    /// The member cancels their own pending withdrawal request (#27): 204, also when they cancelled it already. 404
+    /// RequestNotFound for an unknown id or another member's request; 409 AlreadyProcessed once an admin approved or
+    /// rejected it (the Arabic message says which).
     /// </summary>
     [HttpDelete("withdraw/{id:guid}")]
     public async Task<IActionResult> CancelWithdrawal([FromRoute] Guid id)

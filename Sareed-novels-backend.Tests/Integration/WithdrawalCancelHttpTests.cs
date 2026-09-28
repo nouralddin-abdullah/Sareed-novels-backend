@@ -141,8 +141,7 @@ public class WithdrawalCancelHttpTests(SardApiFactory api)
     [Theory]
     [InlineData(RequestStatus.Approved, null, "قُبل طلب السحب هذا من قبل، فلا يمكن إلغاؤه.")]
     [InlineData(RequestStatus.Rejected, "بيانات الاستلام غير صحيحة", "رُفض طلب السحب هذا من قبل، فلا يمكن إلغاؤه.")]
-    [InlineData(RequestStatus.Rejected, CancelledByOwner, "ألغيت طلب السحب هذا من قبل.")]
-    public async Task A_request_that_is_no_longer_pending_cannot_be_cancelled(string status, string? reason, string message)
+    public async Task A_request_an_admin_decided_cannot_be_cancelled(string status, string? reason, string message)
     {
         var owner = await api.SignUp();
         var request = await SeedRequest(owner, 1000, status, reason);
@@ -156,19 +155,21 @@ public class WithdrawalCancelHttpTests(SardApiFactory api)
     }
 
     [Fact]
-    public async Task Cancelling_twice_cancels_once()
+    public async Task Cancelling_again_or_several_times_at_once_is_done_once()
     {
+        // A retry after a lost answer, or a double tap: the request is cancelled, so it is done (as with the other
+        // idempotent writes).
         var owner = await api.SignUp();
         var request = await SeedRequest(owner, 1000);
 
         var responses = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Cancel(owner, request.Id)));
+        var closed = await Stored(request.Id);
+        var again = await Cancel(owner, request.Id);
 
-        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.NoContent);
-        foreach (var refused in responses.Where(r => r.StatusCode != HttpStatusCode.NoContent))
-        {
-            var body = await refused.Error(HttpStatusCode.Conflict);
-            Assert.Equal(("AlreadyProcessed", "ألغيت طلب السحب هذا من قبل."), (body.GetProperty("code").GetString(), body.GetProperty("message").GetString()));
-        }
+        Assert.All(responses.Append(again), r => Assert.Equal(HttpStatusCode.NoContent, r.StatusCode));
+        var stored = await Stored(request.Id);
+        Assert.Equal((RequestStatus.Rejected, CancelledByOwner, owner.Id), (stored.Status, stored.RejectionReason, stored.ProcessedBy));
+        Assert.Equal(closed.ProcessedAt, stored.ProcessedAt); // closed once
     }
 
     [Fact]

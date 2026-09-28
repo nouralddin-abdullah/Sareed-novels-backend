@@ -29,15 +29,18 @@ public static class WithdrawalMessages
 
     /// <summary>
     /// The reason a request its owner cancelled carries (#27). Its status is Rejected, as for the requests an account
-    /// deletion cancels, which every app already shows with its reason.
+    /// deletion cancels, which every app already shows with its reason; its ProcessedBy is the owner.
     /// </summary>
     public const string CancelledByOwnerReason = "ألغاه صاحب الطلب";
 
-    /// <summary>Why a request can't be cancelled: it isn't pending any more.</summary>
-    public static string NotCancellable(string status, string? rejectionReason) => status switch
+    /// <summary>Whether a request was cancelled by its owner: rejected, and decided by the member who made it.</summary>
+    public static bool IsCancelledByOwner(string status, string? processedBy, string userId) =>
+        status == RequestStatus.Rejected && processedBy == userId;
+
+    /// <summary>Why a request can't be cancelled: an admin decided it already.</summary>
+    public static string NotCancellable(string status) => status switch
     {
         RequestStatus.Approved => "قُبل طلب السحب هذا من قبل، فلا يمكن إلغاؤه.",
-        RequestStatus.Rejected when rejectionReason == CancelledByOwnerReason => "ألغيت طلب السحب هذا من قبل.",
         RequestStatus.Rejected => "رُفض طلب السحب هذا من قبل، فلا يمكن إلغاؤه.",
         _ => "عولج طلب السحب هذا من قبل، فلا يمكن إلغاؤه."
     };
