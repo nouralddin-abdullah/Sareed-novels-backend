@@ -53,9 +53,10 @@ public class GiftTransactionRepository(ApplicationDbContext dbContext) : IGiftTr
 
     public async Task<List<(string UserId, decimal TotalPoints, int TotalGifts)>> GetTopSupportersForNovel(Guid novelId, int topCount)
     {
-        // Real-time aggregation for per-novel top supporters
+        // Real-time aggregation for per-novel top supporters; deleted accounts aren't listed (their gifts still count
+        // towards the novel's totals).
         return await dbContext.GiftTransactions
-            .Where(t => t.NovelId == novelId)
+            .Where(t => t.NovelId == novelId && t.Sender.DeletedAt == null)
             .GroupBy(t => t.SenderId)
             .Select(g => new
             {

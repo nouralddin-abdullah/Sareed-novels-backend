@@ -15,8 +15,8 @@ public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logg
     {
         var currentUser = userContext.GetCurrentUser() ?? null;
         // A name the member used before still finds them (old links); the profile carries the current userName, so
-        // clients can move to it. A live user with that name always wins.
-        var user = await userManager.FindByNameAsync(request.UserName)
+        // clients can move to it. A live user with that name always wins. A deleted account has no profile.
+        var user = NotDeleted(await userManager.FindByNameAsync(request.UserName))
             ?? await usersRepository.GetByPreviousUserNameAsync(request.UserName, cancellationToken)
             ?? throw new NotFoundException("User is not found");
         logger.LogInformation("Getting profile for {UserId}", user.Id);
@@ -57,4 +57,6 @@ public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logg
 
         return profile;
     }
+
+    private static User? NotDeleted(User? user) => user?.DeletedAt == null ? user : null;
 }

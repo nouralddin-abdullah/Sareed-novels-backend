@@ -43,21 +43,23 @@ internal sealed class TokenRevocationService(ApplicationDbContext db, TokenCutof
             state = await db.Users
                 .AsNoTracking()
                 .Where(u => u.Id == userId)
-                .Select(u => new UserTokenCutoff(true, u.TokensValidAfter, u.SuspendedUntil))
+                .Select(u => new UserTokenCutoff(true, u.TokensValidAfter, u.SuspendedUntil, u.DeletedAt != null))
                 .FirstOrDefaultAsync(cancellationToken)
                 ?? UserTokenCutoff.NoSuchUser;
             cache.Set(userId, state, readStartedAt);
         }
 
+        // A deleted account's tokens are refused whenever they were issued, even in the second it was deleted.
         return state.UserExists
+            && !state.Deleted
             && (state.ValidAfter is not { } validAfter || issuedAtUtc >= validAfter)
             // Suspending revokes every token, but one issued in the revoking second would pass the cut-off.
             && !Suspension.IsActive(state.SuspendedUntil, time.GetUtcNow().UtcDateTime);
     }
 }
 
-/// <summary>A user's token cut-off and suspension as last read from the database.</summary>
-internal sealed record UserTokenCutoff(bool UserExists, DateTime? ValidAfter, DateTime? SuspendedUntil = null)
+/// <summary>A user's token cut-off, suspension and deletion as last read from the database.</summary>
+internal sealed record UserTokenCutoff(bool UserExists, DateTime? ValidAfter, DateTime? SuspendedUntil = null, bool Deleted = false)
 {
     public static readonly UserTokenCutoff NoSuchUser = new(false, null);
 }
