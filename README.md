@@ -348,3 +348,79 @@ the note and the time (the member's `DeletedAt`). It holds ids and the admin's n
 account. The API also logs `Admin {AdminId} deleted the account of user {UserId} ({Reason})` at Information level.
 There is no endpoint to read the table yet (query it in the database); it is meant for later admin actions too. The
 reports the deletion closes show no admin in `resolvedById`, as after a member's own deletion; the audit row says who.
+
+### Reading, social and account API notes for the apps (#25)
+
+The small fixes the Android app asked for. Everything is additive unless it says otherwise; errors are
+`{ "code", "message" }` with an Arabic message, as everywhere.
+
+**Offline reading.** Every unlocked `GET /api/novel/{novelId}/chapter/{id}` counts a read (once per visitor per day). A
+download for offline reading adds `?prefetch=true` (or `1`), or the header `X-Sard-Prefetch: 1`: the same answer, no read
+counted. When the reader opens a downloaded chapter, the app sends `POST /api/novel/{novelId}/chapter/{id}/view` (queued
+while offline): it counts one read with the reader's rules, the same visitor key (the signed-in user, or the device)
+and once a day, and nothing for the novel's author, a chapter locked for the caller or a crawler. It answers 204
+whether or not this call counted (so a repeat is harmless), 404 `NovelNotFound`/`ChapterNotFound` for a chapter readers
+can't open, and 500 when the count failed, so keep it queued and send it again. It works signed out too.
+
+**Blocks and reading lists.** To a member the list's owner blocked, the list doesn't exist: `GET /api/readinglist/{id}`
+and following it answer 404 `ReadingListNotFound`, what a list nobody has answers, and it drops out of their
+`GET /api/readinglist/followed` (their follow stays for an unblock). The blocker still opens the blocked member's lists.
+
+**Chapter counts.** A novel's `chapterCount` (novel page, lists, my works) counts published chapters only, the chapters
+the list shows. The migration `RecountPublishedChaptersAndNotificationGifts` recounted every novel.
+
+**Reviews by page.** Every sorting of `GET /api/{novelId}` is a total order, so pages never repeat or skip a review:
+`likes` (and any unknown sorting) by likes, then newest, then id; `newest`/`oldest` by date, then id.
+
+**Notification parts.** Each item of `GET /api/notifications` also has the parts its message names, so the message
+needn't be parsed. Names are current, like `novelSlug` (a rename shows here; `message` keeps the words it was sent
+with), and null when what they name was deleted since, or when the message doesn't name one:
+
+| Field | Set for |
+|---|---|
+| `novelTitle` | the five types with `novelId`: GiftReceived, PrivilegeSubscribed, NewChapterInLibrary, ReviewOnNovel, LikeOnReview |
+| `chapterId`, `chapterTitle` | NewChapterInLibrary (the new chapter) and CommentOnChapter (the chapter commented on) |
+| `readingListName` | ReadingListFollowed (the list is `relatedEntityId`) |
+| `giftId`, `giftNameAr`, `giftCount` | GiftReceived (gift notifications from before #25 have none) |
+
+**Wallet.** Each entry of `GET /api/wallet/transactions` with a `giftId` also has `giftNameAr`, the gift's Arabic name,
+retired gifts included (the public catalog lists only active ones).
+
+**Sign-up errors.** A refused `POST /api/identity/Register` (400) keeps `result` and also has, at the top level, `code`
+and `message` (the same as `result`'s) and `errors`: every problem as `[{ "code", "description" }]`, e.g. both
+`DuplicateUserName` and `DuplicateEmail`.
+
+**update-me.** `PATCH /api/User/update-me`: a user name that differs from one's own only in letter case is accepted (it
+was refused as `UserNameTaken`); another member's name in any case is still `UserNameTaken`. A refusal by the identity
+rules answers its own code (`InvalidUserName`, `DuplicateUserName`...), not `OperationFailed`. `UploadFailed` adds
+`field`: `ProfilePhoto` or `ProfileBanner`.
+
+**My works.** `totalAverageScore` in `GET /api/myworks`, `/api/myworks/{id}` and `/api/myworks/user/{userId}` has its
+fraction (`3.75`), like the other novel lists; it was a whole number.
+
+**Search.** `GET`/`POST /api/search/novels` with a genre (name or slug) that doesn't exist answers 404 `GenreNotFound`,
+as `GET /api/genre/{slug}/novels` does, instead of an empty list. Blank genre values are ignored.
+
+**Idempotent writes: 204 when already done** (a change of status). A write whose state is already as asked answers
+204 No Content, no body (it was 400 with the code in brackets):
+
+| Request | Already as asked |
+|---|---|
+| `POST /api/User/follow`, `DELETE /api/User/unfollow` | following (`AlreadyFollowing`) / not following (`NotFollowing`) |
+| `POST /api/comment/{id}/like`, `DELETE /api/comment/{id}/unlike` | liked (`AlreadyLiked`) / not liked, or the comment is gone (`NotLiked`) |
+| `POST /api/posts/{id}/like`, `DELETE /api/posts/{id}/unlike` | liked / not liked |
+| `POST /api/{novelId}/reviews/{id}/like`, `DELETE .../unlike` | liked / not liked |
+| `POST /api/readinglist/{id}/follow`, `DELETE .../unfollow` | following / not following |
+| `DELETE /api/readinglist/{id}/novels/{novelId}` | not in the list (`NotInList`; removing it was already 204) |
+| `DELETE /api/novel/{novelId}/privilege/subscription` | not subscribed (a subscriber is still refused: 400 `SubscriptionCannotBeCancelled`) |
+
+A request that changes the state answers 200 with its result as before, and a refusal 400 with its code
+(`CannotFollowSelf`, `PostNotFound`...). Adding a novel a list already has stays 400 `AlreadyInList`. Concurrent
+requests (a double tap, a retry) change the state once: the others get the 204, never a 500.
+
+**Counts include blocked members' comments** (a decision, not a bug). A paragraph's `commentsCount` (the reader's
+marker), a chapter's `totalCommentsCount` and a post's `commentsCount` count every comment, including those by members
+the viewer blocked, while the comment lists leave those out for the viewer. So a marker can say 3 while the sheet
+lists 2. The counts are stored per paragraph, chapter and post, shared by every viewer; subtracting per viewer would cost
+a query per item, so it isn't done. Clients should treat these counts as "about this many" and not as the list's
+length: page through the list with its own `totalItemsCount`, which does leave blocked members out.
