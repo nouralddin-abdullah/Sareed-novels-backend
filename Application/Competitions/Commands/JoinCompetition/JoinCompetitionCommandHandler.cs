@@ -1,4 +1,5 @@
 ﻿using Application.Competitions.DTOs;
+using Application.Common;
 using Application.Users;
 using AutoMapper;
 using Domain.Entities;
@@ -27,7 +28,7 @@ public class JoinCompetitionCommandHandler(
         // Check if competition is open for participation
         if (!competition.CanJoin())
         {
-            throw new ForbidException("This competition is not currently accepting participants", "CompetitionClosed");
+            throw new ForbidException("المشاركة في هذه المسابقة غير مفتوحة الآن", "CompetitionClosed");
         }
 
         // Get the novel
@@ -37,13 +38,13 @@ public class JoinCompetitionCommandHandler(
         // Verify ownership
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("You can only enter your own novels into a competition", "NotOwner");
+            throw new ForbidException("يمكنك المشاركة في المسابقة برواياتك فقط", "NotOwner");
         }
 
         // Check if novel is already in this competition
         if (await participantRepository.IsNovelParticipatingAsync(request.CompetitionId, request.NovelId))
         {
-            throw new ForbidException("This novel is already participating in this competition", "AlreadyParticipating");
+            throw new ForbidException("هذه الرواية مشاركة في المسابقة بالفعل", "AlreadyParticipating");
         }
 
         // Validate novel eligibility - Age check
@@ -53,7 +54,7 @@ public class JoinCompetitionCommandHandler(
             var novelAge = DateTime.UtcNow - novel.CreatedAt;
             if (novelAge > maxAge)
             {
-                throw new ForbidException($"Novel must be created within the last {competition.MaxNovelAgeDays} days to participate", "NovelTooOld");
+                throw new ForbidException($"يُشترط للمشاركة ألا يتجاوز عمر الرواية {ArabicCount.DaysObject(competition.MaxNovelAgeDays.Value)}", "NovelTooOld");
             }
         }
 
@@ -62,13 +63,13 @@ public class JoinCompetitionCommandHandler(
         var publishedChapterCount = chapters.Count();
         if (publishedChapterCount < competition.MinChapters)
         {
-            throw new ForbidException($"Novel must have at least {competition.MinChapters} published chapters to participate. Current: {publishedChapterCount}", "NotEnoughPublishedChapters");
+            throw new ForbidException($"يلزم للمشاركة {ArabicCount.PublishedChapters(competition.MinChapters)} على الأقل (المنشور الآن: {publishedChapterCount})", "NotEnoughPublishedChapters");
         }
 
         // Validate novel is published
         if (novel.IsDraft || novel.IsDeleted)
         {
-            throw new ForbidException("Only published novels can participate in competitions", "NovelNotPublished");
+            throw new ForbidException("يمكن المشاركة في المسابقات بالروايات المنشورة فقط", "NovelNotPublished");
         }
 
         // Create participant entry

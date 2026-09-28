@@ -30,4 +30,11 @@ public static class ArabicCount
 
     /// <summary>Chapters after a preposition or as an object: «فصل واحد», «فصلين», «3 فصول», «20 فصلًا».</summary>
     public static string ChaptersObject(long count) => Of(count, "فصل واحد", "فصلين", "{0} فصول", "{0} فصلًا", "{0} فصل");
+
+    /// <summary>Published chapters as a subject: «فصل منشور واحد», «فصلان منشوران», «5 فصول منشورة», «20 فصلًا منشورًا».</summary>
+    public static string PublishedChapters(long count) =>
+        Of(count, "فصل منشور واحد", "فصلان منشوران", "{0} فصول منشورة", "{0} فصلًا منشورًا", "{0} فصل منشور");
+
+    /// <summary>Days as an object: «يومًا واحدًا», «يومين», «7 أيام», «30 يومًا», «100 يوم».</summary>
+    public static string DaysObject(long count) => Of(count, "يومًا واحدًا", "يومين", "{0} أيام", "{0} يومًا", "{0} يوم");
 }

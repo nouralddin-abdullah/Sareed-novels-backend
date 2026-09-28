@@ -24,7 +24,7 @@ public class GetGenreRankingQueryHandler(IRankingRepository rankingRepository, I
         if (rankingType == null || !GenreRankingTypes.Contains(rankingType))
         {
             throw new NotFoundException(
-                $"Invalid ranking type '{request.RankingType}'. Valid types: {string.Join(", ", GenreRankingTypes)}",
+                $"نوع الترتيب «{request.RankingType}» غير صالح. الأنواع المتاحة: {string.Join("، ", GenreRankingTypes)}",
                 "InvalidRankingType");
         }
 

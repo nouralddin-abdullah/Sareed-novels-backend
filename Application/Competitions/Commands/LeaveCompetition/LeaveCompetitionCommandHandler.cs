@@ -23,7 +23,7 @@ public class LeaveCompetitionCommandHandler(
         // Can only leave during participation phase
         if (competition.Status != CompetitionStatus.Participation && competition.Status != CompetitionStatus.Upcoming)
         {
-            throw new ForbidException("Cannot leave competition after participation phase has ended", "ParticipationEnded");
+            throw new ForbidException("انتهت فترة المشاركة، فلا يمكن سحب الرواية من المسابقة", "ParticipationEnded");
         }
 
         var novel = await novelsRepository.GetOne(request.NovelId)
@@ -32,11 +32,11 @@ public class LeaveCompetitionCommandHandler(
         // Verify ownership
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("You can only remove your own novels from a competition", "NotOwner");
+            throw new ForbidException("يمكنك سحب رواياتك فقط من المسابقة", "NotOwner");
         }
 
         var participant = await participantRepository.GetByCompetitionAndNovelAsync(request.CompetitionId, request.NovelId)
-            ?? throw new NotFoundException("Novel is not participating in this competition", "NotParticipating");
+            ?? throw new NotFoundException("هذه الرواية غير مشاركة في المسابقة", "NotParticipating");
 
         await participantRepository.DeleteAsync(participant);
 

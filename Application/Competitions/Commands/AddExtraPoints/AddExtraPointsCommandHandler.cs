@@ -10,7 +10,7 @@ public class AddExtraPointsCommandHandler(
     public async Task<bool> Handle(AddExtraPointsCommand request, CancellationToken cancellationToken)
     {
         var participant = await participantRepository.GetByCompetitionAndNovelAsync(request.CompetitionId, request.NovelId)
-            ?? throw new NotFoundException("Participant not found in this competition", "NotParticipating");
+            ?? throw new NotFoundException("هذه الرواية غير مشاركة في المسابقة", "NotParticipating");
 
         participant.ExtraPoints = request.ExtraPoints;
         await participantRepository.UpdateAsync(participant);

@@ -22,7 +22,7 @@ public class CalculateGenreRankingsCommandHandler(IRankingService rankingService
             return new CalculateGenreRankingsResult
             {
                 Success = true,
-                Message = $"Rankings calculated successfully for genre {request.GenreId}",
+                Message = $"أُعيد حساب ترتيب التصنيف رقم {request.GenreId}",
                 GenreId = request.GenreId,
                 RankingType = request.RankingType,
                 ExecutionTimeMs = duration.TotalMilliseconds,
@@ -36,7 +36,7 @@ public class CalculateGenreRankingsCommandHandler(IRankingService rankingService
             {
                 Success = false,
                 Code = "OperationFailed",
-                Message = $"Failed to calculate rankings for genre {request.GenreId}",
+                Message = $"تعذّر حساب ترتيب التصنيف رقم {request.GenreId}",
                 GenreId = request.GenreId,
                 RankingType = request.RankingType,
                 ExecutionTimeMs = 0,
