@@ -11,8 +11,9 @@ namespace Sareed_novels_backend.Controllers;
 public class AppController(IMediator mediator) : ControllerBase
 {
     /// <summary>
-    /// What the mobile app checks at startup: the minimum and latest Android versions and the maintenance flag, from the
-    /// "AppConfig" configuration section (see README). Cacheable for five minutes, so a change reaches apps within that.
+    /// What the mobile apps check at startup: the minimum and latest Android and iOS versions and the maintenance flag,
+    /// from the "AppConfig" configuration section (see README). Cacheable for five minutes, so a change reaches apps
+    /// within that.
     /// </summary>
     [HttpGet("config")]
     [AllowAnonymous]
