@@ -325,6 +325,135 @@ public class WalletPoolsTests
         AssertPools(ledger.Pools(T0.AddDays(29)), bought: 0, held: 900, released: 0);
     }
 
+    /// <summary>The rules written out plainly, row by row, to check the fold against.</summary>
+    private static (decimal Bought, List<(Guid Id, DateTime At, decimal Left)> Held, decimal Released, decimal Deficit) Reference(
+        decimal balance, IReadOnlyList<LedgerEntry> rows, DateTime asOf)
+    {
+        decimal bought = 0, released = 0, deficit = 0;
+        var lots = new List<(Guid Id, DateTime At, decimal Left, int Seq)>();
+        var seq = 0;
+        var opening = balance - rows.Sum(r => r.Amount);
+        if (opening > 0) bought = opening; else deficit = -opening;
+
+        void Release(DateTime t)
+        {
+            released += lots.Where(l => l.At <= t).Sum(l => l.Left);
+            lots.RemoveAll(l => l.At <= t);
+        }
+
+        decimal Pay(decimal x)
+        {
+            var paid = Math.Min(x, deficit);
+            deficit -= paid;
+            return x - paid;
+        }
+
+        void Debit(decimal x, bool withdrawal)
+        {
+            decimal FromHeld(decimal want)
+            {
+                var got = 0m;
+                foreach (var i in lots.Select((l, i) => (l, i)).OrderByDescending(p => p.l.At).ThenByDescending(p => p.l.Seq).Select(p => p.i).ToList())
+                {
+                    var part = Math.Min(want - got, lots[i].Left);
+                    lots[i] = lots[i] with { Left = lots[i].Left - part };
+                    got += part;
+                }
+                return got;
+            }
+
+            foreach (var pool in withdrawal ? new[] { 'r', 'b', 'h' } : new[] { 'b', 'h', 'r' })
+            {
+                var take = pool switch
+                {
+                    'b' => Math.Min(x, bought),
+                    'r' => Math.Min(x, released),
+                    _ => FromHeld(x)
+                };
+                if (pool == 'b') bought -= take;
+                if (pool == 'r') released -= take;
+                x -= take;
+            }
+            deficit += x;
+        }
+
+        foreach (var row in rows.OrderBy(r => r.CreatedAt)) // the tests give every row its own instant
+        {
+            var at = row.CreatedAt < asOf ? row.CreatedAt : asOf;
+            Release(at);
+            if (row.Amount > 0 && TransactionType.IsEarning(row.Type))
+            {
+                var left = Pay(row.Amount);
+                if (left > 0 && row.AvailableAt > at) lots.Add((row.Id, row.AvailableAt!.Value, left, seq++));
+                else if (left > 0) released += left;
+            }
+            else if (row.Amount > 0)
+            {
+                bought += Pay(row.Amount);
+            }
+            else if (row.Type == TransactionType.EarningReversed)
+            {
+                var x = -row.Amount;
+                var i = lots.FindIndex(l => l.Id == row.ReversedTransactionId);
+                if (i >= 0)
+                {
+                    var taken = Math.Min(x, lots[i].Left);
+                    lots[i] = lots[i] with { Left = lots[i].Left - taken };
+                    x -= taken;
+                }
+                Debit(x, withdrawal: false);
+            }
+            else
+            {
+                Debit(-row.Amount, withdrawal: row.Type == TransactionType.WithdrawalApproved);
+            }
+        }
+        Release(asOf);
+        return (bought, lots.Where(l => l.Left > 0).OrderBy(l => l.At).ThenBy(l => l.Seq).Select(l => (l.Id, l.At, l.Left)).ToList(),
+            released, deficit);
+    }
+
+    [Fact]
+    public void The_fold_takes_from_the_same_pools_as_the_rules_written_out_plainly()
+    {
+        var random = new Random(2027);
+        for (var run = 0; run < 300; run++)
+        {
+            var ledger = new Ledger(opening: random.Next(-300, 800));
+            var at = T0;
+            var earnings = new List<LedgerEntry>();
+            for (var step = 0; step < 60; step++)
+            {
+                at = at.AddMinutes(random.Next(1, 60 * 24 * 4));
+                var amount = random.Next(1, 30) * 10m;
+                switch (random.Next(9))
+                {
+                    case 0: ledger.Add(TransactionType.RechargeApproved, amount, at); break;
+                    case 1: ledger.Add(TransactionType.EarningReversed, amount, at); break; // given back to whom paid
+                    case 2 or 3:
+                        // Holds of 30 days mostly, sometimes shorter or longer: lots don't always arrive in release order.
+                        var hold = random.Next(4) == 0 ? TimeSpan.FromDays(random.Next(0, 60)) : Hold;
+                        earnings.Add(ledger.Add(TransactionType.GiftReceived, amount, at, at + hold));
+                        break;
+                    case 4 or 5: ledger.Spend(amount, at); break;
+                    case 6: ledger.Add(TransactionType.PlayRefund, -amount, at); break;
+                    case 7 when earnings.Count > 0:
+                        ledger.Add(TransactionType.EarningReversed, -amount, at, reversed: earnings[random.Next(earnings.Count)].Id);
+                        break;
+                    case 8: ledger.Add(TransactionType.WithdrawalApproved, -amount, at); break;
+                }
+            }
+
+            foreach (var asOf in new[] { at.AddDays(-10), at, at.AddDays(45) })
+            {
+                var pools = ledger.Pools(asOf);
+                var expected = Reference(ledger.Balance, ledger.Rows, asOf);
+                Assert.Equal((expected.Bought, expected.Released, expected.Deficit), (pools.Bought, pools.Released, pools.Deficit));
+                Assert.Equal(expected.Held, pools.Held.Select(l => (l.EarningId, l.AvailableAt, l.Remaining)).ToList());
+            }
+        }
+    }
+
     [Fact]
     public void The_pools_always_add_up_to_the_balance_and_hold_nothing_while_something_is_owed()
     {

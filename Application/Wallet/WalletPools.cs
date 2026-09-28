@@ -96,11 +96,10 @@ public sealed class WalletPools
         }
     }
 
-    private sealed class Lot(Guid earningId, DateTime availableAt, decimal remaining, int order)
+    private sealed class Lot(Guid earningId, DateTime availableAt, decimal remaining)
     {
         public Guid EarningId { get; } = earningId;
         public DateTime AvailableAt { get; } = availableAt;
-        public int Order { get; } = order;
         public decimal Remaining { get; set; } = remaining;
     }
 
@@ -111,8 +110,13 @@ public sealed class WalletPools
 
     private sealed class Folding
     {
+        /// <summary>
+        /// The held lots from <see cref="head"/> on, by release (then by when they were earned): the next one released
+        /// first, the one released last at the end. Those before <see cref="head"/> are released.
+        /// </summary>
         private readonly List<Lot> lots = new();
-        private int lotsAdded;
+        private readonly Dictionary<Guid, Lot> held = new();
+        private int head;
         private decimal bought;
         private decimal released;
         private decimal deficit;
@@ -124,11 +128,23 @@ public sealed class WalletPools
 
         public void ReleaseUpTo(DateTime at)
         {
-            foreach (var lot in lots.Where(l => l.AvailableAt <= at).ToList())
+            for (; head < lots.Count && lots[head].AvailableAt <= at; head++)
             {
-                released += lot.Remaining;
-                lots.Remove(lot);
+                released += lots[head].Remaining;
+                held.Remove(lots[head].EarningId);
             }
+        }
+
+        private void Hold(Lot lot)
+        {
+            // Earned later, released later, as long as the hold doesn't shrink: then it goes before those released later.
+            var at = lots.Count;
+            while (at > head && lots[at - 1].AvailableAt > lot.AvailableAt)
+            {
+                at--;
+            }
+            lots.Insert(at, lot);
+            held[lot.EarningId] = lot;
         }
 
         public void Apply(LedgerEntry row, DateTime at)
@@ -150,7 +166,7 @@ public sealed class WalletPools
                 switch (row.AvailableAt)
                 {
                     case { } availableAt when availableAt > at:
-                        lots.Add(new Lot(row.Id, availableAt, left, lotsAdded++));
+                        Hold(new Lot(row.Id, availableAt, left));
                         break;
                     case not null:
                         released += left; // released at once: an earning from before the hold (AvailableAt = CreatedAt)
@@ -172,7 +188,7 @@ public sealed class WalletPools
             {
                 case TransactionType.EarningReversed:
                     // The author's side: that very earning, as far as it is still held and unspent.
-                    if (lots.Find(l => l.EarningId == row.ReversedTransactionId) is { } lot)
+                    if (row.ReversedTransactionId is { } earningId && held.TryGetValue(earningId, out var lot))
                     {
                         var taken = Math.Min(amount, lot.Remaining);
                         lot.Remaining -= taken;
@@ -227,16 +243,19 @@ public sealed class WalletPools
                 }
                 default:
                 {
+                    // The lot released last first; lots used up at the end are dropped, so the next debit starts at one
+                    // with something left.
                     var taken = 0m;
-                    foreach (var lot in lots.OrderByDescending(l => l.AvailableAt).ThenByDescending(l => l.Order))
+                    for (var i = lots.Count - 1; i >= head && taken < amount; i--)
                     {
-                        if (taken == amount)
-                        {
-                            break;
-                        }
-                        var part = Math.Min(amount - taken, lot.Remaining);
-                        lot.Remaining -= part;
+                        var part = Math.Min(amount - taken, lots[i].Remaining);
+                        lots[i].Remaining -= part;
                         taken += part;
+                    }
+                    while (lots.Count > head && lots[^1].Remaining == 0)
+                    {
+                        held.Remove(lots[^1].EarningId);
+                        lots.RemoveAt(lots.Count - 1);
                     }
                     return taken;
                 }
@@ -245,8 +264,8 @@ public sealed class WalletPools
 
         public WalletPools Result() => new(
             bought,
-            lots.Where(l => l.Remaining > 0)
-                .OrderBy(l => l.AvailableAt).ThenBy(l => l.Order)
+            lots.Skip(head)
+                .Where(l => l.Remaining > 0)
                 .Select(l => new HeldLot(l.EarningId, DateTime.SpecifyKind(l.AvailableAt, DateTimeKind.Utc), l.Remaining))
                 .ToList(),
             released,
