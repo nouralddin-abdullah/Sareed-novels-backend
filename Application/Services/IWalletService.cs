@@ -84,4 +84,14 @@ public interface IWalletService
     /// balance then take turns, so what is checked is still true when the request is saved or the points paid.
     /// </summary>
     Task<WithdrawableBalance> GetWithdrawableForUpdateAsync(string userId);
+
+    /// <summary>
+    /// The refund clawback (#22 rule 4), inside the caller's transaction (the one that took the refunded points back
+    /// from <paramref name="buyerId"/>). Walks the buyer's gifts and privilege subscriptions paid since
+    /// <paramref name="paidSince"/>, newest first, and takes back from each author the earning it became while that is
+    /// still on hold, until <paramref name="deficit"/> is covered: an EarningReversed row on the author (whose balance may
+    /// go below zero) and one on the buyer, whose balance gets the amount back so the loss isn't counted twice. Released
+    /// earnings are never touched. Returns what was reversed.
+    /// </summary>
+    Task<decimal> ReverseHeldEarningsAsync(string buyerId, Guid voidedPurchaseId, DateTime paidSince, decimal deficit);
 }

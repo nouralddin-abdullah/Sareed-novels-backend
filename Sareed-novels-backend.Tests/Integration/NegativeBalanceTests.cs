@@ -23,12 +23,13 @@ namespace Sareed_novels_backend.Tests.Integration;
 /// </summary>
 public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<SqlServerDatabase>
 {
-    private sealed class Request(SqlServerDatabase database) : IAsyncDisposable
+    private sealed class Request(SqlServerDatabase database, TimeProvider? clock = null) : IAsyncDisposable
     {
         public ApplicationDbContext Db { get; } = database.CreateContext();
         public TransactionManager Transactions => new(Db);
+        public TimeProvider Clock { get; } = clock ?? TimeProvider.System;
 
-        public WalletService Wallet => WalletTesting.Wallet(Db);
+        public WalletService Wallet => WalletTesting.Wallet(Db, Clock);
 
         public ValueTask DisposeAsync() => Db.DisposeAsync();
     }
@@ -53,7 +54,10 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
         return user;
     }
 
-    /// <summary>A reader who bought 1000 points on Google Play, spent 700 of them, and then got the purchase refunded.</summary>
+    /// <summary>
+    /// A reader who bought 1000 points on Google Play, spent 700 of them, and then got the purchase refunded after the
+    /// author's hold on that gift had ended (so the gift stays the author's, #22).
+    /// </summary>
     private async Task<(User Reader, User Author, Novel Novel)> ReaderWithRefundedPurchase()
     {
         var reader = await SeedUser(balance: 0m);
@@ -67,12 +71,14 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
 
         var google = new FakeGooglePlay();
         var purchase = google.Buy(reader.Id, "points_1000");
-        await using (var request = new Request(database))
+        var clock = new MutableClock(DateTime.UtcNow);
+        await using (var request = new Request(database, clock))
         {
             var play = PlayBilling(request, google);
             Assert.True((await play.VerifyPurchaseAsync(reader.Id, purchase.ProductId, purchase.Token, purchase.OrderId)).Success);
             await request.Wallet.TransferPointsAsync(reader.Id, author.Id, 700, TransactionType.GiftSent, TransactionType.GiftReceived, "s", "r");
-            Assert.True(await play.ApplyVoidAsync(new PlayVoidedPurchase(purchase.Token, purchase.OrderId, DateTime.UtcNow, 1, 0)));
+            clock.Advance(TimeSpan.FromDays(31));
+            Assert.True(await play.ApplyVoidAsync(new PlayVoidedPurchase(purchase.Token, purchase.OrderId, clock.UtcNow, 1, 0)));
         }
 
         Assert.Equal(-700m, await Balance(reader.Id));
@@ -81,7 +87,7 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
 
     private static PlayBillingService PlayBilling(Request request, FakeGooglePlay google) =>
         new(google.Connection(), google.Api(), new PlayPurchaseRepository(request.Db), new UserWalletRepository(request.Db),
-            new PointTransactionRepository(request.Db), request.Transactions, TimeProvider.System, NullLogger<PlayBillingService>.Instance);
+            new PointTransactionRepository(request.Db), request.Wallet, request.Transactions, request.Clock, NullLogger<PlayBillingService>.Instance);
 
     private async Task<decimal?> Balance(string userId)
     {
@@ -183,7 +189,8 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
     [Fact]
     public async Task A_withdrawal_requested_before_the_refund_cannot_be_approved_and_stays_pending()
     {
-        // An author earns 1500 points in gifts and asks to withdraw 1000; then points bought with a refunded purchase go.
+        // An author earns 1500 points in gifts and asks to withdraw 1000; then points bought with a refunded purchase go
+        // (after the hold on what they gave away with them, which therefore stays given).
         var author = await SeedUser(balance: 1500m);
         var admin = await SeedUser(balance: null);
         var google = new FakeGooglePlay();
@@ -199,16 +206,18 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
             db.WithdrawalRequests.Add(withdrawal);
             await db.SaveChangesAsync();
         }
-        await using (var request = new Request(database))
+        var clock = new MutableClock(DateTime.UtcNow);
+        await using (var request = new Request(database, clock))
         {
             var play = PlayBilling(request, google);
             Assert.True((await play.VerifyPurchaseAsync(author.Id, purchase.ProductId, purchase.Token, null)).Success); // 4000
             await request.Wallet.TransferPointsAsync(author.Id, admin.Id, 3500, TransactionType.GiftSent, TransactionType.GiftReceived, "s", "r"); // 500
-            await play.ApplyVoidAsync(new PlayVoidedPurchase(purchase.Token, purchase.OrderId, DateTime.UtcNow, 1, 0)); // -2000
+            clock.Advance(TimeSpan.FromDays(31));
+            await play.ApplyVoidAsync(new PlayVoidedPurchase(purchase.Token, purchase.OrderId, clock.UtcNow, 1, 0)); // -2000
         }
         Assert.Equal(-2000m, await Balance(author.Id));
 
-        await using (var request = new Request(database))
+        await using (var request = new Request(database, clock))
         {
             var result = await new ApproveWithdrawalCommandHandler(NullLogger<ApproveWithdrawalCommandHandler>.Instance, SignedIn(admin),
                     new WithdrawalRequestRepository(request.Db), request.Wallet, request.Transactions)

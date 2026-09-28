@@ -1,4 +1,5 @@
 using Application.Services;
+using Application.Wallet;
 using Application.Wallet.DTOs;
 using Domain.Constants;
 using Domain.Entities;
@@ -18,7 +19,8 @@ namespace Infrastructure.PlayBilling;
 /// <see cref="RetryConsumptionsAsync"/> (background worker) tries again with backoff, because Google refunds a purchase
 /// nobody consumed or acknowledged within three days. The app must never consume or acknowledge.</item>
 /// <item>Voids: <see cref="SyncVoidedPurchasesAsync"/> polls the Voided Purchases API and <see cref="ApplyVoidAsync"/>
-/// takes the points back, even below zero, once per token.</item>
+/// takes the points back, even below zero, once per token; what the buyer's balance can't cover is taken back from the
+/// authors' earnings those points paid for, while still on hold (#22).</item>
 /// </list>
 /// </summary>
 public class PlayBillingService(
@@ -27,6 +29,7 @@ public class PlayBillingService(
     IPlayPurchaseRepository purchases,
     IUserWalletRepository wallets,
     IPointTransactionRepository ledger,
+    IWalletService wallet,
     ITransactionManager transactions,
     TimeProvider clock,
     ILogger<PlayBillingService> logger) : IPlayBillingService
@@ -499,14 +502,17 @@ public class PlayBillingService(
         }
 
         await wallets.EnsureExistsAsync(userId);
-        var balance = await transactions.InTransactionAsync(async () =>
+        var outcome = await transactions.InTransactionAsync(async () =>
         {
             // Only the request that moves the row from Credited takes the points back.
             if (!await purchases.TryMarkVoidedAsync(purchase.Id, voided.VoidedAt, voided.VoidedReason, voided.VoidedSource))
             {
-                return (decimal?)null;
+                return ((decimal Balance, decimal Reversed)?)null;
             }
 
+            // Held until the commit: the clawback below changes this wallet again, and SQL Server lets go of the row's
+            // index key between two UPDATEs, where a second refund of this buyer's could slip in and deadlock with it.
+            await wallets.LockBalanceAsync(userId);
             var after = await wallets.DebitAllowingNegativeAsync(userId, purchase.Points);
             await ledger.CreateAsync(new PointTransaction
             {
@@ -520,17 +526,23 @@ public class PlayBillingService(
                 RelatedRequestId = purchase.Id,
                 CreatedAt = Now()
             });
-            return after;
+
+            // What the balance couldn't cover was given away: take it back from the earnings those points paid for, as
+            // long as they are still on hold, and give it back to the buyer (#22 rule 4). Same transaction: all or nothing.
+            var reversed = await wallet.ReverseHeldEarningsAsync(userId, purchase.Id, purchase.CreatedAt,
+                EarningsClawback.Deficit(purchase.Points, after));
+            return (after + reversed, reversed);
         }, CancellationToken.None);
 
-        if (balance is null)
+        if (outcome is not { } result)
         {
             return false;
         }
 
+        var (balance, reversed) = result;
         logger.LogWarning(
-            "Took back {Points} points from user {UserId}: Google voided Play order {OrderId} (purchase {PurchaseId}, reason {Reason}, source {Source}). Balance now {Balance}{Blocked}",
-            purchase.Points, userId, purchase.OrderId, purchase.Id, voided.VoidedReason, voided.VoidedSource, balance,
+            "Took back {Points} points from user {UserId}: Google voided Play order {OrderId} (purchase {PurchaseId}, reason {Reason}, source {Source}). {Reversed} of them were taken back from authors' earnings still on hold. Balance now {Balance}{Blocked}",
+            purchase.Points, userId, purchase.OrderId, purchase.Id, voided.VoidedReason, voided.VoidedSource, reversed, balance,
             balance < 0 ? ", below zero: spending is blocked until it is topped up" : "");
         return true;
     }

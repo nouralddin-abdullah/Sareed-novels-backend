@@ -40,7 +40,7 @@ public class PlayBillingTests(SqlServerDatabase database) : IClassFixture<SqlSer
         public ApplicationDbContext Db { get; } = database.CreateContext();
 
         public PlayBillingService Service => new(connection, google.Api(connection), new PlayPurchaseRepository(Db),
-            new UserWalletRepository(Db), new PointTransactionRepository(Db), new TransactionManager(Db), clock,
+            new UserWalletRepository(Db), new PointTransactionRepository(Db), WalletTesting.Wallet(Db, clock), new TransactionManager(Db), clock,
             NullLogger<PlayBillingService>.Instance);
 
         public ValueTask DisposeAsync() => Db.DisposeAsync();
@@ -660,12 +660,13 @@ public class PlayBillingTests(SqlServerDatabase database) : IClassFixture<SqlSer
                 .TransferPointsAsync(user.Id, author.Id, 800, TransactionType.GiftSent, TransactionType.GiftReceived, "s", "r");
         }
 
-        clock.Advance(TimeSpan.FromDays(2));
+        // A chargeback after the author's hold ended (a refund within it takes the gift back: EarningsHoldTests).
+        clock.Advance(TimeSpan.FromDays(31));
         google.Void(purchase.Token, recordedAt: clock.UtcNow.AddHours(-1), reason: 1, source: 0);
         Assert.Equal(1, await SyncVoided());
 
         Assert.Equal(-800m, await Balance(user.Id));
-        Assert.Equal(800m, await Balance(author.Id)); // the author keeps the gift
+        Assert.Equal(800m, await Balance(author.Id)); // the author keeps the gift: it was released
         var refund = (await Ledger(user.Id)).Single(t => t.Type == TransactionType.PlayRefund);
         Assert.Equal((-1000m, 200m, -800m), (refund.Amount, refund.BalanceBefore, refund.BalanceAfter));
         Assert.Contains(purchase.OrderId!, refund.Description);
@@ -877,7 +878,8 @@ public class PlayBillingTests(SqlServerDatabase database) : IClassFixture<SqlSer
         {
             var db = scope.GetRequiredService<ApplicationDbContext>();
             return new PlayBillingService(connection, google.Api(connection), new PlayPurchaseRepository(db), new UserWalletRepository(db),
-                new PointTransactionRepository(db), new TransactionManager(db), clock, NullLogger<PlayBillingService>.Instance);
+                new PointTransactionRepository(db), WalletTesting.Wallet(db, clock), new TransactionManager(db), clock,
+                NullLogger<PlayBillingService>.Instance);
         });
         provider = services.BuildServiceProvider();
         return new PlayBillingWorker(provider.GetRequiredService<IServiceScopeFactory>(), connection, clock, NullLogger<PlayBillingWorker>.Instance);

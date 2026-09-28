@@ -21,7 +21,9 @@ namespace Sareed_novels_backend.Tests.Integration;
 /// <summary>
 /// Payouts (#22) against SQL Server, through the real handlers and services, with a clock the tests move: only earnings
 /// can be withdrawn, 30 days after they were received; bought points never; pending requests reserve their points and
-/// approval checks again. The arithmetic alone: Unit/EarningsHoldRulesTests.
+/// approval checks again; a Google Play refund takes back the earnings still on hold that the refunded points paid for,
+/// newest first, up to what the buyer's balance can't cover, and gives that back to the buyer. The arithmetic alone:
+/// Unit/EarningsHoldRulesTests.
 /// </summary>
 public class EarningsHoldTests(SqlServerDatabase database) : IClassFixture<SqlServerDatabase>
 {
@@ -38,7 +40,7 @@ public class EarningsHoldTests(SqlServerDatabase database) : IClassFixture<SqlSe
         public WalletService Wallet => WalletTesting.Wallet(Db, clock);
 
         public PlayBillingService Play => new(google.Connection(), google.Api(), new PlayPurchaseRepository(Db),
-            new UserWalletRepository(Db), new PointTransactionRepository(Db), Transactions, clock,
+            new UserWalletRepository(Db), new PointTransactionRepository(Db), Wallet, Transactions, clock,
             NullLogger<PlayBillingService>.Instance);
 
         public SendGiftCommandHandler SendGift(User sender) => new(NullLogger<SendGiftCommandHandler>.Instance,
@@ -112,6 +114,22 @@ public class EarningsHoldTests(SqlServerDatabase database) : IClassFixture<SqlSe
         var result = await request.Play.VerifyPurchaseAsync(user.Id, productId, purchase.Token, purchase.OrderId);
         Assert.True(result.Success, result.Error?.ToString());
         return purchase;
+    }
+
+    /// <summary>Google voided the purchase (a refund) and the server applied it.</summary>
+    private async Task Refund(FakePlayPurchase purchase) => Assert.True(await ApplyVoid(purchase));
+
+    /// <summary>The server applies Google's void; false when it had been applied already.</summary>
+    private async Task<bool> ApplyVoid(FakePlayPurchase purchase)
+    {
+        await using var request = NewRequest();
+        return await request.Play.ApplyVoidAsync(new PlayVoidedPurchase(purchase.Token, purchase.OrderId, clock.UtcNow, 1, 0));
+    }
+
+    private async Task<Guid> PlayPurchaseId(FakePlayPurchase purchase)
+    {
+        await using var db = database.CreateContext();
+        return await db.PlayPurchases.Where(p => p.PurchaseToken == purchase.Token).Select(p => p.Id).SingleAsync();
     }
 
     /// <summary>A gift of exactly <paramref name="points"/> to the novel, through the gift handler.</summary>
@@ -361,6 +379,27 @@ public class EarningsHoldTests(SqlServerDatabase database) : IClassFixture<SqlSe
     }
 
     [Fact]
+    public async Task Approval_refuses_what_a_refund_took_between_the_request_and_the_approval()
+    {
+        var admin = await SeedUser();
+        var author = await AuthorWithReleasedEarnings(1000);
+        Assert.True((await RequestWithdrawal(author, 1000)).Success);
+
+        // Then the author buys points, gives them away and has the purchase refunded: the earnings paid for the gift.
+        var purchase = await BuyOnPlay(author);
+        Assert.True(await Gift(author, await SeedNovel(await SeedUser()), 1000));
+        await Refund(purchase);
+        Assert.Equal(0m, await Balance(author));
+
+        var approval = await Approve(admin, Assert.Single(await Withdrawals(author)).Id);
+
+        Assert.False(approval.Success);
+        Assert.Equal(WithdrawalMessages.NotWithdrawableCode, approval.Code);
+        Assert.Equal(RequestStatus.Pending, Assert.Single(await Withdrawals(author)).Status);
+        Assert.Equal(0m, await Balance(author));
+    }
+
+    [Fact]
     public async Task An_approved_withdrawal_is_paid_and_counts_as_withdrawn()
     {
         var admin = await SeedUser();
@@ -371,6 +410,160 @@ public class EarningsHoldTests(SqlServerDatabase database) : IClassFixture<SqlSe
 
         var wallet = await Withdrawable(author);
         Assert.Equal((1500m, 1000m, 0m, 1500m), (wallet.Balance, wallet.Withdrawn, wallet.PendingWithdrawals, wallet.Withdrawable));
+        await AssertLedgerAddsUp(author);
+    }
+
+    // ===== Rule 4: a refund takes back held earnings =====
+
+    [Fact]
+    public async Task A_refund_takes_back_held_earnings_newest_first_up_to_the_deficit_and_gives_it_back_to_the_buyer()
+    {
+        var buyer = await SeedUser();
+        var (a, b, c, d) = (await SeedUser(), await SeedUser(), await SeedUser(), await SeedUser());
+        var (novelA, novelB, novelC, novelD) = (await SeedNovel(a), await SeedNovel(b), await SeedNovel(c), await SeedNovel(d));
+
+        await TopUp(buyer, 300);
+        Assert.True(await Gift(buyer, novelD, 100)); // before the purchase: not paid with it
+        clock.Advance(TimeSpan.FromMinutes(1));
+        var purchase = await BuyOnPlay(buyer); // 1200
+        clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.True(await Gift(buyer, novelA, 400));
+        clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.True(await Gift(buyer, novelB, 500));
+        clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.True(await Gift(buyer, novelC, 200)); // 100 left
+        clock.Advance(TimeSpan.FromDays(3));
+
+        await Refund(purchase); // 100 - 1000 = -900: C's 200, B's 500, then 200 of A's 400
+
+        Assert.Equal(0m, await Balance(buyer));
+        Assert.Equal((200m, 0m, 0m, 100m), (await Balance(a), await Balance(b), await Balance(c), await Balance(d)));
+
+        var purchaseId = await PlayPurchaseId(purchase);
+        foreach (var (author, novel, taken) in new[] { (a, novelA, 200m), (b, novelB, 500m), (c, novelC, 200m) })
+        {
+            var ledger = await Ledger(author);
+            var earning = Assert.Single(ledger, t => t.Type == TransactionType.GiftReceived);
+            var reversal = Assert.Single(ledger, t => t.Type == TransactionType.EarningReversed);
+            Assert.Equal(-taken, reversal.Amount);
+            Assert.Equal(purchaseId, reversal.RelatedRequestId);
+            Assert.Equal(earning.Id, reversal.ReversedTransactionId);
+            Assert.Equal(novel.Id, reversal.NovelId);
+            Assert.Null(reversal.AvailableAt);
+            Assert.Equal($"أُلغيت أرباح {taken:0} نقطة لأن عملية الشراء التي جاءت منها استُرد مبلغها", reversal.Description);
+            await AssertLedgerAddsUp(author);
+        }
+        Assert.DoesNotContain(await Ledger(d), t => t.Type == TransactionType.EarningReversed);
+
+        var buyerLedger = await Ledger(buyer);
+        Assert.Equal(-1000m, Assert.Single(buyerLedger, t => t.Type == TransactionType.PlayRefund).Amount);
+        var returned = buyerLedger.Where(t => t.Type == TransactionType.EarningReversed).OrderBy(t => t.Amount).ToList();
+        Assert.Equal([200m, 200m, 500m], returned.Select(t => t.Amount));
+        Assert.All(returned, t => Assert.Equal(purchaseId, t.RelatedRequestId));
+        Assert.Contains(returned, t => t.Description == "استُرجعت 500 نقطة من أرباح الكاتب وأُعيدت إلى رصيدك، لأن عملية الشراء التي دفعت منها استُرد مبلغها");
+        await AssertLedgerAddsUp(buyer);
+
+        // A keeps what wasn't needed: on hold until its release, then withdrawable.
+        var held = await Withdrawable(a);
+        Assert.Equal((0m, 200m), (held.Withdrawable, held.PendingEarnings));
+        clock.Advance(Hold);
+        Assert.Equal(200m, (await Withdrawable(a)).Withdrawable);
+        Assert.Equal(0m, (await Withdrawable(c)).PendingEarnings + (await Withdrawable(c)).Withdrawable);
+    }
+
+    [Fact]
+    public async Task Earnings_whose_hold_ended_are_not_taken_back()
+    {
+        var buyer = await SeedUser();
+        var (a, b) = (await SeedUser(), await SeedUser());
+        var purchase = await BuyOnPlay(buyer);
+        Assert.True(await Gift(buyer, await SeedNovel(a), 600));
+        clock.Advance(Hold + TimeSpan.FromMinutes(1)); // A's gift is released
+        Assert.True(await Gift(buyer, await SeedNovel(b), 300));
+
+        await Refund(purchase); // 100 - 1000 = -900: only B's 300 is still on hold
+
+        Assert.Equal((-600m, 600m, 0m), (await Balance(buyer), await Balance(a), await Balance(b)));
+        Assert.DoesNotContain(await Ledger(a), t => t.Type == TransactionType.EarningReversed);
+        Assert.Equal(600m, (await Withdrawable(a)).Withdrawable);
+        await AssertLedgerAddsUp(buyer);
+    }
+
+    [Fact]
+    public async Task A_refund_the_buyers_balance_covers_takes_nothing_back()
+    {
+        var (buyer, author) = (await SeedUser(), await SeedUser());
+        await TopUp(buyer, 2000);
+        var purchase = await BuyOnPlay(buyer);
+        Assert.True(await Gift(buyer, await SeedNovel(author), 800));
+
+        await Refund(purchase); // 2200 - 1000 = 1200
+
+        Assert.Equal((1200m, 800m), (await Balance(buyer), await Balance(author)));
+        Assert.DoesNotContain(await Ledger(author), t => t.Type == TransactionType.EarningReversed);
+        Assert.DoesNotContain(await Ledger(buyer), t => t.Type == TransactionType.EarningReversed);
+        Assert.Equal(800m, (await Withdrawable(author)).PendingEarnings);
+    }
+
+    [Fact]
+    public async Task A_refunded_privilege_subscription_is_taken_back_from_the_author()
+    {
+        var (buyer, author) = (await SeedUser(), await SeedUser());
+        var novel = await SeedNovel(author, privilegeCost: 700);
+        var purchase = await BuyOnPlay(buyer);
+        await using (var request = NewRequest())
+        {
+            Assert.True((await request.Privileges.SubscribeToPrivilegeAsync(novel.Id, buyer.Id)).Success);
+        }
+
+        await Refund(purchase); // 300 - 1000 = -700
+
+        Assert.Equal((0m, 0m), (await Balance(buyer), await Balance(author)));
+        var revenue = Assert.Single(await Ledger(author), t => t.Type == TransactionType.PrivilegeRevenue);
+        var reversal = Assert.Single(await Ledger(author), t => t.Type == TransactionType.EarningReversed);
+        Assert.Equal((-700m, revenue.Id, novel.Id), (reversal.Amount, reversal.ReversedTransactionId!.Value, reversal.NovelId!.Value));
+        var held = await Withdrawable(author);
+        Assert.Equal((0m, 0m, (DateTime?)null), (held.Withdrawable, held.PendingEarnings, held.NextReleaseAt));
+    }
+
+    [Fact]
+    public async Task An_author_who_already_spent_a_reversed_earning_goes_below_zero_and_cannot_spend()
+    {
+        var (buyer, author, nextAuthor) = (await SeedUser(), await SeedUser(), await SeedUser());
+        var purchase = await BuyOnPlay(buyer);
+        Assert.True(await Gift(buyer, await SeedNovel(author), 1000));
+        var onward = await SeedNovel(nextAuthor);
+        Assert.True(await Gift(author, onward, 1000)); // the author gives it all away
+
+        await Refund(purchase);
+
+        Assert.Equal((0m, -1000m), (await Balance(buyer), await Balance(author)));
+        Assert.False(await Gift(author, onward, 1)); // a negative balance refuses every kind of spending
+        Assert.Equal(0m, (await Withdrawable(author)).Withdrawable);
+        await AssertLedgerAddsUp(author);
+
+        // Only the buyer's own payments are walked: the author's gift onward stays with the next author.
+        Assert.Equal(1000m, await Balance(nextAuthor));
+        Assert.DoesNotContain(await Ledger(nextAuthor), t => t.Type == TransactionType.EarningReversed);
+    }
+
+    [Fact]
+    public async Task Refunds_applied_at_the_same_moment_never_take_back_more_than_an_earning()
+    {
+        var (buyer, author) = (await SeedUser(), await SeedUser());
+        var first = await BuyOnPlay(buyer);
+        var second = await BuyOnPlay(buyer);
+        Assert.True(await Gift(buyer, await SeedNovel(author), 2000)); // one earning of 2000, paid with both
+
+        var applied = await Task.WhenAll(Task.Run(() => ApplyVoid(first)), Task.Run(() => ApplyVoid(second)), Task.Run(() => ApplyVoid(first)));
+
+        Assert.Equal(2, applied.Count(a => a)); // the first one reported twice is applied once
+        Assert.Equal((0m, 0m), (await Balance(buyer), await Balance(author)));
+        var reversals = (await Ledger(author)).Where(t => t.Type == TransactionType.EarningReversed).ToList();
+        Assert.Equal(-2000m, reversals.Sum(t => t.Amount));
+        Assert.Equal(2, reversals.Count);
+        Assert.Equal(2000m, (await Ledger(buyer)).Where(t => t.Type == TransactionType.EarningReversed).Sum(t => t.Amount));
+        await AssertLedgerAddsUp(buyer);
         await AssertLedgerAddsUp(author);
     }
 }

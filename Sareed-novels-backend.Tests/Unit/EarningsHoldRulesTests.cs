@@ -1,12 +1,13 @@
 using Application.Services;
 using Application.Wallet;
 using Domain.Constants;
+using Domain.Repositories;
 
 namespace Sareed_novels_backend.Tests.Unit;
 
 /// <summary>
-/// The arithmetic of #22: what can be withdrawn (rule 3) and the Arabic refusal. The same rules against SQL Server:
-/// Integration/EarningsHoldTests.
+/// The arithmetic of #22: what can be withdrawn (rule 3), how a refund's deficit is taken back from held earnings
+/// (rule 4), and the Arabic refusal. The same rules against SQL Server: Integration/EarningsHoldTests.
 /// </summary>
 public class EarningsHoldRulesTests
 {
@@ -88,6 +89,50 @@ public class EarningsHoldRulesTests
         {
             Assert.False(TransactionType.IsEarning(type), type);
         }
+    }
+
+    // ===== Rule 4: the refund clawback =====
+
+    private static HeldEarning Held(decimal remaining, string author = "author") =>
+        new(Guid.NewGuid(), author, remaining, null, null, null, Now);
+
+    [Theory]
+    [InlineData(1000, 200, 0)] // the balance covered it
+    [InlineData(1000, 0, 0)]
+    [InlineData(1000, -700, 700)]
+    [InlineData(1000, -1000, 1000)]
+    [InlineData(1000, -1500, 1000)] // 500 was owed already: only this refund's part
+    public void The_deficit_is_how_far_below_zero_this_refund_took_the_balance(decimal refunded, decimal balanceAfter, decimal deficit) =>
+        Assert.Equal(deficit, EarningsClawback.Deficit(refunded, balanceAfter));
+
+    [Fact]
+    public void Newest_payments_are_taken_back_first_and_only_up_to_the_deficit()
+    {
+        var (newest, middle, oldest) = (Held(300, "a"), Held(500, "b"), Held(800, "c"));
+
+        var reversals = EarningsClawback.Allocate(700, [newest, middle, oldest]);
+
+        Assert.Equal(new[] { (newest, 300m), (middle, 400m) }, reversals);
+    }
+
+    [Fact]
+    public void Earnings_with_nothing_left_are_skipped()
+    {
+        var (reversedAlready, partly, whole) = (Held(0), Held(50), Held(500));
+
+        var reversals = EarningsClawback.Allocate(100, [reversedAlready, partly, whole]);
+
+        Assert.Equal(new[] { (partly, 50m), (whole, 50m) }, reversals);
+    }
+
+    [Fact]
+    public void A_deficit_larger_than_everything_on_hold_takes_all_of_it_and_nothing_takes_nothing()
+    {
+        var (a, b) = (Held(200), Held(300));
+
+        Assert.Equal(new[] { (a, 200m), (b, 300m) }, EarningsClawback.Allocate(10_000, [a, b]));
+        Assert.Empty(EarningsClawback.Allocate(0, [a, b]));
+        Assert.Empty(EarningsClawback.Allocate(500, []));
     }
 
     // ===== The refusal, in Arabic =====

@@ -1,4 +1,5 @@
 ﻿using Application.Services;
+using Application.Wallet;
 using Domain.Constants;
 using Domain.Entities;
 using Domain.Exceptions;
@@ -172,12 +173,64 @@ public class WalletService(
             earnings.Held, earnings.NextReleaseAt, HoldDays, now);
     }
 
+    public async Task<decimal> ReverseHeldEarningsAsync(string buyerId, Guid voidedPurchaseId, DateTime paidSince, decimal deficit)
+    {
+        if (deficit <= 0)
+        {
+            return 0;
+        }
+
+        return await transactionManager.InTransactionAsync(async () =>
+        {
+            // The buyer's wallet stays locked until the commit (the caller's refund locked it first): a second refund of
+            // theirs waits for this one and then sees what it reversed, so no earning is taken back twice.
+            await walletRepository.LockBalanceAsync(buyerId);
+            var held = await transactionRepository.GetHeldEarningsPaidByAsync(buyerId, paidSince, Now());
+            var reversals = EarningsClawback.Allocate(deficit, held);
+
+            // Each author's wallet is locked before it changes (it may change more than once here), in a fixed order so
+            // that clawbacks sharing authors take their locks the same way round.
+            foreach (var authorId in reversals.Select(r => r.Earning.AuthorId).Distinct().Order(StringComparer.Ordinal))
+            {
+                await walletRepository.LockBalanceAsync(authorId);
+            }
+
+            var reversed = 0m;
+            foreach (var (earning, amount) in reversals)
+            {
+                var details = new TransactionDetails(earning.NovelId, earning.GiftId, earning.GiftCount);
+
+                // Below zero if the author already spent it: a negative balance refuses every kind of spending.
+                var authorAfter = await walletRepository.DebitAllowingNegativeAsync(earning.AuthorId, amount);
+                await RecordAsync(earning.AuthorId, -amount, authorAfter, TransactionType.EarningReversed,
+                    TransactionDescriptions.EarningReversed(amount), voidedPurchaseId, details, earning.EarningId);
+
+                var buyerAfter = await walletRepository.CreditAsync(buyerId, amount);
+                await RecordAsync(buyerId, amount, buyerAfter, TransactionType.EarningReversed,
+                    TransactionDescriptions.EarningReversalReturned(amount), voidedPurchaseId, details, earning.EarningId);
+
+                reversed += amount;
+                logger.LogWarning(
+                    "Took back {Amount} points of earning {EarningId} from author {AuthorId} (balance now {AuthorBalance}): purchase {PurchaseId} that paid for it was refunded; returned to buyer {BuyerId} (balance now {BuyerBalance})",
+                    amount, earning.EarningId, earning.AuthorId, authorAfter, voidedPurchaseId, buyerId, buyerAfter);
+            }
+
+            if (reversed < deficit)
+            {
+                logger.LogWarning(
+                    "Refund of purchase {PurchaseId} left buyer {BuyerId} {Uncovered} points short that no earning still on hold could cover",
+                    voidedPurchaseId, buyerId, deficit - reversed);
+            }
+            return reversed;
+        });
+    }
+
     private async Task<decimal> DebitOrThrowAsync(string userId, decimal amount) =>
         await walletRepository.TryDebitAsync(userId, amount)
         ?? throw new InsufficientBalanceException(amount);
 
     private Task RecordAsync(string userId, decimal signedAmount, decimal balanceAfter, string type, string description, Guid? relatedRequestId,
-        TransactionDetails? details)
+        TransactionDetails? details, Guid? reversedTransactionId = null)
     {
         var now = Now();
         return transactionRepository.CreateAsync(new PointTransaction
@@ -195,6 +248,7 @@ public class WalletService(
             GiftCount = details?.GiftCount,
             // Earnings are held; everything else has no hold.
             AvailableAt = TransactionType.IsEarning(type) ? now.AddDays(HoldDays) : null,
+            ReversedTransactionId = reversedTransactionId,
             CreatedAt = now
         });
     }

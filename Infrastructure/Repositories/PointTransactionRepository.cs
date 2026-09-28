@@ -88,6 +88,43 @@ public class PointTransactionRepository(ApplicationDbContext dbContext) : IPoint
             nextReleaseAt is { } next ? DateTime.SpecifyKind(next, DateTimeKind.Utc) : null);
     }
 
+    public async Task<IReadOnlyList<HeldEarning>> GetHeldEarningsPaidByAsync(string buyerId, DateTime paidSince, DateTime now)
+    {
+        // Both rows of a gift or subscription share RelatedRequestId (the GiftTransaction or subscription), which pairs
+        // the reader's payment with the author's earning.
+        var rows = await (
+                from paid in dbContext.PointTransactions.AsNoTracking()
+                where paid.UserId == buyerId
+                      && (paid.Type == TransactionType.GiftSent || paid.Type == TransactionType.PrivilegeSubscription)
+                      && paid.CreatedAt >= paidSince
+                      && paid.RelatedRequestId != null
+                join earning in dbContext.PointTransactions.AsNoTracking() on paid.RelatedRequestId equals earning.RelatedRequestId
+                where earning.UserId != buyerId
+                      && ((paid.Type == TransactionType.GiftSent && earning.Type == TransactionType.GiftReceived)
+                          || (paid.Type == TransactionType.PrivilegeSubscription && earning.Type == TransactionType.PrivilegeRevenue))
+                      && earning.AvailableAt > now
+                orderby paid.CreatedAt descending, paid.Id descending
+                select new
+                {
+                    earning.Id,
+                    earning.UserId,
+                    earning.Amount,
+                    earning.NovelId,
+                    earning.GiftId,
+                    earning.GiftCount,
+                    PaidAt = paid.CreatedAt,
+                    Reversed = dbContext.PointTransactions
+                        .Where(r => r.ReversedTransactionId == earning.Id && r.UserId == earning.UserId
+                                    && r.Type == TransactionType.EarningReversed && r.Amount < 0)
+                        .Sum(r => -r.Amount)
+                })
+            .ToListAsync();
+
+        return rows
+            .Select(r => new HeldEarning(r.Id, r.UserId, r.Amount - r.Reversed, r.NovelId, r.GiftId, r.GiftCount, r.PaidAt))
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<PointTransaction>> GetEarningReversalsAsync(IReadOnlyCollection<string> userIds, DateTime since, int perUser)
     {
         if (userIds.Count == 0)
