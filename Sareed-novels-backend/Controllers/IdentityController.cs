@@ -60,9 +60,14 @@ namespace Sareed_novels_backend.Controllers
             return Ok(response);
         }
 
+        /// <summary>
+        /// Google sign-in for the mobile app: Google Sign-In on Android hands the app an ID token, which it posts here
+        /// ({"idToken"}) and gets the same answer as /Login. The website uses the authorization code flow instead
+        /// (/google-callback), which redirects back to the site, so it can't serve the app. Refusals are 403
+        /// GoogleTokenInvalid, 403 GoogleEmailNotVerified, 403 AccountSuspended and 400 GoogleSignInFailed.
+        /// </summary>
         [HttpPost("google-login")]
         [EnableRateLimiting(RateLimitPolicies.Auth)]
-        [Obsolete("Use Authorization Code Flow via /google-callback instead")]
         public async Task<IActionResult> GoogleLogin(GoogleLoginCommand command)
         {
             var response = await mediator.Send(command);
