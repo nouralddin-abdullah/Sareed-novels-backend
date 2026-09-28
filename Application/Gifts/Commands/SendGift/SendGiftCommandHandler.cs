@@ -88,8 +88,10 @@ public class SendGiftCommandHandler(
             // on a DbContext from a new scope, so it covered none of these writes.)
             // Both ledger rows point at the gift record: that pairs the reader's payment with the author's earning, which
             // a refund of the points behind it takes back while it is still on hold (#22).
+            // If SQL Server picks it as a deadlock victim, none of it happened, and it is sent once more in a new
+            // transaction (#27): the reader is charged once either way.
             var giftTransactionId = Guid.NewGuid();
-            giftTransaction = await transactionManager.InTransactionAsync(async () =>
+            giftTransaction = await transactionManager.InNewTransactionAsync(async _ =>
             {
                 await walletService.TransferPointsAsync(
                     fromUserId: currentUser.Id,
@@ -116,7 +118,7 @@ public class SendGiftCommandHandler(
                 };
                 await giftTransactionRepository.CreateTransaction(record);
                 return record;
-            }, cancellationToken);
+            }, attempts: 2, cancellationToken);
         }
         catch (InsufficientBalanceException)
         {

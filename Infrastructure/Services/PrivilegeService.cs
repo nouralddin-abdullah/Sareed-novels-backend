@@ -614,11 +614,12 @@ public class PrivilegeService(
         
         // Payment and subscription commit together or not at all. Both ledger rows point at the subscription: that pairs
         // the reader's payment with the author's earning, which a refund of the points behind it takes back while it is
-        // still on hold (#22).
+        // still on hold (#22). If SQL Server picks it as a deadlock victim, none of it happened, and it runs once more in a
+        // new transaction (#27): the reader pays once either way.
         var subscriptionId = Guid.NewGuid();
         try
         {
-            await transactionManager.InTransactionAsync(async () =>
+            await transactionManager.InNewTransactionAsync(async _ =>
             {
                 // Step 1: Transfer points atomically (subscriber -> author)
                 await walletService.TransferPointsAsync(
@@ -650,7 +651,8 @@ public class PrivilegeService(
                     IsActive = true,
                     AmountPaid = cost
                 });
-            });
+                return true;
+            }, attempts: 2);
         }
         catch (AlreadySubscribedException)
         {
