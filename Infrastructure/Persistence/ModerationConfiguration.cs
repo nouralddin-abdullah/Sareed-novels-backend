@@ -69,3 +69,23 @@ internal sealed class ReportConfiguration : IEntityTypeConfiguration<Report>
         entity.HasIndex(r => r.TargetOwnerId);
     }
 }
+
+internal sealed class AdminAuditLogConfiguration : IEntityTypeConfiguration<AdminAuditLog>
+{
+    public void Configure(EntityTypeBuilder<AdminAuditLog> entity)
+    {
+        entity.HasKey(a => a.Id);
+
+        // Stored by name, like the reports' enums.
+        entity.Property(a => a.Action).HasConversion<string>().HasMaxLength(50);
+        entity.Property(a => a.Reason).HasMaxLength(50);
+        entity.Property(a => a.Note).HasMaxLength(AdminAuditLog.NoteMaxLength);
+
+        // User ids, without foreign keys: the record outlives the accounts it names.
+        entity.Property(a => a.AdminId).HasMaxLength(450);
+        entity.Property(a => a.TargetUserId).HasMaxLength(450);
+
+        // What admins did to a user, in order.
+        entity.HasIndex(a => new { a.TargetUserId, a.CreatedAt });
+    }
+}
