@@ -1,6 +1,7 @@
 using Domain.Entities;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Sareed_novels_backend.Tests.Integration;
 
@@ -17,6 +18,10 @@ public class SqlServerDatabase : IAsyncLifetime
 
     public ApplicationDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlServer(ConnectionString).Options);
+
+    /// <summary>A context whose commands pass through <paramref name="interceptors"/> (to pause one at a chosen point).</summary>
+    public ApplicationDbContext CreateContext(params IInterceptor[] interceptors) =>
+        new(new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlServer(ConnectionString).AddInterceptors(interceptors).Options);
 
     public virtual async Task InitializeAsync()
     {

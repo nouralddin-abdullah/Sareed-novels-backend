@@ -12,6 +12,7 @@ using Infrastructure.PlayBilling;
 using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -25,23 +26,32 @@ namespace Sareed_novels_backend.Tests.Integration;
 /// newest first, up to what the buyer's balance can't cover, and gives that back to the buyer. The arithmetic alone:
 /// Unit/EarningsHoldRulesTests.
 /// </summary>
-public class EarningsHoldTests(SqlServerDatabase database) : IClassFixture<SqlServerDatabase>
+public partial class EarningsHoldTests(SqlServerDatabase database) : IClassFixture<SqlServerDatabase>
 {
     private static readonly TimeSpan Hold = TimeSpan.FromDays(30);
 
     private readonly MutableClock clock = new(DateTime.UtcNow);
     private readonly FakeGooglePlay google = new();
 
-    /// <summary>One API request: its own DbContext and scoped services, all on the test's clock.</summary>
-    private sealed class Request(SqlServerDatabase database, MutableClock clock, FakeGooglePlay google) : IAsyncDisposable
+    /// <summary>What the requests' transaction managers logged: a transaction run again after losing a deadlock.</summary>
+    private readonly ListLogger<TransactionManager> transactionLog = new();
+
+    /// <summary>What Play billing logged: a refund started again.</summary>
+    private readonly ListLogger<PlayBillingService> playLog = new();
+
+    /// <summary>
+    /// One API request: its own DbContext and scoped services, all on the test's clock; its commands pass through
+    /// <paramref name="interceptors"/>, if any.
+    /// </summary>
+    private sealed class Request(SqlServerDatabase database, MutableClock clock, FakeGooglePlay google, ListLogger<TransactionManager> log,
+        ListLogger<PlayBillingService> playLog, params IInterceptor[] interceptors) : IAsyncDisposable
     {
-        public ApplicationDbContext Db { get; } = database.CreateContext();
-        public TransactionManager Transactions => new(Db);
+        public ApplicationDbContext Db { get; } = database.CreateContext(interceptors);
+        public TransactionManager Transactions => new(Db, log);
         public WalletService Wallet => WalletTesting.Wallet(Db, clock);
 
         public PlayBillingService Play => new(google.Connection(), google.Api(), new PlayPurchaseRepository(Db),
-            new UserWalletRepository(Db), new PointTransactionRepository(Db), Wallet, Transactions, clock,
-            NullLogger<PlayBillingService>.Instance);
+            new UserWalletRepository(Db), new PointTransactionRepository(Db), Wallet, Transactions, clock, playLog);
 
         public SendGiftCommandHandler SendGift(User sender) => new(NullLogger<SendGiftCommandHandler>.Instance,
             new GiftRepository(Db), new GiftTransactionRepository(Db), new NovelsRepository(Db), SignedIn(sender), Wallet,
@@ -60,7 +70,7 @@ public class EarningsHoldTests(SqlServerDatabase database) : IClassFixture<SqlSe
         public ValueTask DisposeAsync() => Db.DisposeAsync();
     }
 
-    private Request NewRequest() => new(database, clock, google);
+    private Request NewRequest(params IInterceptor[] interceptors) => new(database, clock, google, transactionLog, playLog, interceptors);
 
     private static IUserContext SignedIn(User user)
     {
@@ -408,8 +418,9 @@ public class EarningsHoldTests(SqlServerDatabase database) : IClassFixture<SqlSe
 
         Assert.True((await Approve(admin, Assert.Single(await Withdrawals(author)).Id)).Success);
 
+        // Paid out of the released earnings: 1500 of them are left, and nothing is reserved any more.
         var wallet = await Withdrawable(author);
-        Assert.Equal((1500m, 1000m, 0m, 1500m), (wallet.Balance, wallet.Withdrawn, wallet.PendingWithdrawals, wallet.Withdrawable));
+        Assert.Equal((1500m, 1500m, 0m, 1500m), (wallet.Balance, wallet.Released, wallet.PendingWithdrawals, wallet.Withdrawable));
         await AssertLedgerAddsUp(author);
     }
 
@@ -527,23 +538,62 @@ public class EarningsHoldTests(SqlServerDatabase database) : IClassFixture<SqlSe
     }
 
     [Fact]
-    public async Task An_author_who_already_spent_a_reversed_earning_goes_below_zero_and_cannot_spend()
+    public async Task An_author_who_already_spent_a_reversed_earning_has_it_taken_back_from_whom_they_paid()
+    {
+        var (buyer, author, nextAuthor) = (await SeedUser(), await SeedUser(), await SeedUser());
+        var purchase = await BuyOnPlay(buyer);
+        Assert.True(await Gift(buyer, await SeedNovel(author), 1000));
+        clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.True(await Gift(author, await SeedNovel(nextAuthor), 1000)); // the author gives it all away
+        clock.Advance(TimeSpan.FromMinutes(1));
+
+        await Refund(purchase);
+
+        // Taking the gift back left the author 1000 below zero, so the author's own gift onward, still on hold, was taken
+        // back from the next author in the same way (#27): nobody is left below zero.
+        Assert.Equal((0m, 0m, 0m), (await Balance(buyer), await Balance(author), await Balance(nextAuthor)));
+        var purchaseId = await PlayPurchaseId(purchase);
+        var authorLedger = await Ledger(author);
+        var received = Assert.Single(authorLedger, t => t.Type == TransactionType.GiftReceived);
+        var reversals = authorLedger.Where(t => t.Type == TransactionType.EarningReversed).OrderBy(t => t.Amount).ToList();
+        Assert.Equal([-1000m, 1000m], reversals.Select(t => t.Amount));
+        var nextLedger = await Ledger(nextAuthor);
+        var nextEarning = Assert.Single(nextLedger, t => t.Type == TransactionType.GiftReceived);
+        var nextReversal = Assert.Single(nextLedger, t => t.Type == TransactionType.EarningReversed);
+        Assert.Equal(-1000m, nextReversal.Amount);
+        // Taken from the author: the gift they received; given back to them: what was taken of the gift they gave on.
+        Assert.Equal([received.Id, nextEarning.Id, nextEarning.Id],
+            new[] { reversals[0].ReversedTransactionId, reversals[1].ReversedTransactionId, nextReversal.ReversedTransactionId });
+        Assert.All(reversals.Append(nextReversal), t => Assert.Equal(purchaseId, t.RelatedRequestId));
+        Assert.Equal($"أُلغيت أرباح 1000 نقطة لأن عملية الشراء التي جاءت منها استُرد مبلغها", nextReversal.Description);
+        await AssertLedgerAddsUp(buyer);
+        await AssertLedgerAddsUp(author);
+        await AssertLedgerAddsUp(nextAuthor);
+        var next = await Withdrawable(nextAuthor);
+        Assert.Equal((0m, 0m), (next.PendingEarnings, next.Withdrawable));
+    }
+
+    [Fact]
+    public async Task An_author_whose_gift_onward_was_released_already_stays_below_zero_and_cannot_spend()
     {
         var (buyer, author, nextAuthor) = (await SeedUser(), await SeedUser(), await SeedUser());
         var purchase = await BuyOnPlay(buyer);
         Assert.True(await Gift(buyer, await SeedNovel(author), 1000));
         var onward = await SeedNovel(nextAuthor);
-        Assert.True(await Gift(author, onward, 1000)); // the author gives it all away
+        // The author gives it all on while earnings were released at once (a hold of 0 days): nothing to take back there.
+        await using (var request = NewRequest())
+        {
+            await WalletTesting.Wallet(request.Db, clock, holdDays: 0)
+                .TransferPointsAsync(author.Id, nextAuthor.Id, 1000, TransactionType.GiftSent, TransactionType.GiftReceived, "هدية", "هدية");
+        }
+        clock.Advance(TimeSpan.FromMinutes(1));
 
         await Refund(purchase);
 
-        Assert.Equal((0m, -1000m), (await Balance(buyer), await Balance(author)));
+        Assert.Equal((0m, -1000m, 1000m), (await Balance(buyer), await Balance(author), await Balance(nextAuthor)));
         Assert.False(await Gift(author, onward, 1)); // a negative balance refuses every kind of spending
         Assert.Equal(0m, (await Withdrawable(author)).Withdrawable);
         await AssertLedgerAddsUp(author);
-
-        // Only the buyer's own payments are walked: the author's gift onward stays with the next author.
-        Assert.Equal(1000m, await Balance(nextAuthor));
         Assert.DoesNotContain(await Ledger(nextAuthor), t => t.Type == TransactionType.EarningReversed);
     }
 

@@ -4,6 +4,7 @@ using Application.Wallet.DTOs;
 using Domain.Constants;
 using Domain.Entities;
 using Domain.Repositories;
+using Infrastructure.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.PlayBilling;
@@ -20,7 +21,7 @@ namespace Infrastructure.PlayBilling;
 /// nobody consumed or acknowledged within three days. The app must never consume or acknowledge.</item>
 /// <item>Voids: <see cref="SyncVoidedPurchasesAsync"/> polls the Voided Purchases API and <see cref="ApplyVoidAsync"/>
 /// takes the points back, even below zero, once per token; what the buyer's balance can't cover is taken back from the
-/// authors' earnings those points paid for, while still on hold (#22).</item>
+/// earnings still on hold that the buyer paid for, and from whom those authors passed the points on to (#22, #27).</item>
 /// </list>
 /// </summary>
 public class PlayBillingService(
@@ -183,7 +184,9 @@ public class PlayBillingService(
                 BalanceAfter = after,
                 Description = $"شراء {points} نقطة عبر Google Play{OrderSuffix(record.OrderId)}",
                 RelatedRequestId = record.Id,
-                CreatedAt = now
+                // Stamped once the wallet is changed (and locked), like every other row: the ledger reads back in the
+                // order the balance changed (#27).
+                CreatedAt = Now()
             });
             return after;
         }, CancellationToken.None);
@@ -502,50 +505,65 @@ public class PlayBillingService(
         }
 
         await wallets.EnsureExistsAsync(userId);
-        var outcome = await transactions.InTransactionAsync(async () =>
+        var description = $"استرجاع {purchase.Points} نقطة: أُلغي شراء عبر Google Play أو استُرد مبلغه{OrderSuffix(purchase.OrderId)}";
+
+        // The refund and its clawback change the buyer's wallet and those of the authors whose held earnings it takes back
+        // (and theirs in turn). To take all their locks in one pass, in the order a gift takes its two, the wallets are
+        // worked out first without locks, then locked, read again and changed. If the ledger changed in between so that
+        // another wallet is needed, or SQL Server picks the refund as a deadlock victim (against an account deletion, say),
+        // everything is rolled back and done again, with that wallet locked from the start (#27).
+        var alsoLock = new HashSet<string>(StringComparer.Ordinal);
+        PlayRefundOutcome? outcome;
+        for (var attempt = 1; ; attempt++)
         {
-            // Only the request that moves the row from Credited takes the points back.
-            if (!await purchases.TryMarkVoidedAsync(purchase.Id, voided.VoidedAt, voided.VoidedReason, voided.VoidedSource))
+            var toLock = (await wallet.PlanPlayRefundAsync(userId, purchase.Points)).Concat(alsoLock).ToList();
+            try
             {
-                return ((decimal Balance, decimal Reversed)?)null;
+                outcome = await transactions.InNewTransactionAsync(async _ =>
+                {
+                    // Only the request that moves the row from Credited takes the points back.
+                    if (!await purchases.TryMarkVoidedAsync(purchase.Id, voided.VoidedAt, voided.VoidedReason, voided.VoidedSource))
+                    {
+                        return null;
+                    }
+                    return await wallet.RefundPlayPurchaseAsync(userId, purchase.Points, purchase.Id, description, toLock);
+                }, cancellationToken: CancellationToken.None);
+                break;
             }
-
-            // Held until the commit: the clawback below changes this wallet again, and SQL Server lets go of the row's
-            // index key between two UPDATEs, where a second refund of this buyer's could slip in and deadlock with it.
-            await wallets.LockBalanceAsync(userId);
-            var after = await wallets.DebitAllowingNegativeAsync(userId, purchase.Points);
-            await ledger.CreateAsync(new PointTransaction
+            catch (RefundWalletsChangedException changed) when (attempt < MaxRefundAttempts)
             {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                Type = TransactionType.PlayRefund,
-                Amount = -purchase.Points,
-                BalanceBefore = after + purchase.Points,
-                BalanceAfter = after,
-                Description = $"استرجاع {purchase.Points} نقطة: أُلغي شراء عبر Google Play أو استُرد مبلغه{OrderSuffix(purchase.OrderId)}",
-                RelatedRequestId = purchase.Id,
-                CreatedAt = Now()
-            });
-
-            // What the balance couldn't cover was given away: take it back from the earnings those points paid for, as
-            // long as they are still on hold, and give it back to the buyer (#22 rule 4). Same transaction: all or nothing.
-            var reversed = await wallet.ReverseHeldEarningsAsync(userId, purchase.Id, purchase.CreatedAt,
-                EarningsClawback.Deficit(purchase.Points, after));
-            return (after + reversed, reversed);
-        }, CancellationToken.None);
+                alsoLock.UnionWith(changed.Wallets);
+                logger.LogInformation("Refund of Google Play order {OrderId} needs {Count} more wallet(s) than planned; starting again (attempt {Attempt})",
+                    purchase.OrderId, changed.Wallets.Count, attempt + 1);
+            }
+            catch (Exception ex) when (attempt < MaxRefundAttempts && SqlErrors.IsDeadlock(ex))
+            {
+                logger.LogWarning(ex, "Refund of Google Play order {OrderId} was picked as a deadlock victim; starting again (attempt {Attempt})",
+                    purchase.OrderId, attempt + 1);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Refund of Google Play order {OrderId} (purchase {PurchaseId}) failed after {Attempts} attempt(s); the next poll tries again",
+                    purchase.OrderId, purchase.Id, attempt);
+                throw;
+            }
+        }
 
         if (outcome is not { } result)
         {
             return false;
         }
 
-        var (balance, reversed) = result;
         logger.LogWarning(
-            "Took back {Points} points from user {UserId}: Google voided Play order {OrderId} (purchase {PurchaseId}, reason {Reason}, source {Source}). {Reversed} of them were taken back from authors' earnings still on hold. Balance now {Balance}{Blocked}",
-            purchase.Points, userId, purchase.OrderId, purchase.Id, voided.VoidedReason, voided.VoidedSource, reversed, balance,
-            balance < 0 ? ", below zero: spending is blocked until it is topped up" : "");
+            "Took back {Points} points from user {UserId}: Google voided Play order {OrderId} (purchase {PurchaseId}, reason {Reason}, source {Source}). {Returned} of them were taken back from the earnings they paid for ({TakenBack} from {Reversals} earning(s) in all, the cascade included). Balance now {Balance}{Blocked}",
+            purchase.Points, userId, purchase.OrderId, purchase.Id, voided.VoidedReason, voided.VoidedSource, result.ReturnedToBuyer,
+            result.TakenBack, result.Reversals, result.BuyerBalance,
+            result.BuyerBalance < 0 ? ", below zero: spending is blocked until it is topped up" : "");
         return true;
     }
+
+    /// <summary>How many times a refund starts again when its wallets changed under it or it lost a deadlock.</summary>
+    internal const int MaxRefundAttempts = 3;
 
     private DateTime Now() => clock.GetUtcNow().UtcDateTime;
 

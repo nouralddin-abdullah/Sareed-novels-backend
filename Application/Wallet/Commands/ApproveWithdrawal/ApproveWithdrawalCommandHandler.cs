@@ -37,14 +37,15 @@ public class ApproveWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyProcessed",
-                Message = RequestMessages.AlreadyDecided(withdrawalRequest.Status)
+                Message = RequestMessages.AlreadyDecided(withdrawalRequest.Status,
+                    WithdrawalMessages.IsCancelledByOwner(withdrawalRequest.Status, withdrawalRequest.ProcessedBy, withdrawalRequest.UserId))
             };
         }
 
         // The status change and the debit commit together: if the debit fails the request stays Pending (it used to
-        // be left Approved with nothing deducted), and a second approval can't deduct twice. What is withdrawable is
-        // checked again here, not the balance (#22): a refund since the request may have taken it. The wallet stays
-        // locked from that check to the debit, so nothing can change it in between.
+        // be left Approved with nothing deducted), and a second approval can't deduct twice. What can be paid is checked
+        // again here, not the balance (#22, #27): released earnings the member hasn't spent, which a refund since the
+        // request may have taken. The wallet stays locked from that check to the debit, so nothing can change it in between.
         bool approved;
         try
         {
@@ -75,9 +76,9 @@ public class ApproveWithdrawalCommandHandler(
         catch (NotWithdrawableException ex)
         {
             logger.LogWarning(
-                "Withdrawal {RequestId} of {Points} points not approved: user {UserId} can be paid {Payable} (balance {Balance}, released earnings {Released}, withdrawn {Withdrawn}, reversed {Reversed})",
+                "Withdrawal {RequestId} of {Points} points not approved: user {UserId} can be paid {Payable} (balance {Balance}: released earnings {Released}, on hold {Held}, bought {Bought}, owed {Deficit})",
                 request.RequestId, withdrawalRequest.PointsRequested, withdrawalRequest.UserId, ex.Balance.Payable, ex.Balance.Balance,
-                ex.Balance.ReleasedEarnings, ex.Balance.Withdrawn, ex.Balance.ReversedEarnings);
+                ex.Balance.Released, ex.Balance.PendingEarnings, ex.Balance.Bought, ex.Balance.Deficit);
             return new OperationResult
             {
                 Success = false,

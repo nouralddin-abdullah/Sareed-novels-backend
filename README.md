@@ -195,9 +195,9 @@ Errors are `{ "code": "...", "message": "<Arabic, for the user>" }`. Act on `cod
 When Google voids a purchase (refund, chargeback, revocation), its points are taken back even if that takes the
 balance below zero (ledger type `PlayRefund`). A negative balance blocks all spending (gifts, early-access
 subscriptions, withdrawals) until purchases or recharges bring it back up. What the balance can't cover was given away:
-it is taken back from the authors' earnings those points paid for, while they are still on hold (the clawback in
-"Wallet: what can be withdrawn" below). A purchase Google voids before anyone claims it is recorded so it can never be
-credited.
+it is taken back from the earnings still on hold that the buyer paid for, and from whom those authors passed the points
+on to (the clawback in "Wallet: what can be withdrawn" below). A purchase Google voids before anyone claims it is
+recorded so it can never be credited.
 
 #### How it works
 
@@ -215,52 +215,94 @@ credited.
 ### Wallet: what can be withdrawn
 
 Bought points have no cash value (the terms: «النقاط لا قيمة نقدية لها»). Only what an author earns from readers can be
-paid out, and only once a refund can no longer take it back (#22):
+paid out, and only once a refund can no longer take it back (#22, #27).
 
-1. **Bought points are never withdrawable**: website top-ups (`RechargeApproved`), Google Play packs (`PlayPurchase`)
-   and anything else in a balance that didn't come from earnings. They are spent inside Sard only.
-2. **Earnings are held.** Each `GiftReceived` and `PrivilegeRevenue` row gets `AvailableAt` = its `CreatedAt` plus
-   the hold, and is withdrawable from then on. 30 days by default, the window of Google's voided purchases list.
-3. **Withdrawable** = min(balance, released earnings − approved withdrawals − reversed earnings) − pending withdrawal
-   requests, never below 0. The min means points an author spends come out of bought points first. Pending requests
-   aren't deducted from the balance until approval, so they come off both sides: two requests can't use the same
-   points. A request is checked against this when made, and approval checks again (without the pending requests,
-   which include itself); both hold the wallet's row lock from the check to the insert or debit.
-4. **Refund clawback.** When a Play purchase is voided and the refund takes the buyer below zero, the deficit (how far
-   below zero this refund went) is taken back from the buyer's gifts and privilege subscriptions paid since that
-   purchase, newest first: from each, what is left of the author's earning while it is still on hold. Two
-   `EarningReversed` rows per reversal, both with `RelatedRequestId` = the voided purchase and `ReversedTransactionId`
-   = the earning row: negative on the author (the balance may go below zero, which blocks spending) and positive on the
-   buyer, whose refund already took those points. Released earnings are never touched; that risk is left to the
-   manual payout review. Both rows of a gift or subscription share `RelatedRequestId` (the gift or subscription record),
+Each user's points are in three pools, worked out from their ledger (`PointTransactions`) read in time order
+(`WalletPools.Fold`). They have no columns of their own: the ledger is the only record, and the wallet page, a
+withdrawal request, its approval, the admin list and a refund all read the same rows.
+
+| Pool | What goes in | Withdrawable |
+|---|---|---|
+| Bought | website top-ups (`RechargeApproved`), Google Play packs (`PlayPurchase`), points a clawback gives back to whom paid (the positive `EarningReversed`), and a balance from before the ledger (the wallet balance less the ledger's sum) | never |
+| Held | each `GiftReceived` and `PrivilegeRevenue`, as a lot of its own, until its `AvailableAt` (its `CreatedAt` plus the hold) | not yet |
+| Released | held lots whose `AvailableAt` has passed | yes |
+
+1. **Spending** (gifts, early-access subscriptions) comes out of Bought, then Held (the lot released last first, so
+   older earnings keep their release date), then Released. So does every other debit: a Play refund (`PlayRefund`), a
+   forfeited balance. What they can't cover is owed (the balance is below zero, which blocks all spending), and new
+   credits, earnings included, pay what is owed before they count anywhere else.
+2. **Taking an earning back** (the author's negative `EarningReversed`) takes that very lot while it is held; what the
+   author spent of it comes out like any debit.
+3. **An approved withdrawal** (`WithdrawalApproved`) comes out of Released. One approved before earnings were held (#22)
+   may be larger: the rest comes out of Bought, then Held, so it doesn't count against later earnings.
+4. **Withdrawable** = max(0, min(Released, balance) − pending withdrawal requests); what an approval can pay,
+   **Payable**, is max(0, min(Released, balance)). Pending requests aren't deducted from the balance until approval, so
+   they are reserved: two requests can't use the same points. A request is checked against Withdrawable when made, and
+   approval checks Payable again; both read the ledger while holding the wallet's row lock, from the check to the insert
+   or the debit. So points an author spent never stay withdrawable: a gift received or a pack bought after spending
+   earnings is held or bought like any other, and a top-up gifted back and forth between two accounts is withdrawable
+   once at most.
+5. **Refund clawback.** A refund that takes the buyer below zero means they gave away points they never paid for. The
+   deficit (how far below zero this refund went) is taken back from every earning still on hold that the buyer paid for
+   with gifts and early-access subscriptions, whenever it was paid (the hold bounds how far back), newest payment first.
+   When taking one back takes its author below zero, the author passed those points on: their own payments are taken
+   back the same way, for how far below zero this refund took them, at most three accounts past the buyer's own
+   payments; each account's payments are walked once, which ends cycles. Earnings of deleted accounts are left alone
+   (their balance was forfeited already), and so are earnings that are released or about to be (within a second). Each
+   reversal is two `EarningReversed` rows, both with `RelatedRequestId` = the voided purchase and
+   `ReversedTransactionId` = the earning row: negative on the author (whose balance may go below zero) and positive on
+   whom paid for it. Both rows of a gift or subscription share `RelatedRequestId` (the gift or subscription record),
    which is how a payment finds its earning; payments from before #22 have none, but their earnings are all released.
-5. **Existing data**: the migration `EarningsHoldAndReversal` released every earning row written before it at once
-   (`AvailableAt` = `CreatedAt`); the hold applies to earnings from then on. Balances that came from top-ups stopped
-   being withdrawable. The database refuses an earning row without `AvailableAt` (a check constraint).
+6. **Locks.** A refund works out without locks which wallets it and its clawback change, then locks all of them and
+   the buyer's in one pass, in the order a gift locks its two (user id), then works it out again under the locks and
+   writes it. If the ledger changed in between so that it needs another wallet, it rolls back and starts again with
+   that wallet locked too (at most 3 attempts; then it logs the error and the next hourly poll tries again). A gift or
+   an early-access subscription that SQL Server picks as a deadlock victim runs once more in a new transaction, and is
+   charged once.
+7. **Existing data**: the migration `EarningsHoldAndReversal` released every earning row written before it at once
+   (`AvailableAt` = `CreatedAt`); the hold applies to earnings from then on. A balance with no ledger rows behind it
+   (production's ledger started empty) counts as bought. The database refuses an earning row without `AvailableAt` (a
+   check constraint).
 
 | Environment variable | Required | Value |
 |---|---|---|
-| `Wallet__EarningsHoldDays` | no | Days an earning is held before it can be withdrawn, 0 to 365. Default `30`. A change applies to earnings credited from then on. Any other value stops the API at startup. |
+| `Wallet__EarningsHoldDays` | no | Days an earning is held before it can be withdrawn. Default `30`. Below 30 it is raised to 30 in Production and kept elsewhere (tests use short holds), with a warning in the startup log either way: the clawback only takes back earnings still on hold, and Google lists voided purchases for 30 days. A change applies to earnings credited from then on. A value outside 0 to 365 stops the API at startup. |
 
 API (additive):
 
 - `GET /api/wallet` also returns `withdrawable` (what a request can ask for now), `pendingEarnings` (earnings still on
-  hold, less what refunds took back of them) and `nextReleaseAt` (UTC, when the next of those is released; `null` when
-  none is on hold). `currentBalance` means what it always did.
+  hold, less what was spent or taken back of them) and `nextReleaseAt` (UTC, when the next of those is released; `null`
+  when none is on hold). `currentBalance` means what it always did.
 - `POST /api/wallet/withdraw` for more than `withdrawable`: 400 `{ "code": "InsufficientWithdrawableBalance",
   "message": "<Arabic>" }`, where the message says what can be withdrawn now, when more is released and the rule, e.g.
   «يمكنك سحب 1200 نقطة فقط الآن، وتصبح أرباحك التالية قابلة للسحب خلال 5 أيام. تُسحب أرباح الهدايا واشتراكات الوصول
   المبكر وحدها، بعد 30 يومًا من استلامها، أما النقاط المشحونة أو المشتراة فلا تُسحب.» `BelowMinimumWithdrawal` is checked
   first, as before; `InsufficientBalance` is no longer returned by this endpoint.
+- `DELETE /api/wallet/withdraw/{id}` (#27): the member cancels their own pending request, which frees its points (none
+  were deducted). 204, also when they cancelled it already (a retry is done). The request becomes `Rejected` with
+  `rejectionReason` «ألغاه صاحب الطلب», as the requests an account deletion cancels, so apps that don't know about
+  cancelling show it as they already show those; each request in `GET /api/wallet/withdraw` also has
+  `cancelledByOwner` (`true` for these, `false` otherwise), to show it as cancelled («ملغى») rather than refused.
+  Errors are `{ "code", "message" }`:
+
+  | HTTP | `code` | When | `message` |
+  |---|---|---|---|
+  | 401 | | not signed in | |
+  | 404 | `RequestNotFound` | an unknown id, or another member's request | «طلب السحب غير موجود» |
+  | 409 | `AlreadyProcessed` | an admin approved it | «قُبل طلب السحب هذا من قبل، فلا يمكن إلغاؤه.» |
+  | 409 | `AlreadyProcessed` | an admin rejected it | «رُفض طلب السحب هذا من قبل، فلا يمكن إلغاؤه.» |
+
 - `PATCH /api/admin/withdraw/{id}/approve` refuses a request the member can no longer be paid with the same code (the
-  message tells the admin what can be paid now), and the request stays pending.
-- `GET /api/admin/withdraw/pending`: each request also has `requesterWithdrawable` (what approving can pay the
+  message tells the admin what can be paid now), and the request stays pending: reject it with an Arabic reason, or
+  the member can cancel it. Approving or rejecting a request the member cancelled answers `AlreadyProcessed` «ألغى
+  صاحبه هذا الطلب من قبل».
+- `GET /api/admin/withdraw/pending`: each request also has `requesterWithdrawable` (Payable: what approving can pay the
   requester now, before their pending requests are taken out) and `recentEarningReversals` (their `EarningReversed`
   rows of the last 90 days, at most 10: `id`, `amount`, `description`, `createdAt`, `purchaseId`,
   `reversedTransactionId`, `novelId`). The member's own `GET /api/wallet/withdraw` doesn't have these fields.
-- The wallet history (`GET /api/wallet/transactions`) has the new type `EarningReversed`, with an Arabic
-  `description` («أُلغيت أرباح 500 نقطة لأن عملية الشراء التي جاءت منها استُرد مبلغها» on the author,
-  «استُرجعت 500 نقطة من أرباح الكاتب وأُعيدت إلى رصيدك، ...» on the buyer); apps need a label for it.
+- The wallet history (`GET /api/wallet/transactions`) has the type `EarningReversed`, with an Arabic `description`
+  («أُلغيت أرباح 500 نقطة لأن عملية الشراء التي جاءت منها استُرد مبلغها» on the author, «استُرجعت 500 نقطة من أرباح
+  الكاتب وأُعيدت إلى رصيدك، ...» on whom paid); apps need a label for it.
 
 Account deletion is unchanged: the whole balance, held earnings included, is forfeited, and pending withdrawals are
 cancelled.
