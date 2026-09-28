@@ -1,21 +1,47 @@
-﻿using Domain.Entities;
+﻿using Application.Comments;
+using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Persistence;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories;
 
 public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepository
 {
+    /// <summary>
+    /// Saves the comment and counts it, in one transaction. A paragraph comment whose paragraph an edit removes at the
+    /// same moment is a 404 <see cref="ParagraphGone"/>, not a server error: its insert either finds the paragraph
+    /// gone (a foreign key violation) or loses a deadlock to the edit, which runs at a higher deadlock priority
+    /// (ChapterParagraphsRepository.SaveEditedParagraphs).
+    /// </summary>
     public async Task<Comments> CreateComment(Comments Comment)
     {
-        await using var transaction = await dbContext.Database.BeginTransactionAsync();
-        dbContext.Comments.Add(Comment);
-        await dbContext.SaveChangesAsync();
-        await SocialCounters.AdjustForComment(dbContext, Comment, +1);
-        await transaction.CommitAsync();
-        return Comment;
+        try
+        {
+            await using var transaction = await dbContext.Database.BeginTransactionAsync();
+            dbContext.Comments.Add(Comment);
+            await dbContext.SaveChangesAsync();
+            await SocialCounters.AdjustForComment(dbContext, Comment, +1);
+            await transaction.CommitAsync();
+            return Comment;
+        }
+        catch (Exception ex) when (LostItsParagraph(Comment, ex))
+        {
+            dbContext.Entry(Comment).State = EntityState.Detached;
+            throw ParagraphGone.Exception();
+        }
     }
+
+    /// <summary>SQL Server errors a paragraph comment's insert gets when an edit removes the paragraph meanwhile.</summary>
+    internal const int ForeignKeyViolation = 547;
+
+    internal const int DeadlockVictim = 1205;
+
+    /// <summary>Whether <paramref name="ex"/> saving <paramref name="comment"/> means its paragraph was removed meanwhile.</summary>
+    internal static bool LostItsParagraph(Comments comment, Exception ex) =>
+        comment.ParagraphId is not null
+        && (ex as SqlException ?? ex.InnerException as SqlException)?.Number is ForeignKeyViolation or DeadlockVictim;
 
     public async Task<bool> DeleteComment(Guid commentId)
     {

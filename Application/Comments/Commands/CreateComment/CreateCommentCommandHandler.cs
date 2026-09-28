@@ -35,7 +35,7 @@ public class CreateCommentCommandHandler(
         if (request.ParagraphId.HasValue)
         {
             logger.LogInformation("Creating comment for paragraph {ParagraphId}", request.ParagraphId);
-            var paragraph = await paragraphsRepository.GetParagraphById(request.ParagraphId.Value) ?? throw new NotFoundException("الفقرة غير موجودة، ربما عدّلها الكاتب. أعد فتح الفصل.", "ParagraphNotFound");
+            var paragraph = await paragraphsRepository.GetParagraphById(request.ParagraphId.Value) ?? throw ParagraphGone.Exception();
             chapterId = paragraph.ChapterId;
         }
         else if (request.ChapterId.HasValue)
@@ -117,7 +117,8 @@ public class CreateCommentCommandHandler(
             );
         }
         
-        // Saves the comment and bumps the user's and the post/chapter/paragraph's counters in one transaction.
+        // Saves the comment and bumps the user's and the post/chapter/paragraph's counters in one transaction. An edit
+        // removing the paragraph at this moment makes it a 404 ParagraphNotFound too (CommentsRepository).
         var createdComment = await commentsRepository.CreateComment(comment);
         
         // Fire-and-forget: Send notifications

@@ -2,6 +2,7 @@ using System.Data.Common;
 using Application.Chapters.Commands.UpdateChapter;
 using Application.Chapters.DTOS;
 using Application.Chapters.Paragraphs;
+using Application.Comments;
 using Application.Comments.Queries.GetChapterComments;
 using Application.Comments.Queries.GetParagraphComments;
 using Application.Services;
@@ -9,6 +10,7 @@ using Application.Users;
 using AutoMapper;
 using Domain.Constants;
 using Domain.Entities;
+using Domain.Exceptions;
 using Domain.Seo;
 using Infrastructure.Persistence;
 using Infrastructure.Repositories;
@@ -352,16 +354,44 @@ public class ChapterEditTests(SqlServerDatabase database) : IClassFixture<SqlSer
         await Task.Delay(TimeSpan.FromMilliseconds(700));
         Assert.False(commenting.IsCompleted);
 
-        // The edit goes on and meets the reader's row: a deadlock, which the reader's request loses.
+        // The edit goes on and meets the reader's row: a deadlock, which the reader's request loses. The reader is told
+        // the paragraph is gone (404 ParagraphNotFound, the app reloads the chapter), not that the server failed.
         pause.Release();
         await editing;
-        await Assert.ThrowsAnyAsync<Exception>(() => commenting);
+        var refused = await Assert.ThrowsAsync<NotFoundException>(() => commenting);
+        Assert.Equal(ParagraphGone.Code, refused.Code);
 
         await using var db = database.CreateContext();
         Assert.Equal(world.ParagraphIds[..last], await ParagraphIds(db, world));
         Assert.False(await db.Comments.IgnoreQueryFilters().AnyAsync(c => c.Id == late));
         Assert.Equal(world.CommentIds.Order(), await CommentIds(db, world));
         await AssertCountersMatchRecount(db, world);
+    }
+
+    [Fact]
+    public async Task A_comment_saved_just_after_the_edit_removed_its_paragraph_is_a_paragraph_not_found()
+    {
+        var world = await SeedChapter();
+
+        // The reader's request found paragraph 23 (CreateCommentCommandHandler checks it), then the edit removed it.
+        await world.Save(ProductionChapter.Paragraphs.Where((_, i) => i != 23));
+
+        await using var readerDb = database.CreateContext();
+        var late = Guid.NewGuid();
+        var refused = await Assert.ThrowsAsync<NotFoundException>(() => new CommentsRepository(readerDb).CreateComment(new Comments
+        {
+            Id = late, UserId = world.Readers[0].Id, ParagraphId = world.ParagraphIds[23], Content = "تعليق متأخر"
+        }));
+
+        Assert.Equal(ParagraphGone.Code, refused.Code);
+        await using var db = database.CreateContext();
+        Assert.False(await db.Comments.IgnoreQueryFilters().AnyAsync(c => c.Id == late));
+        await AssertCountersMatchRecount(db, world);
+
+        // A chapter that is gone is still a failure of its own kind, not a missing paragraph.
+        await using var otherDb = database.CreateContext();
+        var onChapter = new Comments { Id = Guid.NewGuid(), UserId = world.Readers[0].Id, ChapterId = Guid.NewGuid(), Content = "تعليق" };
+        await Assert.ThrowsAsync<DbUpdateException>(() => new CommentsRepository(otherDb).CreateComment(onChapter));
     }
 
     [Fact]

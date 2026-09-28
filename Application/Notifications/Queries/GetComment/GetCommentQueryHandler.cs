@@ -1,3 +1,4 @@
+using Application.Comments;
 using Application.Common;
 using Application.Notifications.DTOs;
 using Application.Services;
@@ -55,7 +56,7 @@ public class GetCommentQueryHandler(
         if (comment.ParagraphId.HasValue)
         {
             var paragraph = await paragraphsRepository.GetParagraphById(comment.ParagraphId.Value)
-                ?? throw new NotFoundException("الفقرة غير موجودة، ربما عدّلها الكاتب. أعد فتح الفصل.", "ParagraphNotFound");
+                ?? throw ParagraphGone.Exception();
 
             var (chapter, novel) = await SetChapter(context, paragraph.ChapterId);
             context.ParagraphId = paragraph.Id;
