@@ -33,12 +33,7 @@ internal class CreateLikeReviewCommandHandler(
         // Inserts the like and bumps LikeCount in one transaction; a concurrent duplicate is a no-op here.
         if (!await reviewLikesRepository.LikeReview(currentUser.Id, request.ReviewId))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "AlreadyLiked",
-                Message = "سبق أن أعجبت بهذه المراجعة"
-            };
+            return OperationResult.AlreadyDone("AlreadyLiked", "سبق أن أعجبت بهذه المراجعة");
         }
         
         // Fire-and-forget: Send notification

@@ -47,12 +47,7 @@ public class FollowUserCommandHandler(
         if (await usersRepository.IsFollowingAsync(currentUser.Id, userToFollow.Id)
             || !await usersRepository.FollowUser(currentUser.Id, userToFollow.Id))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "AlreadyFollowing",
-                Message = "أنت تتابع هذا المستخدم بالفعل",
-            };
+            return OperationResult.AlreadyDone("AlreadyFollowing", "أنت تتابع هذا المستخدم بالفعل");
         }
 
         // Fire-and-forget: Send notification

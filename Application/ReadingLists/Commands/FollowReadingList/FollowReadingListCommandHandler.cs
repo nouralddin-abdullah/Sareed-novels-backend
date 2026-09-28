@@ -59,12 +59,7 @@ public class FollowReadingListCommandHandler(
         if (await followersRepository.IsFollowingAsync(request.ReadingListId, currentUser.Id)
             || !await followersRepository.FollowAsync(follower))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "AlreadyFollowing",
-                Message = "أنت تتابع هذه القائمة بالفعل"
-            };
+            return OperationResult.AlreadyDone("AlreadyFollowing", "أنت تتابع هذه القائمة بالفعل");
         }
 
         await readingListsRepository.AdjustFollowersCountAsync(request.ReadingListId, +1);

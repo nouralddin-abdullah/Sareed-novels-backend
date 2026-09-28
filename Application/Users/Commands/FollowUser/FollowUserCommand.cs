@@ -28,4 +28,15 @@ public class OperationResult
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Field { get; set; }
+
+    /// <summary>
+    /// The state was already what the request asked for (already liked, not following...), so nothing changed. The
+    /// idempotent writes answer these 204 No Content (#25); Code still says which, for callers that read the result.
+    /// </summary>
+    [JsonIgnore]
+    public bool Unchanged { get; init; }
+
+    /// <summary>A result for a request whose state was already as asked (<see cref="Unchanged"/>).</summary>
+    public static OperationResult AlreadyDone(string code, string message) =>
+        new() { Success = false, Code = code, Message = message, Unchanged = true };
 }

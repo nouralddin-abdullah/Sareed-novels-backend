@@ -76,10 +76,12 @@ public class PrivilegeSubscriptionHttpTests(SardApiFactory api)
         await using var db = api.Db();
         Assert.True((await db.NovelPrivilegeSubscriptions.SingleAsync(s => s.NovelId == novel.Id && s.UserId == reader.Id)).IsActive);
 
-        // Without a subscription too: there is nothing to cancel, ever.
+        // Without a subscription there is nothing to cancel: the state is already as asked, 204 (#25; it was the same 400).
         var (other, _) = await PrivilegedNovelAndReader();
         var nothing = await api.Send(HttpMethod.Delete, $"/api/novel/{novel.Id}/privilege/subscription", other);
-        Assert.Equal(CancelSubscriptionCommandHandler.CannotBeCancelledCode, (await nothing.Error(HttpStatusCode.BadRequest)).GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.NoContent, nothing.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await api.Send(HttpMethod.Delete, $"/api/novel/{Guid.NewGuid()}/privilege/subscription", other)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await api.Send(HttpMethod.Delete, $"/api/novel/{novel.Id}/privilege/subscription")).StatusCode);
     }
 
     [Fact]

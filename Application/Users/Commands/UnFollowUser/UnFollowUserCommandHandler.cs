@@ -33,12 +33,7 @@ public class UnFollowUserCommandHandler(
         // Not following, or a concurrent unfollow got there first: the same answer.
         if (!await usersRepository.UnFollowUser(currentUser.Id, userToUnFollow.Id))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotFollowing",
-                Message = "أنت لا تتابع هذا المستخدم",
-            };
+            return OperationResult.AlreadyDone("NotFollowing", "أنت لا تتابع هذا المستخدم");
         }
 
         return new OperationResult

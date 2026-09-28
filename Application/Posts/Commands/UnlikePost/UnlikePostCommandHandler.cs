@@ -30,12 +30,7 @@ public class UnlikePostCommandHandler(
 
         if (!await postLikesRepository.UnLikePost(currentUser.Id, request.PostId))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotLiked",
-                Message = "لم تُبدِ إعجابك بهذا المنشور"
-            };
+            return OperationResult.AlreadyDone("NotLiked", "لم تُبدِ إعجابك بهذا المنشور");
         }
 
         logger.LogInformation("User {UserId} unliked post {PostId}", currentUser.Id, request.PostId);

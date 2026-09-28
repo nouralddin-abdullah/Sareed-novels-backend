@@ -29,12 +29,7 @@ public class RemoveNovelFromListCommandHandler(
         // Not in the list, or a concurrent removal got there first: the same answer.
         if (!await readingListNovelsRepository.RemoveNovelAsync(request.ReadingListId, request.NovelId))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotInList",
-                Message = "هذه الرواية ليست في القائمة"
-            };
+            return OperationResult.AlreadyDone("NotInList", "هذه الرواية ليست في القائمة");
         }
 
         await readingListsRepository.AdjustNovelsCountAsync(request.ReadingListId, -1);

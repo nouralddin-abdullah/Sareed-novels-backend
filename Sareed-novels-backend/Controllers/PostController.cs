@@ -58,27 +58,11 @@ public class PostController(IMediator mediator) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>204 when the caller already likes it (it was 400 AlreadyLiked).</summary>
     [HttpPost("{postId}/like")]
-    public async Task<IActionResult> LikePost([FromRoute] Guid postId)
-    {
-        var command = new LikePostCommand(postId);
-        var result = await mediator.Send(command);
-        if (!result.Success)
-        {
-            return BadRequest(result);
-        }
-        return Ok(result);
-    }
+    public async Task<IActionResult> LikePost([FromRoute] Guid postId) => this.Answer(await mediator.Send(new LikePostCommand(postId)));
 
+    /// <summary>204 when the caller doesn't like it (it was 400 NotLiked).</summary>
     [HttpDelete("{postId}/unlike")]
-    public async Task<IActionResult> UnlikePost([FromRoute] Guid postId)
-    {
-        var command = new UnlikePostCommand(postId);
-        var result = await mediator.Send(command);
-        if (!result.Success)
-        {
-            return BadRequest(result);
-        }
-        return Ok(result);
-    }
+    public async Task<IActionResult> UnlikePost([FromRoute] Guid postId) => this.Answer(await mediator.Send(new UnlikePostCommand(postId)));
 }

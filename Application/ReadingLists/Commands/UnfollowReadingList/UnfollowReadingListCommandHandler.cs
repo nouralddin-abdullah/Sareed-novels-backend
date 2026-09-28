@@ -34,12 +34,7 @@ public class UnfollowReadingListCommandHandler(
         // Not following, or a concurrent unfollow got there first: the same answer.
         if (!await followersRepository.UnfollowAsync(request.ReadingListId, currentUser.Id))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotFollowing",
-                Message = "أنت لا تتابع هذه القائمة"
-            };
+            return OperationResult.AlreadyDone("NotFollowing", "أنت لا تتابع هذه القائمة");
         }
 
         await readingListsRepository.AdjustFollowersCountAsync(request.ReadingListId, -1);

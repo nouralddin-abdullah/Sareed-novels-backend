@@ -7,19 +7,21 @@ namespace Sareed_novels_backend.Tests.Integration;
 /// <summary>
 /// Follows, list follows and a list's novels under concurrent requests (a double tap, an app retrying): one of them
 /// changes the state, the others find it done, and none fails (two follows of one person at once used to be a 500).
+/// A write whose state is already as asked answers 204 No Content (#25).
 /// </summary>
 [Collection(ReaderApiCollection.Name)]
 public class IdempotentWritesHttpTests(SardApiFactory api)
 {
     private const int AtOnce = 8;
 
-    /// <summary>One request did it (<paramref name="done"/>); the others found it done and say so with their code.</summary>
-    private static async Task AssertDoneOrAlreadyDone(HttpResponseMessage[] responses, string alreadyCode, HttpStatusCode done = HttpStatusCode.OK)
+    /// <summary>One request did it (200 with its result); the others found it done (204, no body).</summary>
+    private static async Task AssertDoneOrAlreadyDone(HttpResponseMessage[] responses)
     {
-        Assert.Single(responses, r => r.StatusCode == done);
-        foreach (var response in responses.Where(r => r.StatusCode != done))
+        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.OK);
+        foreach (var response in responses.Where(r => r.StatusCode != HttpStatusCode.OK))
         {
-            Assert.Equal(alreadyCode, (await response.Error(HttpStatusCode.BadRequest)).GetProperty("code").GetString());
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+            Assert.Empty(await response.Content.ReadAsStringAsync());
         }
     }
 
@@ -31,14 +33,14 @@ public class IdempotentWritesHttpTests(SardApiFactory api)
     {
         var (me, them) = (await api.SignUp(), await api.SignUp());
 
-        await AssertDoneOrAlreadyDone(await AtOnceDo(() => api.Follow(me, them)), "AlreadyFollowing");
+        await AssertDoneOrAlreadyDone(await AtOnceDo(() => api.Follow(me, them)));
         await using (var db = api.Db())
         {
             Assert.Equal(1, await db.Follows.CountAsync(f => f.FollowerId == me.Id && f.FollowedId == them.Id));
         }
 
         await AssertDoneOrAlreadyDone(await AtOnceDo(() => api.Send(HttpMethod.Delete, "/api/User/unfollow", me,
-            JsonContent.Create(new { userToUnFollowId = them.Id }))), "NotFollowing");
+            JsonContent.Create(new { userToUnFollowId = them.Id }))));
         await using (var db = api.Db())
         {
             Assert.False(await db.Follows.AnyAsync(f => f.FollowerId == me.Id && f.FollowedId == them.Id));
@@ -52,8 +54,14 @@ public class IdempotentWritesHttpTests(SardApiFactory api)
         var list = await api.ReadingList(owner);
         var novel = await api.AddNovel(owner);
 
-        await AssertDoneOrAlreadyDone(await AtOnceDo(() => api.Send(HttpMethod.Post, $"/api/readinglist/{list}/follow", reader)), "AlreadyFollowing");
-        await AssertDoneOrAlreadyDone(await AtOnceDo(() => api.Send(HttpMethod.Post, $"/api/readinglist/{list}/novels/{novel.Id}", owner)), "AlreadyInList");
+        await AssertDoneOrAlreadyDone(await AtOnceDo(() => api.Send(HttpMethod.Post, $"/api/readinglist/{list}/follow", reader)));
+        // Adding a novel twice is still refused (400 AlreadyInList): only these writes' repeats are 204.
+        var adds = await AtOnceDo(() => api.Send(HttpMethod.Post, $"/api/readinglist/{list}/novels/{novel.Id}", owner));
+        Assert.Single(adds, r => r.StatusCode == HttpStatusCode.OK);
+        foreach (var refused in adds.Where(r => r.StatusCode != HttpStatusCode.OK))
+        {
+            Assert.Equal("AlreadyInList", (await refused.Error(HttpStatusCode.BadRequest)).GetProperty("code").GetString());
+        }
         await using (var db = api.Db())
         {
             var row = await db.ReadingLists.SingleAsync(l => l.Id == list);
@@ -61,9 +69,10 @@ public class IdempotentWritesHttpTests(SardApiFactory api)
             Assert.Equal(1, await db.ReadingListFollowers.CountAsync(f => f.ReadingListId == list));
         }
 
-        await AssertDoneOrAlreadyDone(await AtOnceDo(() => api.Send(HttpMethod.Delete, $"/api/readinglist/{list}/unfollow", reader)), "NotFollowing");
-        await AssertDoneOrAlreadyDone(await AtOnceDo(() => api.Send(HttpMethod.Delete, $"/api/readinglist/{list}/novels/{novel.Id}", owner)),
-            "NotInList", done: HttpStatusCode.NoContent);
+        await AssertDoneOrAlreadyDone(await AtOnceDo(() => api.Send(HttpMethod.Delete, $"/api/readinglist/{list}/unfollow", reader)));
+        // Removing a novel answers 204 either way.
+        Assert.All(await AtOnceDo(() => api.Send(HttpMethod.Delete, $"/api/readinglist/{list}/novels/{novel.Id}", owner)),
+            r => Assert.Equal(HttpStatusCode.NoContent, r.StatusCode));
         await using (var db = api.Db())
         {
             var row = await db.ReadingLists.SingleAsync(l => l.Id == list);
