@@ -51,6 +51,24 @@ public sealed record WithdrawableBalance(
             holdDays, asOf);
 }
 
+/// <summary>What a Google Play refund did (#22 rule 4, #27).</summary>
+/// <param name="BuyerBalance">The buyer's balance after it (below zero when not all of it could be taken back).</param>
+/// <param name="ReturnedToBuyer">What was taken back from the earnings the buyer's own payments became, and given back to them.</param>
+/// <param name="TakenBack">What was taken back from earnings in all, down the cascade included.</param>
+/// <param name="Reversals">How many earnings were taken back from.</param>
+/// <param name="Uncovered">The buyer's deficit that no earning on hold could cover.</param>
+public sealed record PlayRefundOutcome(decimal BuyerBalance, decimal ReturnedToBuyer, decimal TakenBack, int Reversals, decimal Uncovered);
+
+/// <summary>
+/// The clawback of a refund needs a wallet it didn't lock: the ledger changed between the plan read without locks and the
+/// locks. Nothing was written; roll back and start again with <see cref="Wallets"/> locked too.
+/// </summary>
+public sealed class RefundWalletsChangedException(IReadOnlyList<string> wallets)
+    : Exception($"The refund's clawback needs {wallets.Count} more wallet(s) than it locked")
+{
+    public IReadOnlyList<string> Wallets { get; } = wallets;
+}
+
 public interface IWalletService
 {
     Task<UserWallet> GetOrCreateWalletAsync(string userId);
@@ -96,12 +114,25 @@ public interface IWalletService
     Task<WithdrawableBalance> GetWithdrawableForUpdateAsync(string userId);
 
     /// <summary>
-    /// The refund clawback (#22 rule 4), inside the caller's transaction (the one that took the refunded points back
-    /// from <paramref name="buyerId"/>). Walks the buyer's gifts and privilege subscriptions paid since
-    /// <paramref name="paidSince"/>, newest first, and takes back from each author the earning it became while that is
-    /// still on hold, until <paramref name="deficit"/> is covered: an EarningReversed row on the author (whose balance may
-    /// go below zero) and one on the buyer, whose balance gets the amount back so the loss isn't counted twice. Released
-    /// earnings are never touched. Returns what was reversed.
+    /// The wallets a Google Play refund of <paramref name="points"/> from <paramref name="buyerId"/> and its clawback would
+    /// change, read without locks (#27): what <see cref="RefundPlayPurchaseAsync"/> locks.
     /// </summary>
-    Task<decimal> ReverseHeldEarningsAsync(string buyerId, Guid voidedPurchaseId, DateTime paidSince, decimal deficit);
+    Task<IReadOnlyList<string>> PlanPlayRefundAsync(string buyerId, decimal points);
+
+    /// <summary>
+    /// Takes a voided Google Play purchase back (#22 rule 4, #27), inside the caller's transaction:
+    /// <list type="number">
+    /// <item>locks <paramref name="wallets"/> and the buyer's in one pass, in the order transfers lock theirs (user id,
+    /// ordinal), so a gift or another refund among them waits instead of deadlocking;</item>
+    /// <item>reads them again under the locks and takes <paramref name="points"/> from the buyer, even below zero (a
+    /// PlayRefund row, <paramref name="purchaseId"/>, <paramref name="description"/>);</item>
+    /// <item>takes what the buyer's balance couldn't cover back from the earnings still on hold that the buyer paid for,
+    /// newest payment first, whenever they were paid, and down the cascade (<see cref="EarningsClawback"/>): an
+    /// EarningReversed row on the author (whose balance may go below zero) and one giving it back to whom paid.</item>
+    /// </list>
+    /// Throws <see cref="RefundWalletsChangedException"/> before writing anything when the clawback needs a wallet not in
+    /// <paramref name="wallets"/>.
+    /// </summary>
+    Task<PlayRefundOutcome> RefundPlayPurchaseAsync(string buyerId, decimal points, Guid purchaseId, string description,
+        IReadOnlyCollection<string> wallets);
 }

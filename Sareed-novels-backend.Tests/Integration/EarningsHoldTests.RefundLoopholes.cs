@@ -413,10 +413,57 @@ public partial class EarningsHoldTests
         Assert.True(await refund.WaitAsync(TimeSpan.FromSeconds(60)));
         var sent = await gift.WaitAsync(TimeSpan.FromSeconds(60));
         Assert.True(sent.Success, $"{sent.Code}: {sent.Message}");
+        Assert.Empty(transactionLog.Warnings); // no deadlock, not even one retried
         // The refund took the held gift back from the author (1500 - 1000), then the author gave 100 to the buyer.
         Assert.Equal((100m, 400m), (await Balance(buyer), await Balance(author)));
         await AssertLedgerAddsUp(buyer);
         await AssertLedgerAddsUp(author);
+    }
+
+    /// <summary>Runs <paramref name="action"/> just before the first command that locks <paramref name="userId"/>'s wallet.</summary>
+    private sealed class BeforeWalletLock(string userId, Func<Task> action) : DbCommandInterceptor
+    {
+        private int fired;
+
+        public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("UPDLOCK", StringComparison.Ordinal)
+                && command.CommandText.Contains("UserWallets", StringComparison.Ordinal)
+                && command.Parameters.Cast<DbParameter>().Any(p => userId.Equals(p.Value))
+                && Interlocked.Exchange(ref fired, 1) == 0)
+            {
+                await action();
+            }
+            return result;
+        }
+    }
+
+    [Fact]
+    public async Task A_refund_whose_clawback_changes_before_it_locks_starts_again_with_the_wallets_it_needs()
+    {
+        var (buyer, a, b) = (await SeedUser(), await SeedUser(), await SeedUser());
+        var purchase = await BuyOnPlay(buyer);
+        await BuyOnPlay(buyer);
+        Assert.True(await Gift(buyer, await SeedNovel(a), 1000)); // 1000 left: the refund's plan takes nothing back
+        var novelB = await SeedNovel(b);
+        clock.Advance(Minute);
+
+        // Between the plan and the locks, the buyer spends the rest on a gift to B: now the refund leaves them 1000 short,
+        // and the clawback needs B's wallet, which the refund didn't lock.
+        var spend = new BeforeWalletLock(buyer.Id, async () => Assert.True((await GiftResult(buyer, novelB, 1000)).Success));
+        await using (var request = NewRequest(spend))
+        {
+            Assert.True(await request.Play.ApplyVoidAsync(new PlayVoidedPurchase(purchase.Token, purchase.OrderId, clock.UtcNow, 1, 0)));
+        }
+
+        // Started again with B's wallet locked too, and took back the newest gift, B's; A keeps theirs.
+        Assert.Single(playLog.Entries, e => e.Message.Contains("needs 1 more wallet(s) than planned; starting again (attempt 2)"));
+        Assert.Equal((0m, 1000m, 0m), (await Balance(buyer), await Balance(a), await Balance(b)));
+        Assert.Single(await Ledger(buyer), t => t.Type == TransactionType.PlayRefund);
+        Assert.Single(await Ledger(b), t => t.Type == TransactionType.EarningReversed);
+        await AssertLedgerAddsUp(buyer);
+        await AssertLedgerAddsUp(b);
     }
 
     /// <summary>A transaction of the test's own, which SQL Server keeps when it deadlocks with the API (a higher priority).</summary>
@@ -474,6 +521,7 @@ public partial class EarningsHoldTests
 
         var sent = await gift.WaitAsync(TimeSpan.FromSeconds(60));
         Assert.True(sent.Success, $"{sent.Code}: {sent.Message}");
+        Assert.Single(transactionLog.Warnings, w => w.StartsWith("Picked as a deadlock victim (attempt 1 of 2)", StringComparison.Ordinal));
         Assert.Equal((700m, 310m), (await Balance(reader), await Balance(author)));
         Assert.Single(await Ledger(reader), t => t.Type == TransactionType.GiftSent);
         Assert.Single(await Ledger(author), t => t.Type == TransactionType.GiftReceived);
@@ -502,6 +550,7 @@ public partial class EarningsHoldTests
 
         var subscribed = await subscribe.WaitAsync(TimeSpan.FromSeconds(60));
         Assert.True(subscribed.Success, $"{subscribed.Code}: {subscribed.Message}");
+        Assert.Single(transactionLog.Warnings, w => w.StartsWith("Picked as a deadlock victim (attempt 1 of 2)", StringComparison.Ordinal));
         Assert.Equal((700m, 310m), (await Balance(reader), await Balance(author)));
         Assert.Single(await Ledger(reader), t => t.Type == TransactionType.PrivilegeSubscription);
         await using var db = database.CreateContext();

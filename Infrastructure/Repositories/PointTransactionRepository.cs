@@ -1,6 +1,7 @@
 ﻿using Domain.Constants;
 using Domain.Entities;
 using Domain.Repositories;
+using Infrastructure.Configuration;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -38,21 +39,27 @@ public class PointTransactionRepository(ApplicationDbContext dbContext) : IPoint
                 t.ReversedTransactionId))
             .ToListAsync();
 
-    public async Task<IReadOnlyList<HeldEarning>> GetHeldEarningsPaidByAsync(string buyerId, DateTime paidSince, DateTime now)
+    public async Task<IReadOnlyList<HeldEarning>> GetHeldEarningsPaidByAsync(string payerId, DateTime now)
     {
+        // An earning is held at most the longest hold after it was credited, in the same transaction as its payment: a
+        // payment older than that can't have an earning still on hold (this only spares reading older ones).
+        var paidSince = now.AddDays(-(WalletSettings.MaxEarningsHoldDays + 1));
+
         // Both rows of a gift or subscription share RelatedRequestId (the GiftTransaction or subscription), which pairs
-        // the reader's payment with the author's earning.
+        // the payment with the author's earning.
         var rows = await (
                 from paid in dbContext.PointTransactions.AsNoTracking()
-                where paid.UserId == buyerId
+                where paid.UserId == payerId
                       && (paid.Type == TransactionType.GiftSent || paid.Type == TransactionType.PrivilegeSubscription)
                       && paid.CreatedAt >= paidSince
                       && paid.RelatedRequestId != null
                 join earning in dbContext.PointTransactions.AsNoTracking() on paid.RelatedRequestId equals earning.RelatedRequestId
-                where earning.UserId != buyerId
+                where earning.UserId != payerId
                       && ((paid.Type == TransactionType.GiftSent && earning.Type == TransactionType.GiftReceived)
                           || (paid.Type == TransactionType.PrivilegeSubscription && earning.Type == TransactionType.PrivilegeRevenue))
                       && earning.AvailableAt > now
+                      // A deleted account's balance, held earnings included, was forfeited already.
+                      && earning.User.DeletedAt == null
                 orderby paid.CreatedAt descending, paid.Id descending
                 select new
                 {

@@ -7,6 +7,9 @@ public class WalletSettings
 
     public const int DefaultEarningsHoldDays = 30;
 
+    /// <summary>The longest hold the setting accepts.</summary>
+    public const int MaxEarningsHoldDays = 365;
+
     /// <summary>
     /// Days an earning (a gift or privilege subscription received) is held before it can be withdrawn, from 0 to 365;
     /// 30 by default, the window of Google's voided purchases list, so a refund is seen while its points are still held.

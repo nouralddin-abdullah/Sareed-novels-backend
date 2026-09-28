@@ -22,4 +22,12 @@ public interface ITransactionManager
 
     /// <inheritdoc cref="InTransactionAsync{T}"/>
     Task InTransactionAsync(Func<Task> work, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs <paramref name="work"/> (given the attempt number, from 1) in a transaction of its own, which must not be
+    /// inside another one. When SQL Server picks it as a deadlock victim (error 1205), it rolled the whole transaction
+    /// back, so none of it happened: it runs again in a new transaction, up to <paramref name="attempts"/> times in all.
+    /// Whenever an attempt fails, the entities it added to the context are forgotten, so nothing of it is saved later.
+    /// </summary>
+    Task<T> InNewTransactionAsync<T>(Func<int, Task<T>> work, int attempts = 1, CancellationToken cancellationToken = default);
 }

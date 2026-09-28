@@ -16,10 +16,11 @@ public sealed record LedgerEntry(
     DateTime? AvailableAt = null,
     Guid? ReversedTransactionId = null);
 
-/// <summary>An author's earning still on hold that a reader's gift or privilege subscription paid for (#22 rule 4).</summary>
+/// <summary>An author's earning still on hold that a gift or privilege subscription paid for (#22 rule 4, #27).</summary>
 /// <param name="EarningId">The GiftReceived or PrivilegeRevenue row.</param>
+/// <param name="AuthorId">Who received it.</param>
 /// <param name="Remaining">Its amount less what earlier reversals already took back.</param>
-/// <param name="PaidAt">When the reader paid (the GiftSent or PrivilegeSubscription row).</param>
+/// <param name="PaidAt">When it was paid for (the GiftSent or PrivilegeSubscription row).</param>
 public sealed record HeldEarning(
     Guid EarningId,
     string AuthorId,
@@ -38,11 +39,12 @@ public interface IPointTransactionRepository
     Task<IReadOnlyList<LedgerEntry>> GetLedgerAsync(string userId);
 
     /// <summary>
-    /// The earnings still on hold at <paramref name="now"/> that <paramref name="buyerId"/> paid for with gifts or privilege
-    /// subscriptions since <paramref name="paidSince"/>, newest payment first, with what is left of each. Payments from
-    /// before #22 aren't paired with their earning (and those earnings are all released anyway).
+    /// The earnings still on hold at <paramref name="now"/> that <paramref name="payerId"/> paid for with gifts or privilege
+    /// subscriptions, whenever they were paid (the hold bounds how far back that is), newest payment first, with what is
+    /// left of each. Earnings of deleted accounts are left out: their balance was forfeited already. Payments from before
+    /// #22 aren't paired with their earning (and those earnings are all released anyway).
     /// </summary>
-    Task<IReadOnlyList<HeldEarning>> GetHeldEarningsPaidByAsync(string buyerId, DateTime paidSince, DateTime now);
+    Task<IReadOnlyList<HeldEarning>> GetHeldEarningsPaidByAsync(string payerId, DateTime now);
 
     /// <summary>The EarningReversed rows of these users since <paramref name="since"/>, newest first, at most
     /// <paramref name="perUser"/> each.</summary>

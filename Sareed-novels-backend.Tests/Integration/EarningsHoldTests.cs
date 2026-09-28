@@ -33,20 +33,25 @@ public partial class EarningsHoldTests(SqlServerDatabase database) : IClassFixtu
     private readonly MutableClock clock = new(DateTime.UtcNow);
     private readonly FakeGooglePlay google = new();
 
+    /// <summary>What the requests' transaction managers logged: a transaction run again after losing a deadlock.</summary>
+    private readonly ListLogger<TransactionManager> transactionLog = new();
+
+    /// <summary>What Play billing logged: a refund started again.</summary>
+    private readonly ListLogger<PlayBillingService> playLog = new();
+
     /// <summary>
     /// One API request: its own DbContext and scoped services, all on the test's clock; its commands pass through
     /// <paramref name="interceptors"/>, if any.
     /// </summary>
-    private sealed class Request(SqlServerDatabase database, MutableClock clock, FakeGooglePlay google, params IInterceptor[] interceptors)
-        : IAsyncDisposable
+    private sealed class Request(SqlServerDatabase database, MutableClock clock, FakeGooglePlay google, ListLogger<TransactionManager> log,
+        ListLogger<PlayBillingService> playLog, params IInterceptor[] interceptors) : IAsyncDisposable
     {
         public ApplicationDbContext Db { get; } = database.CreateContext(interceptors);
-        public TransactionManager Transactions => new(Db);
+        public TransactionManager Transactions => new(Db, log);
         public WalletService Wallet => WalletTesting.Wallet(Db, clock);
 
         public PlayBillingService Play => new(google.Connection(), google.Api(), new PlayPurchaseRepository(Db),
-            new UserWalletRepository(Db), new PointTransactionRepository(Db), Wallet, Transactions, clock,
-            NullLogger<PlayBillingService>.Instance);
+            new UserWalletRepository(Db), new PointTransactionRepository(Db), Wallet, Transactions, clock, playLog);
 
         public SendGiftCommandHandler SendGift(User sender) => new(NullLogger<SendGiftCommandHandler>.Instance,
             new GiftRepository(Db), new GiftTransactionRepository(Db), new NovelsRepository(Db), SignedIn(sender), Wallet,
@@ -65,7 +70,7 @@ public partial class EarningsHoldTests(SqlServerDatabase database) : IClassFixtu
         public ValueTask DisposeAsync() => Db.DisposeAsync();
     }
 
-    private Request NewRequest(params IInterceptor[] interceptors) => new(database, clock, google, interceptors);
+    private Request NewRequest(params IInterceptor[] interceptors) => new(database, clock, google, transactionLog, playLog, interceptors);
 
     private static IUserContext SignedIn(User user)
     {
