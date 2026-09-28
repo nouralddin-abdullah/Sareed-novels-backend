@@ -53,6 +53,17 @@ public class ErrorHandlingMiddlewareTests
         Assert.Equal("أنت تتابع هذا المستخدم بالفعل", body.GetProperty("message").GetString());
     }
 
+    [Fact]
+    public async Task A_conflict_is_a_409_with_its_code()
+    {
+        var (response, body) = await Run(Throws(new ConflictException("هذا الحساب محذوف بالفعل", "AlreadyDeleted")));
+
+        Assert.Equal(409, response.StatusCode);
+        Assert.Equal(["code", "message"], body.EnumerateObject().Select(p => p.Name));
+        Assert.Equal("AlreadyDeleted", body.GetProperty("code").GetString());
+        Assert.Equal("هذا الحساب محذوف بالفعل", body.GetProperty("message").GetString());
+    }
+
     [Theory]
     [InlineData(typeof(ArgumentException))]
     [InlineData(typeof(ArgumentOutOfRangeException))]
