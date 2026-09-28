@@ -1,23 +1,35 @@
 ﻿using Application.Services;
+using Application.Wallet;
+using Domain.Constants;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
+using Infrastructure.Configuration;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Services;
 
 /// <summary>
 /// Every balance change is a single conditional SQL UPDATE (never read-modify-write) and is committed together with its
-/// PointTransaction row: each method joins the caller's transaction or opens its own.
+/// PointTransaction row: each method joins the caller's transaction or opens its own. Earnings are held for
+/// Wallet:EarningsHoldDays before they can be withdrawn, and only earnings can be (#22).
 /// </summary>
 public class WalletService(
     ILogger<WalletService> logger,
     IUserWalletRepository walletRepository,
     IPointTransactionRepository transactionRepository,
+    IWithdrawalRequestRepository withdrawalRepository,
     UserManager<User> userManager,
-    ITransactionManager transactionManager) : IWalletService
+    ITransactionManager transactionManager,
+    TimeProvider clock,
+    IOptions<WalletSettings> settings) : IWalletService
 {
+    private int HoldDays => settings.Value.EarningsHoldDays;
+
+    private DateTime Now() => clock.GetUtcNow().UtcDateTime;
+
     public async Task<UserWallet> GetOrCreateWalletAsync(string userId)
     {
         var wallet = await walletRepository.GetByUserIdAsync(userId);
@@ -114,6 +126,9 @@ public class WalletService(
             throw new ArgumentException("Cannot transfer points to the same user");
         }
 
+        // The two rows always share an id: the refund clawback finds the author's earning from the reader's payment by it.
+        relatedRequestId ??= Guid.NewGuid();
+
         await transactionManager.InTransactionAsync(async () =>
         {
             // Touch the two wallets in a fixed order (by user id) so opposite transfers (A->B while B->A) take their
@@ -143,13 +158,82 @@ public class WalletService(
             amount, fromUserId, toUserId);
     }
 
+    public async Task<WithdrawableBalance> GetWithdrawableAsync(string userId) =>
+        await WithdrawableAsync(userId, await walletRepository.GetBalanceAsync(userId));
+
+    public async Task<WithdrawableBalance> GetWithdrawableForUpdateAsync(string userId) =>
+        await WithdrawableAsync(userId, await walletRepository.LockBalanceAsync(userId));
+
+    private async Task<WithdrawableBalance> WithdrawableAsync(string userId, decimal balance)
+    {
+        var now = Now();
+        var earnings = await transactionRepository.GetEarningsTotalsAsync(userId, now);
+        var (withdrawn, pendingWithdrawals) = await withdrawalRepository.GetPointTotalsAsync(userId);
+        return new WithdrawableBalance(balance, earnings.Released, earnings.ReversedReleased, withdrawn, pendingWithdrawals,
+            earnings.Held, earnings.NextReleaseAt, HoldDays, now);
+    }
+
+    public async Task<decimal> ReverseHeldEarningsAsync(string buyerId, Guid voidedPurchaseId, DateTime paidSince, decimal deficit)
+    {
+        if (deficit <= 0)
+        {
+            return 0;
+        }
+
+        return await transactionManager.InTransactionAsync(async () =>
+        {
+            // The buyer's wallet stays locked until the commit (the caller's refund locked it first): a second refund of
+            // theirs waits for this one and then sees what it reversed, so no earning is taken back twice.
+            await walletRepository.LockBalanceAsync(buyerId);
+            var held = await transactionRepository.GetHeldEarningsPaidByAsync(buyerId, paidSince, Now());
+            var reversals = EarningsClawback.Allocate(deficit, held);
+
+            // Each author's wallet is locked before it changes (it may change more than once here), in a fixed order so
+            // that clawbacks sharing authors take their locks the same way round.
+            foreach (var authorId in reversals.Select(r => r.Earning.AuthorId).Distinct().Order(StringComparer.Ordinal))
+            {
+                await walletRepository.LockBalanceAsync(authorId);
+            }
+
+            var reversed = 0m;
+            foreach (var (earning, amount) in reversals)
+            {
+                var details = new TransactionDetails(earning.NovelId, earning.GiftId, earning.GiftCount);
+
+                // Below zero if the author already spent it: a negative balance refuses every kind of spending.
+                var authorAfter = await walletRepository.DebitAllowingNegativeAsync(earning.AuthorId, amount);
+                await RecordAsync(earning.AuthorId, -amount, authorAfter, TransactionType.EarningReversed,
+                    TransactionDescriptions.EarningReversed(amount), voidedPurchaseId, details, earning.EarningId);
+
+                var buyerAfter = await walletRepository.CreditAsync(buyerId, amount);
+                await RecordAsync(buyerId, amount, buyerAfter, TransactionType.EarningReversed,
+                    TransactionDescriptions.EarningReversalReturned(amount), voidedPurchaseId, details, earning.EarningId);
+
+                reversed += amount;
+                logger.LogWarning(
+                    "Took back {Amount} points of earning {EarningId} from author {AuthorId} (balance now {AuthorBalance}): purchase {PurchaseId} that paid for it was refunded; returned to buyer {BuyerId} (balance now {BuyerBalance})",
+                    amount, earning.EarningId, earning.AuthorId, authorAfter, voidedPurchaseId, buyerId, buyerAfter);
+            }
+
+            if (reversed < deficit)
+            {
+                logger.LogWarning(
+                    "Refund of purchase {PurchaseId} left buyer {BuyerId} {Uncovered} points short that no earning still on hold could cover",
+                    voidedPurchaseId, buyerId, deficit - reversed);
+            }
+            return reversed;
+        });
+    }
+
     private async Task<decimal> DebitOrThrowAsync(string userId, decimal amount) =>
         await walletRepository.TryDebitAsync(userId, amount)
         ?? throw new InsufficientBalanceException(amount);
 
     private Task RecordAsync(string userId, decimal signedAmount, decimal balanceAfter, string type, string description, Guid? relatedRequestId,
-        TransactionDetails? details) =>
-        transactionRepository.CreateAsync(new PointTransaction
+        TransactionDetails? details, Guid? reversedTransactionId = null)
+    {
+        var now = Now();
+        return transactionRepository.CreateAsync(new PointTransaction
         {
             Id = Guid.NewGuid(),
             UserId = userId,
@@ -162,8 +246,12 @@ public class WalletService(
             NovelId = details?.NovelId,
             GiftId = details?.GiftId,
             GiftCount = details?.GiftCount,
-            CreatedAt = DateTime.UtcNow
+            // Earnings are held; everything else has no hold.
+            AvailableAt = TransactionType.IsEarning(type) ? now.AddDays(HoldDays) : null,
+            ReversedTransactionId = reversedTransactionId,
+            CreatedAt = now
         });
+    }
 
     private static void EnsurePositive(decimal amount)
     {

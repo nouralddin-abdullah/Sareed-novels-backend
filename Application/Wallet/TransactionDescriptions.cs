@@ -1,4 +1,5 @@
 using System.Globalization;
+using Application.Common;
 using Domain.Constants;
 
 namespace Application.Wallet;
@@ -25,6 +26,14 @@ public static class TransactionDescriptions
 
     public static string WithdrawalApproved(int points, decimal amountEgp, string paymentMethod) =>
         $"سحب رصيد: {points} نقطة ({Egp(amountEgp)} جنيه عبر {PaymentMethod.ArabicName(paymentMethod)})";
+
+    /// <summary>The author's EarningReversed row: an earning still on hold, taken back after a refund (#22).</summary>
+    public static string EarningReversed(decimal points) =>
+        $"أُلغيت أرباح {Points.Format(points)} نقطة لأن عملية الشراء التي جاءت منها استُرد مبلغها";
+
+    /// <summary>The buyer's EarningReversed row: what their refund took is given back, since the author no longer has it.</summary>
+    public static string EarningReversalReturned(decimal points) =>
+        $"استُرجعت {Points.Format(points)} نقطة من أرباح الكاتب وأُعيدت إلى رصيدك، لأن عملية الشراء التي دفعت منها استُرد مبلغها";
 
     private static string Egp(decimal amount) => amount.ToString("0.00", CultureInfo.InvariantCulture);
 }

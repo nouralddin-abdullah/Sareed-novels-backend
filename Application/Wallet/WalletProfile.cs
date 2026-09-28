@@ -8,15 +8,22 @@ public class WalletProfile : Profile
 {
     public WalletProfile()
     {
-        CreateMap<UserWallet, WalletDto>();
-        
+        // What is withdrawable comes from the wallet service (GetMyWalletQueryHandler).
+        CreateMap<UserWallet, WalletDto>()
+            .ForMember(dest => dest.Withdrawable, opt => opt.Ignore())
+            .ForMember(dest => dest.PendingEarnings, opt => opt.Ignore())
+            .ForMember(dest => dest.NextReleaseAt, opt => opt.Ignore());
+
         CreateMap<RechargeRequest, RechargeRequestDto>()
             .ForMember(dest => dest.UserDisplayName, opt => opt.MapFrom(src => src.User != null ? src.User.DisplayName : null))
             .ForMember(dest => dest.UserEmail, opt => opt.MapFrom(src => src.User != null ? src.User.Email : null));
         
         CreateMap<WithdrawalRequest, WithdrawalRequestDto>()
             .ForMember(dest => dest.UserDisplayName, opt => opt.MapFrom(src => src.User != null ? src.User.DisplayName : null))
-            .ForMember(dest => dest.UserEmail, opt => opt.MapFrom(src => src.User != null ? src.User.Email : null));
+            .ForMember(dest => dest.UserEmail, opt => opt.MapFrom(src => src.User != null ? src.User.Email : null))
+            // The admin list fills these in (GetPendingWithdrawalRequestsQueryHandler).
+            .ForMember(dest => dest.RequesterWithdrawable, opt => opt.Ignore())
+            .ForMember(dest => dest.RecentEarningReversals, opt => opt.Ignore());
         
         CreateMap<PointTransaction, PointTransactionDto>()
             .ForMember(dest => dest.NovelSlug, opt => opt.Ignore())

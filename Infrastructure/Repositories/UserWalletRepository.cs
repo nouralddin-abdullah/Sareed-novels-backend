@@ -14,6 +14,19 @@ public class UserWalletRepository(ApplicationDbContext dbContext) : IUserWalletR
             .FirstOrDefaultAsync(w => w.UserId == userId);
     }
 
+    public async Task<decimal> GetBalanceAsync(string userId) =>
+        await dbContext.UserWallets.AsNoTracking()
+            .Where(w => w.UserId == userId)
+            .Select(w => (decimal?)w.CurrentBalance)
+            .FirstOrDefaultAsync() ?? 0;
+
+    public async Task<decimal> LockBalanceAsync(string userId) =>
+        await dbContext.UserWallets
+            .FromSqlInterpolated($"SELECT * FROM UserWallets WITH (UPDLOCK, ROWLOCK) WHERE UserId = {userId}")
+            .AsNoTracking()
+            .Select(w => (decimal?)w.CurrentBalance)
+            .SingleOrDefaultAsync() ?? 0;
+
     public async Task<UserWallet> CreateAsync(UserWallet wallet)
     {
         dbContext.UserWallets.Add(wallet);

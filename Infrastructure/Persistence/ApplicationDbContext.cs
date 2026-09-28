@@ -1146,6 +1146,24 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(pt => new { pt.Type, pt.CreatedAt })
                 .HasDatabaseName("IX_PointTransactions_Type_Created");
+
+            // What a user can withdraw (#22): their earnings on each side of the hold, and their reversals.
+            entity.HasIndex(pt => new { pt.UserId, pt.Type, pt.AvailableAt })
+                .IncludeProperties(pt => new { pt.Amount, pt.ReversedTransactionId })
+                .HasDatabaseName("IX_PointTransactions_User_Type_Available");
+
+            // The refund clawback: a reader's payment to the author's earning (both rows share RelatedRequestId), and
+            // what earlier reversals already took of an earning.
+            entity.HasIndex(pt => pt.RelatedRequestId)
+                .HasFilter("[RelatedRequestId] IS NOT NULL")
+                .HasDatabaseName("IX_PointTransactions_RelatedRequest");
+            entity.HasIndex(pt => pt.ReversedTransactionId)
+                .HasFilter("[ReversedTransactionId] IS NOT NULL")
+                .HasDatabaseName("IX_PointTransactions_ReversedTransaction");
+
+            // An earning without a release date would count as neither released nor held: refuse it.
+            entity.ToTable(t => t.HasCheckConstraint("CK_PointTransactions_EarningHasAvailableAt",
+                "[Type] NOT IN (N'GiftReceived', N'PrivilegeRevenue') OR [AvailableAt] IS NOT NULL"));
         });
 
         // Google Play point packs: one row per purchase token, and the voided-purchases poll's cursor.
