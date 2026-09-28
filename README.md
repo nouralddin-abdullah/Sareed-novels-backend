@@ -239,3 +239,7 @@ adjusted), privilege subscriptions, devices, preferences and blocks are deleted;
 name and photo. Open reports about them close as `AccountDeleted`. The wallet balance is forfeited (set to zero, ledger
 type `BalanceForfeited`) and pending withdrawals are cancelled; the ledger and Play purchases stay. Deleted accounts
 have no profile (404) and are left out of search, supporters and follower lists.
+
+The `deleted-` user name prefix is reserved for them (`UserNameRules.LooksDeleted`, ignoring case), so a client can tell
+a deleted author by `userName` alone and hide the profile link, report and block: sign-up, Google sign-up and renames
+to such a name are refused with code `ReservedUserName` (register: 400 `result.code`; update-me: 400 `code`).

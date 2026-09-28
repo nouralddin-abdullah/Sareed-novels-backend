@@ -23,6 +23,17 @@ public class UpdateMeCommandHandler(
         logger.LogInformation("Updating data for user {username}", currentUser.UserName);
         var user = await userManager.FindByIdAsync(currentUser.Id) ?? throw new NotFoundException("المستخدم غير موجود", "UserNotFound");
 
+        // "deleted-..." names are deleted accounts' (the Identity validator refuses them too; this says so with its code).
+        if (UserNameRules.LooksDeleted(request.UserName) && !string.Equals(request.UserName, user.UserName, StringComparison.OrdinalIgnoreCase))
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Code = UserNameRules.DeletedPrefixCode,
+                Message = UserNameRules.DeletedPrefixMessage
+            };
+        }
+
         //if username is provided and not null test if it was taken before? or available
         if (!string.IsNullOrEmpty(request.UserName) && request.UserName != user.UserName)
         {
