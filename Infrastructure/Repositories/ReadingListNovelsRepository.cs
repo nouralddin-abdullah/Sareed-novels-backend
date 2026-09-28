@@ -9,8 +9,15 @@ public class ReadingListNovelsRepository(ApplicationDbContext dbContext) : IRead
 {
     public async Task<bool> AddNovelAsync(ReadingListNovel readingListNovel)
     {
-        dbContext.ReadingListNovels.Add(readingListNovel);
-        return await dbContext.SaveChangesAsync() > 0;
+        // A concurrent duplicate is a no-op (the key lock), not a primary key violation (500).
+        var n = readingListNovel;
+        var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO ReadingListNovels (ReadingListId, NovelId, AddedAt, OrderIndex)
+            SELECT {n.ReadingListId}, {n.NovelId}, {n.AddedAt}, {n.OrderIndex}
+            WHERE NOT EXISTS (SELECT 1 FROM ReadingListNovels WITH (UPDLOCK, HOLDLOCK)
+                              WHERE ReadingListId = {n.ReadingListId} AND NovelId = {n.NovelId})
+            """);
+        return inserted == 1;
     }
 
     public async Task<ReadingListNovel?> GetAsync(Guid readingListId, Guid novelId)
@@ -49,14 +56,12 @@ public class ReadingListNovelsRepository(ApplicationDbContext dbContext) : IRead
             .AnyAsync(rln => rln.ReadingListId == readingListId && rln.NovelId == novelId);
     }
 
-    public async Task<bool> RemoveNovelAsync(Guid readingListId, Guid novelId)
-    {
-        var readingListNovel = await GetAsync(readingListId, novelId);
-        if (readingListNovel == null) return false;
-
-        dbContext.ReadingListNovels.Remove(readingListNovel);
-        return await dbContext.SaveChangesAsync() > 0;
-    }
+    public async Task<bool> RemoveNovelAsync(Guid readingListId, Guid novelId) =>
+        // One statement: a concurrent removal deletes nothing instead of failing on the row the other one removed.
+        await dbContext.ReadingListNovels
+            .IgnoreQueryFilters()
+            .Where(rln => rln.ReadingListId == readingListId && rln.NovelId == novelId)
+            .ExecuteDeleteAsync() > 0;
 
     public async Task<int> GetNovelsCountAsync(Guid readingListId)
     {

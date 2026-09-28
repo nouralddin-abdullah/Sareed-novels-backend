@@ -48,9 +48,16 @@ public class FollowReadingListCommandHandler(
             };
         }
 
-        var isFollowing = await followersRepository.IsFollowingAsync(request.ReadingListId, currentUser.Id);
+        var follower = new ReadingListFollower
+        {
+            ReadingListId = request.ReadingListId,
+            UserId = currentUser.Id,
+            FollowedAt = DateTime.UtcNow
+        };
 
-        if (isFollowing)
+        // Already following, or a concurrent follow (a double tap) got there first: the same answer.
+        if (await followersRepository.IsFollowingAsync(request.ReadingListId, currentUser.Id)
+            || !await followersRepository.FollowAsync(follower))
         {
             return new OperationResult
             {
@@ -60,36 +67,17 @@ public class FollowReadingListCommandHandler(
             };
         }
 
-        var follower = new ReadingListFollower
-        {
-            ReadingListId = request.ReadingListId,
-            UserId = currentUser.Id,
-            FollowedAt = DateTime.UtcNow
-        };
+        await readingListsRepository.AdjustFollowersCountAsync(request.ReadingListId, +1);
 
-        var result = await followersRepository.FollowAsync(follower);
+        // Fire-and-forget: Send notification
+        _ = SendReadingListFollowedNotificationInBackground(readingList.UserId, currentUser.Id, request.ReadingListId, readingList.Name);
 
-        if (result)
-        {
-            await readingListsRepository.AdjustFollowersCountAsync(request.ReadingListId, +1);
-            
-            // Fire-and-forget: Send notification
-            _ = SendReadingListFollowedNotificationInBackground(readingList.UserId, currentUser.Id, request.ReadingListId, readingList.Name);
-
-            logger.LogInformation("User {UserId} successfully followed reading list {ListId}", currentUser.Id, request.ReadingListId);
-
-            return new OperationResult
-            {
-                Success = true,
-                Message = $"أنت تتابع «{readingList.Name}» الآن"
-            };
-        }
+        logger.LogInformation("User {UserId} successfully followed reading list {ListId}", currentUser.Id, request.ReadingListId);
 
         return new OperationResult
         {
-            Success = false,
-            Code = "OperationFailed",
-            Message = "تعذّرت متابعة القائمة. حاول مرة أخرى."
+            Success = true,
+            Message = $"أنت تتابع «{readingList.Name}» الآن"
         };
     }
     

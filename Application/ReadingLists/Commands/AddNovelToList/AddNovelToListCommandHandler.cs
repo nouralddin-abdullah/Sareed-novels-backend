@@ -38,8 +38,16 @@ public class AddNovelToListCommandHandler(
             };
         }
 
-        // Check if novel is already in list (checks raw existence)
-        if (await readingListNovelsRepository.IsNovelInListAsync(request.ReadingListId, request.NovelId))
+        // Already in the list (checks raw existence), or a concurrent add got there first: the same answer.
+        var added = !await readingListNovelsRepository.IsNovelInListAsync(request.ReadingListId, request.NovelId)
+            && await readingListNovelsRepository.AddNovelAsync(new ReadingListNovel
+            {
+                ReadingListId = request.ReadingListId,
+                NovelId = request.NovelId,
+                AddedAt = DateTime.UtcNow,
+                OrderIndex = await readingListNovelsRepository.GetNextOrderIndexAsync(request.ReadingListId)
+            });
+        if (!added)
         {
             return new OperationResult
             {
@@ -49,34 +57,14 @@ public class AddNovelToListCommandHandler(
             };
         }
 
-        var readingListNovel = new ReadingListNovel
-        {
-            ReadingListId = request.ReadingListId,
-            NovelId = request.NovelId,
-            AddedAt = DateTime.UtcNow,
-            OrderIndex = await readingListNovelsRepository.GetNextOrderIndexAsync(request.ReadingListId)
-        };
+        await readingListsRepository.AdjustNovelsCountAsync(request.ReadingListId, +1);
 
-        var result = await readingListNovelsRepository.AddNovelAsync(readingListNovel);
-
-        if (result)
-        {
-            await readingListsRepository.AdjustNovelsCountAsync(request.ReadingListId, +1);
-
-            logger.LogInformation("Novel {NovelId} added to reading list {ListId}", request.NovelId, request.ReadingListId);
-
-            return new OperationResult
-            {
-                Success = true,
-                Message = $"أُضيفت الرواية إلى «{readingList.Name}»"
-            };
-        }
+        logger.LogInformation("Novel {NovelId} added to reading list {ListId}", request.NovelId, request.ReadingListId);
 
         return new OperationResult
         {
-            Success = false,
-            Code = "OperationFailed",
-            Message = "تعذّرت إضافة الرواية إلى القائمة. حاول مرة أخرى."
+            Success = true,
+            Message = $"أُضيفت الرواية إلى «{readingList.Name}»"
         };
     }
 }

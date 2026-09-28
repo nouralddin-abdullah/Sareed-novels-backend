@@ -87,24 +87,22 @@ namespace Infrastructure.Repositories
 
         public async Task<bool> FollowUser(string userId, string userToFollow)
         {
-            var follow = new Follow
-            {
-                FollowerId = userId,
-                FollowedId = userToFollow,
-                CreatedAt = DateTime.UtcNow
-            };
-            await dbContext.Follows.AddAsync(follow);
-            var result = await dbContext.SaveChangesAsync();
-            return result > 0;
+            // Two follows at once (a double tap, a retry) insert one row: the key lock makes the second a no-op instead
+            // of a primary key violation, which answered 500 (#25).
+            var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO Follows (FollowerId, FollowedId, CreatedAt)
+                SELECT {userId}, {userToFollow}, {DateTime.UtcNow}
+                WHERE NOT EXISTS (SELECT 1 FROM Follows WITH (UPDLOCK, HOLDLOCK)
+                                  WHERE FollowerId = {userId} AND FollowedId = {userToFollow})
+                """);
+            return inserted == 1;
         }
 
-        public async Task<bool> UnFollowUser(string userId, string userToUnFollow)
-        {
-            var follow = await dbContext.Follows.FirstOrDefaultAsync(f => f.FollowerId == userId && f.FollowedId == userToUnFollow);
-            dbContext.Follows.Remove(follow!);
-            var result = await dbContext.SaveChangesAsync();
-            return result > 0;
-        }
+        public async Task<bool> UnFollowUser(string userId, string userToUnFollow) =>
+            // One statement: a concurrent unfollow deletes nothing (it used to fail on the row the other one removed).
+            await dbContext.Follows
+                .Where(f => f.FollowerId == userId && f.FollowedId == userToUnFollow)
+                .ExecuteDeleteAsync() > 0;
 
         public async Task<(IEnumerable<Follow>, int)> GetFollowersList(string userId, int PageSize, int PageNumber)
         {

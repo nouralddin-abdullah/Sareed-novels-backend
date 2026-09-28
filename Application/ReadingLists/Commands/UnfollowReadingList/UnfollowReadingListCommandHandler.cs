@@ -31,9 +31,8 @@ public class UnfollowReadingListCommandHandler(
             };
         }
 
-        var isFollowing = await followersRepository.IsFollowingAsync(request.ReadingListId, currentUser.Id);
-
-        if (!isFollowing)
+        // Not following, or a concurrent unfollow got there first: the same answer.
+        if (!await followersRepository.UnfollowAsync(request.ReadingListId, currentUser.Id))
         {
             return new OperationResult
             {
@@ -43,26 +42,14 @@ public class UnfollowReadingListCommandHandler(
             };
         }
 
-        var result = await followersRepository.UnfollowAsync(request.ReadingListId, currentUser.Id);
+        await readingListsRepository.AdjustFollowersCountAsync(request.ReadingListId, -1);
 
-        if (result)
-        {
-            await readingListsRepository.AdjustFollowersCountAsync(request.ReadingListId, -1);
-
-            logger.LogInformation("User {UserId} successfully unfollowed reading list {ListId}", currentUser.Id, request.ReadingListId);
-
-            return new OperationResult
-            {
-                Success = true,
-                Message = $"ألغيت متابعة «{readingList.Name}»"
-            };
-        }
+        logger.LogInformation("User {UserId} successfully unfollowed reading list {ListId}", currentUser.Id, request.ReadingListId);
 
         return new OperationResult
         {
-            Success = false,
-            Code = "OperationFailed",
-            Message = "تعذّر إلغاء متابعة القائمة. حاول مرة أخرى."
+            Success = true,
+            Message = $"ألغيت متابعة «{readingList.Name}»"
         };
     }
 }
