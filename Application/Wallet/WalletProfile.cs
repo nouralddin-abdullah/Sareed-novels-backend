@@ -21,6 +21,8 @@ public class WalletProfile : Profile
         CreateMap<WithdrawalRequest, WithdrawalRequestDto>()
             .ForMember(dest => dest.UserDisplayName, opt => opt.MapFrom(src => src.User != null ? src.User.DisplayName : null))
             .ForMember(dest => dest.UserEmail, opt => opt.MapFrom(src => src.User != null ? src.User.Email : null))
+            .ForMember(dest => dest.CancelledByOwner,
+                opt => opt.MapFrom(src => WithdrawalMessages.IsCancelledByOwner(src.Status, src.ProcessedBy, src.UserId)))
             // The admin list fills these in (GetPendingWithdrawalRequestsQueryHandler).
             .ForMember(dest => dest.RequesterWithdrawable, opt => opt.Ignore())
             .ForMember(dest => dest.RecentEarningReversals, opt => opt.Ignore());

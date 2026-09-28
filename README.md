@@ -280,8 +280,10 @@ API (additive):
   first, as before; `InsufficientBalance` is no longer returned by this endpoint.
 - `DELETE /api/wallet/withdraw/{id}` (#27): the member cancels their own pending request, which frees its points (none
   were deducted). 204, also when they cancelled it already (a retry is done). The request becomes `Rejected` with
-  `rejectionReason` «ألغاه صاحب الطلب», as the requests an account deletion cancels, so the apps show it as they
-  already show those. Errors are `{ "code", "message" }`:
+  `rejectionReason` «ألغاه صاحب الطلب», as the requests an account deletion cancels, so apps that don't know about
+  cancelling show it as they already show those; each request in `GET /api/wallet/withdraw` also has
+  `cancelledByOwner` (`true` for these, `false` otherwise), to show it as cancelled («ملغى») rather than refused.
+  Errors are `{ "code", "message" }`:
 
   | HTTP | `code` | When | `message` |
   |---|---|---|---|

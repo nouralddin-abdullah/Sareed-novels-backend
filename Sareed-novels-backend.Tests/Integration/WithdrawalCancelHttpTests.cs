@@ -104,7 +104,8 @@ public class WithdrawalCancelHttpTests(SardApiFactory api)
         Assert.NotNull(stored.ProcessedAt);
         // The member's history shows it closed, with the reason; nothing was ever deducted.
         var listed = Assert.Single((await (await api.Get("/api/wallet/withdraw", author)).OkJson()).GetProperty("requests").EnumerateArray());
-        Assert.Equal((RequestStatus.Rejected, CancelledByOwner), (listed.GetProperty("status").GetString(), listed.GetProperty("rejectionReason").GetString()));
+        Assert.Equal((RequestStatus.Rejected, CancelledByOwner, true), (listed.GetProperty("status").GetString(),
+            listed.GetProperty("rejectionReason").GetString(), listed.GetProperty("cancelledByOwner").GetBoolean()));
         Assert.Equal(2000m, (await (await api.Get("/api/wallet", author)).OkJson()).GetProperty("currentBalance").GetDecimal());
     }
 
@@ -152,6 +153,8 @@ public class WithdrawalCancelHttpTests(SardApiFactory api)
         Assert.Equal(message, body.GetProperty("message").GetString());
         var stored = await Stored(request.Id);
         Assert.Equal((status, reason), (stored.Status, stored.RejectionReason));
+        var listed = Assert.Single((await (await api.Get("/api/wallet/withdraw", owner)).OkJson()).GetProperty("requests").EnumerateArray());
+        Assert.False(listed.GetProperty("cancelledByOwner").GetBoolean());
     }
 
     [Fact]
