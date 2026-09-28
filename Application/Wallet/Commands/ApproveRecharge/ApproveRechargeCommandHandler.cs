@@ -52,7 +52,7 @@ public class ApproveRechargeCommandHandler(
                 rechargeRequest.UserId,
                 rechargeRequest.PointsRequested,
                 TransactionType.RechargeApproved,
-                $"Recharge approved: {rechargeRequest.PointsRequested} points ({rechargeRequest.TotalAmountEGP} EGP via {rechargeRequest.PaymentMethod})",
+                TransactionDescriptions.RechargeApproved(rechargeRequest.PointsRequested, rechargeRequest.TotalAmountEGP, rechargeRequest.PaymentMethod),
                 rechargeRequest.Id
             );
             return true;

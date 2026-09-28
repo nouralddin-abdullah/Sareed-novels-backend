@@ -4,6 +4,8 @@ public class GiftDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = default!;
+    /// <summary>The gift's Arabic name (وردة, بيتزا...).</summary>
+    public string NameAr { get; set; } = default!;
     public string ImageUrl { get; set; } = default!;
     public decimal Cost { get; set; }
     public bool IsActive { get; set; }

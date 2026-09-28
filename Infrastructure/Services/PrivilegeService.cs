@@ -7,6 +7,7 @@ using Domain.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Application.Common;
+using Application.Wallet;
 
 namespace Infrastructure.Services;
 
@@ -595,8 +596,9 @@ public class PrivilegeService(
                     amount: cost,
                     fromTransactionType: TransactionType.PrivilegeSubscription,
                     toTransactionType: TransactionType.PrivilegeRevenue,
-                    fromDescription: $"Subscribed to privilege for novel: {novel.Title}",
-                    toDescription: $"Privilege subscription revenue from novel: {novel.Title}"
+                    fromDescription: TransactionDescriptions.PrivilegeSubscription(novel.Title),
+                    toDescription: TransactionDescriptions.PrivilegeRevenue(novel.Title),
+                    details: new TransactionDetails(NovelId: novel.Id)
                 );
 
                 // The transfer holds both wallet rows locked until commit, so a concurrent subscribe by the same user

@@ -21,6 +21,9 @@ public class UpdateGiftCommandHandler(
         if (request.Name != null)
             gift.Name = request.Name;
 
+        if (!string.IsNullOrWhiteSpace(request.NameAr))
+            gift.NameAr = request.NameAr.Trim();
+
         if (request.Cost.HasValue)
             gift.Cost = request.Cost.Value;
 

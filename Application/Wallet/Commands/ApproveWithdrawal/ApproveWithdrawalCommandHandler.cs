@@ -65,7 +65,7 @@ public class ApproveWithdrawalCommandHandler(
                     withdrawalRequest.UserId,
                     withdrawalRequest.PointsRequested,
                     TransactionType.WithdrawalApproved,
-                    $"Withdrawal approved: {withdrawalRequest.PointsRequested} points ({withdrawalRequest.NetAmountEGP} EGP via {withdrawalRequest.WithdrawalMethod})",
+                    TransactionDescriptions.WithdrawalApproved(withdrawalRequest.PointsRequested, withdrawalRequest.NetAmountEGP, withdrawalRequest.WithdrawalMethod),
                     withdrawalRequest.Id
                 );
                 return true;

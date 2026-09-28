@@ -98,7 +98,7 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
 
     private async Task<Gift> SeedGift(decimal cost)
     {
-        var gift = new Gift { Id = Guid.NewGuid(), Name = "Rose", ImageUrl = "https://example.test/rose.png", Cost = cost };
+        var gift = new Gift { Id = Guid.NewGuid(), Name = "Rose", NameAr = "وردة", ImageUrl = "https://example.test/rose.png", Cost = cost };
         await using var db = database.CreateContext();
         db.Gifts.Add(gift);
         await db.SaveChangesAsync();
