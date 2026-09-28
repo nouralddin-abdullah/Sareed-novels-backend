@@ -229,7 +229,7 @@ Errors are `{ "code": "...", "message": "<Arabic, for the user>" }`:
 After 204 every token of the account is refused: delete the stored token, clear what the app cached about the user and
 show the signed-out app (the server already removed the account's push devices, so there's nothing to unregister). If
 the response was lost and the retry gets 401, the deletion went through. Suspended members can't sign in, so they
-email `support@sardnovels.com` instead.
+email `support@sardnovels.com` instead, and an admin deletes the account for them (`OwnerRequest`, below).
 
 What deletion does (`IAccountDeletionService`, one transaction): the user row stays, anonymized, so comments, reviews
 and posts keep an author shown as «مستخدم محذوف» (user name `deleted-<id>`); email, phone, bio, links, photo and banner
@@ -243,3 +243,47 @@ have no profile (404) and are left out of search, supporters and follower lists.
 The `deleted-` user name prefix is reserved for them (`UserNameRules.LooksDeleted`, ignoring case), so a client can tell
 a deleted author by `userName` alone and hide the profile link, report and block: sign-up, Google sign-up and renames
 to such a name are refused with code `ReservedUserName` (register: 400 `result.code`; update-me: 400 `code`).
+
+### Admin: deleting a member's account: `DELETE /api/admin/users/{userId}`
+
+For when Sard must delete an account the member doesn't delete themselves: the terms say Sard is for 13 and older and
+that an account is deleted once we learn it belongs to someone under 13 (`Underage`); enforcing the rules when
+suspending isn't enough (`PolicyViolation`); or a member who asks by email and can't do it in the app, a suspended one
+for instance (`OwnerRequest`, once you have checked the email comes from the account's own address). The other admin
+endpoints (reports, suspensions, wallet requests) are under `/api/admin` too; all need an admin's token.
+
+```bash
+curl -X DELETE https://api-sareed.runasp.net/api/admin/users/<userId> \
+  -H "Authorization: Bearer <admin token>" -H "Content-Type: application/json" \
+  -d '{ "reason": "Underage", "note": "optional, at most 500 characters" }'
+```
+
+- `reason`: `Underage`, `PolicyViolation` or `OwnerRequest` (by name, any case; numbers are refused). `note` is optional:
+  the admin's own words for the record, such as where the request came from (a support email's date, a report id).
+  Never put the member's personal data in it (name, email, age, documents): it is kept after everything else about
+  them is gone.
+- There is no re-authentication and no undo. The result is exactly the member's own deletion (above): anonymized as
+  «مستخدم محذوف», novels hidden, private data deleted, balance forfeited, pending withdrawals cancelled, open reports
+  about them closed as `AccountDeleted`, every session ended, push devices and images removed.
+- 200 answers what it did. `filesNotDeleted` above 0 means an image stayed in storage (the error log names its key):
+
+```json
+{ "userId": "5f1c...", "reason": "Underage", "deletedAt": "2026-09-28T12:00:00.1234567Z", "novelsHidden": 2,
+  "forfeitedBalance": 500, "withdrawalsCancelled": 1, "reportsClosed": 2, "filesDeleted": 2, "filesNotDeleted": 0 }
+```
+
+| HTTP | `code` | Meaning |
+|---|---|---|
+| 400 | `ValidationFailed` | no body, a missing or unknown `reason`, or a `note` over 500 characters (`message` says which) |
+| 401 | | not signed in |
+| 403 | | not an admin (the role check, before the endpoint runs) |
+| 403 | `CannotDeleteAdmin` | an admin's account, yours included: its admin role has to be removed first |
+| 404 | `UserNotFound` | no user with that id |
+| 409 | `AlreadyDeleted` | deleted already, by the member or by an earlier request whose response was lost |
+
+The record: each deletion writes a row to the `AdminAuditLogs` table in the deletion's own transaction, so there is a
+row exactly when an account was deleted: the admin's id, the action (`DeleteAccount`), the member's user id, the reason,
+the note and the time (the member's `DeletedAt`). It holds ids and the admin's note only, nothing copied from the
+account. The API also logs `Admin {AdminId} deleted the account of user {UserId} ({Reason})` at Information level.
+There is no endpoint to read the table yet (query it in the database); it is meant for later admin actions too. The
+reports the deletion closes show no admin in `resolvedById`, as after a member's own deletion; the audit row says who.
