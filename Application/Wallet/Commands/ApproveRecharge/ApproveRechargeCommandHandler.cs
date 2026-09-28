@@ -27,7 +27,7 @@ public class ApproveRechargeCommandHandler(
             {
                 Success = false,
                 Code = "RequestNotFound",
-                Message = "Recharge request not found"
+                Message = "طلب الشحن غير موجود"
             };
         }
 
@@ -37,7 +37,7 @@ public class ApproveRechargeCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyProcessed",
-                Message = $"Request already {rechargeRequest.Status.ToLower()}"
+                Message = RequestMessages.AlreadyDecided(rechargeRequest.Status)
             };
         }
 
@@ -66,7 +66,7 @@ public class ApproveRechargeCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyProcessed",
-                Message = "Request was already processed"
+                Message = RequestMessages.AlreadyProcessed
             };
         }
 
@@ -78,7 +78,7 @@ public class ApproveRechargeCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = $"Recharge request approved. {rechargeRequest.PointsRequested} points added to user wallet."
+            Message = $"قُبل طلب الشحن، وأُضيفت {rechargeRequest.PointsRequested} نقطة إلى محفظة المستخدم."
         };
     }
 }

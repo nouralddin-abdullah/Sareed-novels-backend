@@ -28,7 +28,7 @@ public class RequestRechargeCommandHandler(
             {
                 Success = false,
                 Code = "BelowMinimumRecharge",
-                Message = $"Minimum recharge is {PointsConstants.MinimumRecharge} points"
+                Message = $"الحد الأدنى للشحن {PointsConstants.MinimumRecharge} نقطة"
             };
         }
 
@@ -41,7 +41,7 @@ public class RequestRechargeCommandHandler(
             {
                 Success = false,
                 Code = "InvalidPaymentMethod",
-                Message = "Invalid payment method. Use VodafoneCash, InstaPay, or PayPal"
+                Message = "طريقة الدفع غير صالحة. اختر فودافون كاش أو إنستاباي أو باي بال"
             };
         }
 
@@ -52,7 +52,7 @@ public class RequestRechargeCommandHandler(
             {
                 Success = false,
                 Code = "PaymentProofRequired",
-                Message = "Payment proof is required"
+                Message = "أرفق إثبات الدفع"
             };
         }
 
@@ -63,7 +63,7 @@ public class RequestRechargeCommandHandler(
             {
                 Success = false,
                 Code = "PaymentProofTooLarge",
-                Message = "Payment proof must be less than 5MB"
+                Message = "يجب ألا يتجاوز حجم إثبات الدفع 5 ميغابايت"
             };
         }
 
@@ -75,7 +75,7 @@ public class RequestRechargeCommandHandler(
             {
                 Success = false,
                 Code = "InvalidPaymentProofType",
-                Message = "Payment proof must be JPG, PNG, or PDF"
+                Message = "إثبات الدفع يجب أن يكون صورة JPG أو PNG أو ملف PDF"
             };
         }
 
@@ -100,7 +100,7 @@ public class RequestRechargeCommandHandler(
             {
                 Success = false,
                 Code = "UploadFailed",
-                Message = "Failed to upload payment proof. Please try again."
+                Message = "تعذّر رفع إثبات الدفع. حاول مرة أخرى."
             };
         }
 
@@ -129,7 +129,7 @@ public class RequestRechargeCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = $"Recharge request submitted successfully. Total: {total} EGP. Please wait 12-24 hours for approval."
+            Message = $"أُرسل طلب الشحن، والمبلغ الإجمالي {RequestMessages.Egp(total)} جنيه. تتم مراجعة الطلب خلال 12 إلى 24 ساعة."
         };
     }
 }

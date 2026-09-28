@@ -154,7 +154,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "NovelNotFound",
-                Message = "Novel not found"
+                Message = "الرواية غير موجودة"
             };
         }
         
@@ -164,7 +164,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "NotOwner",
-                Message = "You don't own this novel"
+                Message = "هذا الإجراء متاح لكاتب الرواية فقط"
             };
         }
         
@@ -176,7 +176,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "PrivilegeAlreadyEnabled",
-                Message = "Privilege system already configured for this novel"
+                Message = "الوصول المبكر مفعّل لهذه الرواية بالفعل"
             };
         }
         
@@ -187,7 +187,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "InvalidSubscriptionCost",
-                Message = "Subscription cost must be between 100 and 2000 points"
+                Message = "سعر الاشتراك يجب أن يكون من 100 إلى 2000 نقطة"
             };
         }
         
@@ -199,7 +199,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "NotEnoughPublishedChapters",
-                Message = $"You need at least 11 published chapters to enable privilege (current: {publishedCount}). The first 10 chapters must remain free for readers."
+                Message = $"يلزم 11 فصلًا منشورًا على الأقل لتفعيل الوصول المبكر (المنشور الآن: {publishedCount}). تبقى الفصول العشرة الأولى مجانية للقرّاء."
             };
         }
         
@@ -212,7 +212,7 @@ public class PrivilegeService(
                 {
                     Success = false,
                     Code = "InvalidPrivilegeStart",
-                    Message = $"Invalid privilege start sequence. Must be between 1 and {publishedCount}"
+                    Message = $"رقم أول فصل مقفل يجب أن يكون من 1 إلى {publishedCount}"
                 };
             }
             
@@ -223,7 +223,7 @@ public class PrivilegeService(
                 {
                     Success = false,
                     Code = "FirstChaptersMustStayFree",
-                    Message = "The first 10 chapters must remain free for readers. Privilege can only start from chapter 11 onwards."
+                    Message = "تبقى الفصول العشرة الأولى مجانية للقرّاء، فالوصول المبكر يبدأ من الفصل 11 أو بعده."
                 };
             }
             
@@ -237,7 +237,7 @@ public class PrivilegeService(
                 {
                     Success = false,
                     Code = "TooManyLockedChapters",
-                    Message = $"Starting from sequence {privilegeStartSequence.Value} would lock {lockedCount} chapters. Maximum is 20. Please start from sequence {publishedCount - 19} or later."
+                    Message = $"البدء من الفصل {privilegeStartSequence.Value} يقفل {ArabicCount.ChaptersObject(lockedCount)}، والحد الأقصى 20 فصلًا. ابدأ من الفصل {publishedCount - 19} أو بعده."
                 };
             }
             
@@ -264,7 +264,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = true,
-                Message = $"Privilege system enabled! Chapters {privilegeStartSequence.Value}-{publishedCount} ({lockedCount} chapters) are now locked. Subscription cost: {subscriptionCost} points"
+                Message = $"تم تفعيل الوصول المبكر. الفصول من {privilegeStartSequence.Value} إلى {publishedCount} مقفلة الآن ({ArabicCount.Chapters(lockedCount)})، وسعر الاشتراك {Points.Format(subscriptionCost)} نقطة."
             };
         }
         else
@@ -279,7 +279,7 @@ public class PrivilegeService(
                 {
                     Success = false,
                     Code = "NotEnoughPublishedChapters",
-                    Message = $"Cannot enable privilege with only {publishedCount} chapters. The first 10 chapters must remain free. You need at least 11 published chapters."
+                    Message = $"يلزم 11 فصلًا منشورًا على الأقل لتفعيل الوصول المبكر (المنشور الآن: {publishedCount}). تبقى الفصول العشرة الأولى مجانية للقرّاء."
                 };
             }
             
@@ -314,7 +314,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = true,
-                Message = $"Privilege system enabled! Chapters {startSequence}-{publishedCount} ({initialLockedCount} chapters) are now locked. The first 10 chapters remain free. Subscription cost: {subscriptionCost} points"
+                Message = $"تم تفعيل الوصول المبكر. الفصول من {startSequence} إلى {publishedCount} مقفلة الآن ({ArabicCount.Chapters(initialLockedCount)})، وتبقى الفصول العشرة الأولى مجانية. سعر الاشتراك {Points.Format(subscriptionCost)} نقطة."
             };
         }
     }
@@ -333,7 +333,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "NotOwner",
-                Message = "Novel not found or you don't own it"
+                Message = "هذا الإجراء متاح لكاتب الرواية فقط"
             };
         }
         
@@ -344,7 +344,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "PrivilegeNotEnabled",
-                Message = "Privilege system not enabled for this novel"
+                Message = "الوصول المبكر غير مفعّل لهذه الرواية"
             };
         }
         
@@ -359,7 +359,7 @@ public class PrivilegeService(
                 {
                     Success = false,
                     Code = "InvalidSubscriptionCost",
-                    Message = "Subscription cost must be between 100 and 2000 points"
+                    Message = "سعر الاشتراك يجب أن يكون من 100 إلى 2000 نقطة"
                 };
             }
             
@@ -379,7 +379,7 @@ public class PrivilegeService(
                 {
                     Success = false,
                     Code = "InvalidPrivilegeStart",
-                    Message = $"Invalid privilege start sequence. Must be between 1 and {totalPublished}"
+                    Message = $"رقم أول فصل مقفل يجب أن يكون من 1 إلى {totalPublished}"
                 };
             }
             
@@ -390,7 +390,7 @@ public class PrivilegeService(
                 {
                     Success = false,
                     Code = "FirstChaptersMustStayFree",
-                    Message = "The first 10 chapters must remain free for readers. Privilege can only start from chapter 11 onwards."
+                    Message = "تبقى الفصول العشرة الأولى مجانية للقرّاء، فالوصول المبكر يبدأ من الفصل 11 أو بعده."
                 };
             }
             
@@ -401,7 +401,7 @@ public class PrivilegeService(
                 {
                     Success = false,
                     Code = "NoPrivilegeStart",
-                    Message = "Cannot update privilege start sequence - current configuration doesn't have a start sequence set"
+                    Message = "لا يمكن تغيير أول فصل مقفل، فإعدادات الوصول المبكر الحالية لا تحدده"
                 };
             }
             
@@ -412,7 +412,7 @@ public class PrivilegeService(
                 {
                     Success = false,
                     Code = "PrivilegeStartCannotMoveBack",
-                    Message = $"Cannot move privilege start backward (from {privilege.PrivilegeStartSequence.Value} to {newPrivilegeStartSequence.Value}). This would re-lock previously unlocked chapters. You can only move it forward."
+                    Message = $"لا يمكن إرجاع بداية الفصول المقفلة من الفصل {privilege.PrivilegeStartSequence.Value} إلى الفصل {newPrivilegeStartSequence.Value}، فهذا يقفل فصولًا فُتحت للقرّاء من قبل. يمكن تقديمها فقط."
                 };
             }
             
@@ -423,7 +423,7 @@ public class PrivilegeService(
                 {
                     Success = false,
                     Code = "NoChanges",
-                    Message = $"Privilege start is already at sequence {privilege.PrivilegeStartSequence.Value}"
+                    Message = $"الفصول المقفلة تبدأ من الفصل {privilege.PrivilegeStartSequence.Value} بالفعل"
                 };
             }
             
@@ -438,7 +438,7 @@ public class PrivilegeService(
                 {
                     Success = false,
                     Code = "TooManyLockedChapters",
-                    Message = $"Moving to sequence {newPrivilegeStartSequence.Value} would lock {newLockedCount} chapters. Maximum is {privilege.MaxLockedChapters}."
+                    Message = $"البدء من الفصل {newPrivilegeStartSequence.Value} يقفل {ArabicCount.ChaptersObject(newLockedCount)}، والحد الأقصى {ArabicCount.Chapters(privilege.MaxLockedChapters)}."
                 };
             }
             
@@ -466,7 +466,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = true,
-                Message = "Privilege configuration updated successfully"
+                Message = "حُفظت إعدادات الوصول المبكر"
             };
         }
         
@@ -474,7 +474,7 @@ public class PrivilegeService(
         {
             Success = false,
             Code = "NoChanges",
-            Message = "No changes were made"
+            Message = "لم يتغير شيء في الإعدادات"
         };
     }
     
@@ -487,7 +487,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "ChapterNotFound",
-                Message = "Chapter not found"
+                Message = "الفصل غير موجود"
             };
         }
         
@@ -498,7 +498,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "NotOwner",
-                Message = "You don't own this novel"
+                Message = "هذا الإجراء متاح لكاتب الرواية فقط"
             };
         }
         
@@ -509,7 +509,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "PrivilegeNotEnabled",
-                Message = "Privilege system not enabled for this novel"
+                Message = "الوصول المبكر غير مفعّل لهذه الرواية"
             };
         }
         
@@ -525,7 +525,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "ChapterNotLocked",
-                Message = "This chapter is not locked"
+                Message = "هذا الفصل غير مقفل"
             };
         }
 
@@ -545,8 +545,8 @@ public class PrivilegeService(
         {
             Success = true,
             Message = unlockedCount == 1
-                ? $"Chapter unlocked! {privilege.CurrentLockedCount} chapters remain locked"
-                : $"Chapters {oldStart}-{sequence} unlocked! {privilege.CurrentLockedCount} chapters remain locked"
+                ? $"فُتح الفصل للجميع. الفصول المقفلة الآن: {privilege.CurrentLockedCount}"
+                : $"فُتحت الفصول من {oldStart} إلى {sequence} للجميع. الفصول المقفلة الآن: {privilege.CurrentLockedCount}"
         };
     }
     
@@ -561,7 +561,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "PrivilegeNotEnabled",
-                Message = "Privilege system not enabled for this novel"
+                Message = "الوصول المبكر غير مفعّل لهذه الرواية"
             };
         }
         
@@ -572,7 +572,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "NovelNotFound",
-                Message = "Novel not found"
+                Message = "الرواية غير موجودة"
             };
         }
 
@@ -583,7 +583,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "CannotSubscribeToOwnNovel",
-                Message = "You cannot subscribe to your own novel's privilege system. You already have full access to all chapters."
+                Message = "لا يمكنك الاشتراك في الوصول المبكر لروايتك، فكل فصولها متاحة لك"
             };
         }
         
@@ -595,7 +595,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "AlreadySubscribed",
-                Message = "You are already subscribed to this novel's privilege"
+                Message = "أنت مشترك في الوصول المبكر لهذه الرواية بالفعل"
             };
         }
         
@@ -608,7 +608,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "InsufficientBalance",
-                Message = $"Insufficient balance. Required: {cost} points"
+                Message = $"رصيدك من النقاط غير كافٍ. سعر الاشتراك {Points.Format(cost)} نقطة."
             };
         }
         
@@ -654,7 +654,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "AlreadySubscribed",
-                Message = "You are already subscribed to this novel's privilege"
+                Message = "أنت مشترك في الوصول المبكر لهذه الرواية بالفعل"
             };
         }
         catch (InsufficientBalanceException)
@@ -663,7 +663,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "InsufficientBalance",
-                Message = $"Insufficient balance. Required: {cost} points"
+                Message = $"رصيدك من النقاط غير كافٍ. سعر الاشتراك {Points.Format(cost)} نقطة."
             };
         }
         catch (Exception ex)
@@ -674,7 +674,7 @@ public class PrivilegeService(
             {
                 Success = false,
                 Code = "OperationFailed",
-                Message = "Subscription failed. No points were deducted. Please try again."
+                Message = "تعذّر الاشتراك، ولم تُخصم أي نقاط. حاول مرة أخرى."
             };
         }
 
@@ -711,7 +711,7 @@ public class PrivilegeService(
         return new OperationResult
         {
             Success = true,
-            Message = $"تم الاشتراك! فُتحت لك كل فصول الامتياز في هذه الرواية بشكل دائم، مقابل {Points.Format(cost)} نقطة."
+            Message = $"تم الاشتراك في الوصول المبكر. فُتحت لك الفصول المقفلة في هذه الرواية بشكل دائم، مقابل {Points.Format(cost)} نقطة."
         };
     }
     

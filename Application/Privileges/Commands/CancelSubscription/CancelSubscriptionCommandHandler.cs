@@ -12,7 +12,7 @@ namespace Application.Privileges.Commands.CancelSubscription;
 public class CancelSubscriptionCommandHandler : IRequestHandler<CancelSubscriptionCommand, OperationResult>
 {
     public const string CannotBeCancelledCode = "SubscriptionCannotBeCancelled";
-    public const string CannotBeCancelledMessage = "لا يمكن إلغاء الاشتراك في الامتياز: فهو يفتح فصول الرواية المقفلة لك بشكل دائم.";
+    public const string CannotBeCancelledMessage = "لا يمكن إلغاء الاشتراك في الوصول المبكر، فهو يفتح لك فصول الرواية المقفلة بشكل دائم.";
 
     public Task<OperationResult> Handle(CancelSubscriptionCommand request, CancellationToken cancellationToken) =>
         throw new BadRequestException(CannotBeCancelledMessage, CannotBeCancelledCode);
