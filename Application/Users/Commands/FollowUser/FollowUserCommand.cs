@@ -21,4 +21,11 @@ public class OperationResult
 
     /// <summary>For people, in Arabic.</summary>
     public string Message { get; set; } = default!;
+
+    /// <summary>
+    /// The request field a failure is about, where the code alone doesn't say (update-me's UploadFailed: ProfilePhoto
+    /// or ProfileBanner). Left out of the JSON when null.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Field { get; set; }
 }
