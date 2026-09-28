@@ -11,25 +11,25 @@ namespace Application.Novels.Commands.UpdateNovel
             RuleFor(x => x.Title)
                 .Length(4, 40)
                 .When(x => x.Title != null)
-                .WithMessage("Title must be between 4 and 40 characters");
+                .WithMessage("يجب أن يكون عنوان الرواية من 4 إلى 40 حرفًا");
 
             RuleFor(x => x.Summary)
             .Length(4, 2000)
             .When(x => x.Summary != null)
-            .WithMessage("Summary must be between 4 and 500 characters");
+            .WithMessage("يجب أن تكون نبذة الرواية من 4 إلى 2000 حرف");
 
             RuleFor(x => x.Status)
                 .Must(status => AllowedStatuses.Contains(status))
                 .When(x => x.Status != null)
-                .WithMessage("Status must be either 'Ongoing' or 'Completed'");
+                .WithMessage("حالة الرواية يجب أن تكون «مستمرة» أو «مكتملة»");
 
             RuleFor(x => x.GenreIds)
                 .Must(genres => genres!.Count >= 1 && genres.Count <= 4)
                 .When(x => x.GenreIds != null)
-                .WithMessage("A novel must have between 1 and 4 genres")
+                .WithMessage("اختر من 1 إلى 4 تصنيفات")
                 .Must(genres => genres!.Distinct().Count() == genres!.Count)
                 .When(x => x.GenreIds != null)
-                .WithMessage("A genre can only be selected once");
+                .WithMessage("اختر كل تصنيف مرة واحدة فقط");
 
         }
     }

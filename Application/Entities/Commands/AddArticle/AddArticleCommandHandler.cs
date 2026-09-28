@@ -25,7 +25,7 @@ public class AddArticleCommandHandler(
             {
                 Success = false,
                 Code = "EntityNotFound",
-                Message = "Entity not found"
+                Message = "هذا المدخل غير موجود"
             };
         }
 
@@ -36,7 +36,7 @@ public class AddArticleCommandHandler(
             {
                 Success = false,
                 Code = "NotOwner",
-                Message = "You don't have permission to add articles to this entity"
+                Message = "إضافة المقالات متاحة لكاتب الرواية فقط"
             };
         }
 
@@ -58,7 +58,7 @@ public class AddArticleCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Article added successfully"
+            Message = "أُضيف المقال"
         };
     }
 }

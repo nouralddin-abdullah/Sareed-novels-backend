@@ -24,7 +24,7 @@ public class PublishWorkCommandHandler(INovelsRepository novelsRepository, IUser
             return new OperationResult
             {
                 Success = true,
-                Message = "Novel has been published successfully"
+                Message = "نُشرت الرواية"
             };
         }
 
@@ -32,7 +32,7 @@ public class PublishWorkCommandHandler(INovelsRepository novelsRepository, IUser
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Novel has not been published"
+            Message = "تعذّر نشر الرواية. حاول مرة أخرى."
         };
     }
 }

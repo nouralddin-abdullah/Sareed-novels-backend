@@ -34,7 +34,7 @@ public class CreateNovelCommandHandler(
             {
                 Success = false,
                 Code = "InvalidGenres",
-                Message = "Unknown genre"
+                Message = "أحد التصنيفات المختارة غير موجود"
             };
         }
 
@@ -78,7 +78,7 @@ public class CreateNovelCommandHandler(
             return new CreateNovelResult
             {
                 Code = "OperationFailed",
-                Message = "Error while creating novel",
+                Message = "تعذّر إنشاء الرواية. حاول مرة أخرى.",
                 Success = false
             };
         }
@@ -86,7 +86,7 @@ public class CreateNovelCommandHandler(
 
         return new CreateNovelResult
         {
-            Message = "Novel was created successfully",
+            Message = "أُنشئت الرواية",
             Success = true,
             NovelId = novel.Id
         };

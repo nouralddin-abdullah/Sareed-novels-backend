@@ -24,7 +24,7 @@ public class DraftWorkCommandHandler(INovelsRepository novelsRepository, IUserCo
             return new OperationResult
             {
                 Success = true,
-                Message = "Novel has been drafted successfully"
+                Message = "أصبحت الرواية مسودة، ولن تظهر للقرّاء"
             };
         }
 
@@ -32,7 +32,7 @@ public class DraftWorkCommandHandler(INovelsRepository novelsRepository, IUserCo
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Novel has not been drafted"
+            Message = "تعذّر تحويل الرواية إلى مسودة. حاول مرة أخرى."
         };
     }
 }

@@ -27,14 +27,14 @@ public class UpdateEntityCommandHandler(
             {
                 Success = false,
                 Code = "EntityNotFound",
-                Message = "Entity not found"
+                Message = "هذا المدخل غير موجود"
             };
         }
 
         // Verify user owns the novel (using included Novel)
         if (entity.Novel == null || entity.Novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "هذا الإجراء متاح لكاتب الرواية فقط" };
         }
 
         // Validate icon if provided
@@ -47,7 +47,7 @@ public class UpdateEntityCommandHandler(
                 {
                     Success = false,
                     Code = "InvalidIcon",
-                    Message = $"Invalid icon. Valid icons are: {string.Join(", ", EntityIconValidator.GetValidIcons())}"
+                    Message = $"الأيقونة غير صالحة. الأيقونات المتاحة: {string.Join("، ", EntityIconValidator.GetValidIcons())}"
                 };
             }
             entity.Icon = normalizedIcon;
@@ -85,7 +85,7 @@ public class UpdateEntityCommandHandler(
                 {
                     Success = false,
                     Code = "InvalidAttributes",
-                    Message = "Invalid JSON format for Attributes"
+                    Message = "تعذّرت قراءة السمات. تأكد من صيغتها."
                 };
             }
         }
@@ -99,7 +99,7 @@ public class UpdateEntityCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Entity updated successfully"
+            Message = "حُفظ المدخل"
         };
     }
 }

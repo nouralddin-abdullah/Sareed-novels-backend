@@ -39,7 +39,7 @@ namespace Application.Novels.Commands.ChangeCover
             // The previous files stay: notifications and other snapshots may still point at them.
             return new ChangeCoverResult
             {
-                Message = "Novel cover was changed successfully",
+                Message = "تم تغيير غلاف الرواية",
                 Success = true,
                 CoverImageUrl = coverUrl
             };

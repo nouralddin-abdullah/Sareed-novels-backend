@@ -40,7 +40,7 @@ public class UpdateNovelCommandHandler(
                 return new OperationResult
                 {
                     Code = "InvalidGenres",
-                    Message = "A novel must have between 1 and 4 different, existing genres",
+                    Message = "اختر من 1 إلى 4 تصنيفات مختلفة من التصنيفات المتاحة",
                     Success = false
                 };
             }
@@ -62,7 +62,7 @@ public class UpdateNovelCommandHandler(
             return new OperationResult
             {
                 Code = "OperationFailed",
-                Message = "Novel wasn't updated successfully",
+                Message = "تعذّر تحديث الرواية. حاول مرة أخرى.",
                 Success = false
             };
         }
@@ -74,7 +74,7 @@ public class UpdateNovelCommandHandler(
                 return new OperationResult
                 {
                     Code = "InvalidGenres",
-                    Message = "Novel was updated but failed to update genres. Please check that all selected genres exist.",
+                    Message = "حُدّثت الرواية، لكن تعذّر تحديث تصنيفاتها. تأكد من أن التصنيفات المختارة متاحة.",
                     Success = false
                 };
             }
@@ -85,7 +85,7 @@ public class UpdateNovelCommandHandler(
 
         return new OperationResult
         {
-            Message = "Novel was updated successfully",
+            Message = "تم تحديث الرواية",
             Success = true
         };
     }

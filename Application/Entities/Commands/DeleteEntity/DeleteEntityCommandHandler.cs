@@ -25,7 +25,7 @@ public class DeleteEntityCommandHandler(
             {
                 Success = false,
                 Code = "EntityNotFound",
-                Message = "Entity not found"
+                Message = "هذا المدخل غير موجود"
             };
         }
 
@@ -37,7 +37,7 @@ public class DeleteEntityCommandHandler(
             {
                 Success = false,
                 Code = "NotOwner",
-                Message = "You don't have permission to delete this entity"
+                Message = "حذف المدخل متاح لكاتب الرواية فقط"
             };
         }
 
@@ -48,7 +48,7 @@ public class DeleteEntityCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Entity deleted successfully"
+            Message = "حُذف المدخل"
         };
     }
 }

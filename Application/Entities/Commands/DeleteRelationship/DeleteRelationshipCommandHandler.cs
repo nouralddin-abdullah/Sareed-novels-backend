@@ -21,25 +21,25 @@ public class DeleteRelationshipCommandHandler(
         var relationship = await entityRepository.GetRelationshipByIdAsync(request.RelationshipId);
         if (relationship == null)
         {
-            return new OperationResult { Success = false, Code = "RelationshipNotFound", Message = "Relationship not found" };
+            return new OperationResult { Success = false, Code = "RelationshipNotFound", Message = "العلاقة غير موجودة" };
         }
 
         var sourceEntity = await entityRepository.GetEntityByIdAsync(relationship.SourceEntityId);
         if (sourceEntity == null)
         {
-            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "Source entity not found" };
+            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "هذا المدخل غير موجود" };
         }
 
         var novel = await novelsRepository.GetOne(sourceEntity.NovelId);
         if (novel == null || novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "هذا الإجراء متاح لكاتب الرواية فقط" };
         }
 
         await entityRepository.DeleteRelationshipAsync(request.RelationshipId);
 
         logger.LogInformation("Relationship {RelationshipId} deleted", request.RelationshipId);
 
-        return new OperationResult { Success = true, Message = "Relationship deleted successfully" };
+        return new OperationResult { Success = true, Message = "حُذفت العلاقة" };
     }
 }

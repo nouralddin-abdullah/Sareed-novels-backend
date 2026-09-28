@@ -23,25 +23,25 @@ public class RemoveGalleryImageCommandHandler(
         
         if (targetImage == null)
         {
-            return new OperationResult { Success = false, Code = "GalleryImageNotFound", Message = "Gallery image not found" };
+            return new OperationResult { Success = false, Code = "GalleryImageNotFound", Message = "الصورة غير موجودة في معرض الصور" };
         }
 
         var entity = await entityRepository.GetEntityByIdAsync(targetImage.EntityId);
         if (entity == null)
         {
-            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "Entity not found" };
+            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "هذا المدخل غير موجود" };
         }
 
         var novel = await novelsRepository.GetOne(entity.NovelId);
         if (novel == null || novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "هذا الإجراء متاح لكاتب الرواية فقط" };
         }
 
         await entityRepository.DeleteGalleryImageAsync(request.ImageId);
 
         logger.LogInformation("Gallery image {ImageId} removed from entity {EntityId}", request.ImageId, entity.Id);
 
-        return new OperationResult { Success = true, Message = "Gallery image removed successfully" };
+        return new OperationResult { Success = true, Message = "حُذفت الصورة من معرض الصور" };
     }
 }

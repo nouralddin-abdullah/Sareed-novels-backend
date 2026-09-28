@@ -149,7 +149,7 @@ public class CoverConversionTests : SqlServerDatabase
         Assert.Equal(3, failures.Count);
         Assert.Equal(CoverErrorCodes.Unreadable, failures[missing.Id].ErrorCode);
         Assert.Equal(CoverErrorCodes.UnsupportedFormat, failures[notAnImage.Id].ErrorCode);
-        Assert.Contains("configured bucket", failures[foreign.Id].Error);
+        Assert.Contains("مساحة التخزين المضبوطة", failures[foreign.Id].Error);
         Assert.Equal(3, results[^1].Remaining);
         Assert.True(NovelCovers.IsStandard((await Covers())[good.Id]));
 

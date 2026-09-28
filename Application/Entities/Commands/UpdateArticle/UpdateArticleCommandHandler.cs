@@ -20,19 +20,19 @@ public class UpdateArticleCommandHandler(
         var article = await entityRepository.GetArticleByIdAsync(request.ArticleId);
         if (article == null)
         {
-            return new OperationResult { Success = false, Code = "ArticleNotFound", Message = "Article not found" };
+            return new OperationResult { Success = false, Code = "ArticleNotFound", Message = "المقال غير موجود" };
         }
 
         var entity = await entityRepository.GetEntityByIdAsync(article.EntityId);
         if (entity == null)
         {
-            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "Entity not found" };
+            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "هذا المدخل غير موجود" };
         }
 
         // Verify user owns the novel (using included Novel)
         if (entity.Novel == null || entity.Novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "هذا الإجراء متاح لكاتب الرواية فقط" };
         }
 
         // Update only provided fields
@@ -46,6 +46,6 @@ public class UpdateArticleCommandHandler(
 
         logger.LogInformation("Article {ArticleId} updated", article.Id);
 
-        return new OperationResult { Success = true, Message = "Article updated successfully" };
+        return new OperationResult { Success = true, Message = "حُفظ المقال" };
     }
 }

@@ -123,7 +123,7 @@ namespace Sareed_novels_backend.Controllers
                 return Ok();
             }
             // The ids sent aren't exactly the novel's chapters.
-            return BadRequest(new ApiError("InvalidChapterOrder", "The chapter order must list each of the novel's chapters once"));
+            return BadRequest(new ApiError("InvalidChapterOrder", "يجب أن يضم ترتيب الفصول كل فصل من فصول الرواية مرة واحدة"));
         }
         [HttpGet("{workId}/chapters/{chapterId}")]
         public async Task<IActionResult> ReorderWorkChapters([FromRoute] Guid workId, [FromRoute] Guid chapterId)

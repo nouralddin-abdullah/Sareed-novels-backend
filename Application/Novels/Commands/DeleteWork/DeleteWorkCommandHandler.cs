@@ -39,7 +39,7 @@ public class DeleteWorkCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = "Novel has been deleted successfully"
+                Message = "حُذفت الرواية"
             };
         }
 
@@ -47,7 +47,7 @@ public class DeleteWorkCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Novel has not been deleted"
+            Message = "تعذّر حذف الرواية. حاول مرة أخرى."
         };
     }
 }

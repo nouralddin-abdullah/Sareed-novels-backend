@@ -55,7 +55,7 @@ public sealed class NovelCoverService(
         if (storage.KeyOf(coverUrl) is null)
         {
             throw new CoverImageException(CoverErrorCodes.Unreadable,
-                "The cover isn't in the configured bucket (CloudflareR2:PublicUrl), so it can't be read.");
+                "الغلاف ليس في مساحة التخزين المضبوطة (CloudflareR2:PublicUrl)، فلا يمكن قراءته.");
         }
 
         byte[]? bytes;
@@ -63,13 +63,13 @@ public sealed class NovelCoverService(
         {
             bytes = await storage.GetAsync(coverUrl, MaxExistingCoverBytes, cancellationToken);
         }
-        catch (InvalidDataException ex)
+        catch (InvalidDataException)
         {
-            throw new CoverImageException(CoverErrorCodes.FileTooLarge, ex.Message);
+            throw new CoverImageException(CoverErrorCodes.FileTooLarge, $"ملف الغلاف أكبر من {MaxExistingCoverBytes / (1024 * 1024)} ميغابايت، فلا يمكن تحويله.");
         }
         if (bytes is null)
         {
-            throw new CoverImageException(CoverErrorCodes.Unreadable, "The cover file doesn't exist in the bucket.");
+            throw new CoverImageException(CoverErrorCodes.Unreadable, "ملف الغلاف غير موجود في مساحة التخزين.");
         }
 
         var cover = await ProcessAsync(bytes, enforceMinimumSize: false, cancellationToken);
@@ -130,7 +130,7 @@ public sealed class NovelCoverService(
         {
             if (buffer.Length + read > maxBytes)
             {
-                throw new CoverImageException(CoverErrorCodes.FileTooLarge, $"يجب ألا يتجاوز حجم ملف الغلاف {maxBytes / (1024 * 1024)} ميجابايت.");
+                throw new CoverImageException(CoverErrorCodes.FileTooLarge, $"يجب ألا يتجاوز حجم ملف الغلاف {maxBytes / (1024 * 1024)} ميغابايت.");
             }
             buffer.Write(chunk, 0, read);
         }

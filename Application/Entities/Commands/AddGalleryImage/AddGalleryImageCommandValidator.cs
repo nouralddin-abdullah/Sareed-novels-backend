@@ -9,17 +9,17 @@ public class AddGalleryImageCommandValidator : AbstractValidator<AddGalleryImage
     {
         RuleFor(x => x.ImageFile)
             .NotNull()
-            .WithMessage("Image file is required")
+            .WithMessage("اختر صورة")
             .Must(ImageValidationUtils.IsValidImageFile)
-            .WithMessage("Image must be a valid image file (JPEG, PNG, WebP) and less than 5MB");
+            .WithMessage("الصورة يجب أن تكون بصيغة JPEG أو PNG أو WebP، وحجمها 5 ميغابايت أو أقل");
 
         RuleFor(x => x.Caption)
             .MaximumLength(500)
             .When(x => x.Caption != null)
-            .WithMessage("Caption must not exceed 500 characters");
+            .WithMessage("يجب ألا يتجاوز وصف الصورة 500 حرف");
 
         RuleFor(x => x.OrderIndex)
             .GreaterThanOrEqualTo(0)
-            .WithMessage("Order index must be 0 or greater");
+            .WithMessage("ترتيب الصورة يجب أن يكون 0 أو أكثر");
     }
 }

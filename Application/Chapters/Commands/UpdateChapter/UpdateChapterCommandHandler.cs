@@ -91,7 +91,7 @@ public class UpdateChapterCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = "Update chapter is successful"
+                Message = "حُفظ الفصل"
             };
         }
         
@@ -99,7 +99,7 @@ public class UpdateChapterCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Update chapter is not successful"
+            Message = "تعذّر حفظ الفصل. حاول مرة أخرى."
         };
     }
     
