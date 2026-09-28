@@ -158,19 +158,31 @@ public class WalletService(
             amount, fromUserId, toUserId);
     }
 
-    public async Task<WithdrawableBalance> GetWithdrawableAsync(string userId) =>
-        await WithdrawableAsync(userId, await walletRepository.GetBalanceAsync(userId));
-
-    public async Task<WithdrawableBalance> GetWithdrawableForUpdateAsync(string userId) =>
-        await WithdrawableAsync(userId, await walletRepository.LockBalanceAsync(userId));
-
-    private async Task<WithdrawableBalance> WithdrawableAsync(string userId, decimal balance)
+    public async Task<WithdrawableBalance> GetWithdrawableAsync(string userId)
     {
+        // The ledger before the balance: a change committed in between is in the balance only, so it counts as if it came
+        // before the ledger (a credit as bought points, a debit as a debt the first credits pay), which can only lower
+        // what this shows. Deciding goes through GetWithdrawableForUpdateAsync.
         var now = Now();
-        var earnings = await transactionRepository.GetEarningsTotalsAsync(userId, now);
-        var (withdrawn, pendingWithdrawals) = await withdrawalRepository.GetPointTotalsAsync(userId);
-        return new WithdrawableBalance(balance, earnings.Released, earnings.ReversedReleased, withdrawn, pendingWithdrawals,
-            earnings.Held, earnings.NextReleaseAt, HoldDays, now);
+        var ledger = await transactionRepository.GetLedgerAsync(userId);
+        var balance = await walletRepository.GetBalanceAsync(userId);
+        return await WithdrawableAsync(userId, balance, ledger, now);
+    }
+
+    public async Task<WithdrawableBalance> GetWithdrawableForUpdateAsync(string userId)
+    {
+        // Every change to a user's ledger comes with a change to their wallet row, which waits for this lock: the balance
+        // and the ledger read under it agree.
+        var balance = await walletRepository.LockBalanceAsync(userId);
+        var now = Now();
+        return await WithdrawableAsync(userId, balance, await transactionRepository.GetLedgerAsync(userId), now);
+    }
+
+    private async Task<WithdrawableBalance> WithdrawableAsync(string userId, decimal balance, IReadOnlyList<LedgerEntry> ledger, DateTime now)
+    {
+        var pools = WalletPools.Fold(balance, ledger, now);
+        var pendingWithdrawals = await withdrawalRepository.GetPendingPointsAsync(userId);
+        return WithdrawableBalance.From(balance, pools, pendingWithdrawals, HoldDays, now);
     }
 
     public async Task<decimal> ReverseHeldEarningsAsync(string buyerId, Guid voidedPurchaseId, DateTime paidSince, decimal deficit)

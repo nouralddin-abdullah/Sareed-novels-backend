@@ -31,62 +31,12 @@ public class PointTransactionRepository(ApplicationDbContext dbContext) : IPoint
         return (transactions, totalCount);
     }
 
-    /// <summary>The user's earning rows (IX_PointTransactions_User_Type_Available covers these queries).</summary>
-    private IQueryable<PointTransaction> EarningsOf(string userId) =>
-        dbContext.PointTransactions.AsNoTracking()
-            .Where(t => t.UserId == userId && (t.Type == TransactionType.GiftReceived || t.Type == TransactionType.PrivilegeRevenue));
-
-    /// <summary>The author's side of reversals: negative EarningReversed rows (the buyer's side is positive).</summary>
-    private IQueryable<PointTransaction> ReversalsOf(string userId) =>
-        dbContext.PointTransactions.AsNoTracking()
-            .Where(r => r.UserId == userId && r.Type == TransactionType.EarningReversed && r.Amount < 0);
-
-    public async Task<EarningsTotals> GetEarningsTotalsAsync(string userId, DateTime now)
-    {
-        // An earning row always has AvailableAt (a check constraint); one without would count on neither side.
-        var gross = await EarningsOf(userId)
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                Released = g.Sum(t => t.AvailableAt <= now ? t.Amount : 0m),
-                Held = g.Sum(t => t.AvailableAt > now ? t.Amount : 0m)
-            })
-            .SingleOrDefaultAsync();
-        if (gross is null)
-        {
-            return new EarningsTotals(0, 0, 0, null);
-        }
-
-        // Each reversal goes against the earning it names: while that is held, it lowers what is on hold; once released,
-        // it lowers what is released. A reversal whose earning can't be found counts against released, to be safe.
-        var reversals = await ReversalsOf(userId)
-            .Select(r => new
-            {
-                Amount = -r.Amount,
-                EarningAvailableAt = dbContext.PointTransactions
-                    .Where(e => e.Id == r.ReversedTransactionId && e.UserId == userId)
-                    .Select(e => e.AvailableAt)
-                    .FirstOrDefault()
-            })
+    public async Task<IReadOnlyList<LedgerEntry>> GetLedgerAsync(string userId) =>
+        await dbContext.PointTransactions.AsNoTracking()
+            .Where(t => t.UserId == userId)
+            .Select(t => new LedgerEntry(t.Id, t.Type, t.Amount, t.BalanceBefore, t.BalanceAfter, t.CreatedAt, t.AvailableAt,
+                t.ReversedTransactionId))
             .ToListAsync();
-        var reversedHeld = reversals.Where(r => r.EarningAvailableAt > now).Sum(r => r.Amount);
-        var reversedReleased = reversals.Sum(r => r.Amount) - reversedHeld;
-
-        var held = gross.Held - reversedHeld;
-        DateTime? nextReleaseAt = null;
-        if (held > 0)
-        {
-            // The earliest held earning that a reversal hasn't taken back entirely.
-            var userReversals = ReversalsOf(userId);
-            nextReleaseAt = await EarningsOf(userId)
-                .Where(e => e.AvailableAt > now)
-                .Where(e => e.Amount > userReversals.Where(r => r.ReversedTransactionId == e.Id).Sum(r => -r.Amount))
-                .MinAsync(e => e.AvailableAt);
-        }
-
-        return new EarningsTotals(gross.Released, reversedReleased, held,
-            nextReleaseAt is { } next ? DateTime.SpecifyKind(next, DateTimeKind.Utc) : null);
-    }
 
     public async Task<IReadOnlyList<HeldEarning>> GetHeldEarningsPaidByAsync(string buyerId, DateTime paidSince, DateTime now)
     {

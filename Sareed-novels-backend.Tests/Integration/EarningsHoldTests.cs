@@ -413,8 +413,9 @@ public partial class EarningsHoldTests(SqlServerDatabase database) : IClassFixtu
 
         Assert.True((await Approve(admin, Assert.Single(await Withdrawals(author)).Id)).Success);
 
+        // Paid out of the released earnings: 1500 of them are left, and nothing is reserved any more.
         var wallet = await Withdrawable(author);
-        Assert.Equal((1500m, 1000m, 0m, 1500m), (wallet.Balance, wallet.Withdrawn, wallet.PendingWithdrawals, wallet.Withdrawable));
+        Assert.Equal((1500m, 1500m, 0m, 1500m), (wallet.Balance, wallet.Released, wallet.PendingWithdrawals, wallet.Withdrawable));
         await AssertLedgerAddsUp(author);
     }
 

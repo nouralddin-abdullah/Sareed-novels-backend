@@ -10,8 +10,8 @@ public interface IWithdrawalRequestRepository
     Task<(IEnumerable<WithdrawalRequest>, int)> GetPendingRequestsAsync(int pageNumber, int pageSize);
     Task<bool> UpdateAsync(WithdrawalRequest request);
 
-    /// <summary>Points of the user's approved withdrawals (paid out) and of those still pending (reserved).</summary>
-    Task<(decimal Approved, decimal Pending)> GetPointTotalsAsync(string userId);
+    /// <summary>Points of the user's withdrawal requests still pending (reserved, not deducted until approval).</summary>
+    Task<decimal> GetPendingPointsAsync(string userId);
 
     /// <summary>
     /// Moves a Pending request to <paramref name="newStatus"/> in one conditional UPDATE. Returns false if the request

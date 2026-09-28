@@ -66,18 +66,10 @@ public class WithdrawalRequestRepository(ApplicationDbContext dbContext) : IWith
         return await dbContext.SaveChangesAsync() > 0;
     }
 
-    public async Task<(decimal Approved, decimal Pending)> GetPointTotalsAsync(string userId)
-    {
-        var totals = await dbContext.WithdrawalRequests.AsNoTracking()
-            .Where(r => r.UserId == userId
-                && (r.Status == Domain.Constants.RequestStatus.Approved || r.Status == Domain.Constants.RequestStatus.Pending))
-            .GroupBy(r => r.Status)
-            .Select(g => new { Status = g.Key, Points = g.Sum(r => (decimal)r.PointsRequested) })
-            .ToListAsync();
-
-        return (totals.Where(t => t.Status == Domain.Constants.RequestStatus.Approved).Sum(t => t.Points),
-            totals.Where(t => t.Status == Domain.Constants.RequestStatus.Pending).Sum(t => t.Points));
-    }
+    public async Task<decimal> GetPendingPointsAsync(string userId) =>
+        await dbContext.WithdrawalRequests.AsNoTracking()
+            .Where(r => r.UserId == userId && r.Status == Domain.Constants.RequestStatus.Pending)
+            .SumAsync(r => (decimal)r.PointsRequested);
 
     public async Task<bool> TryMarkProcessedAsync(Guid id, string newStatus, string processedBy, string? rejectionReason = null)
     {

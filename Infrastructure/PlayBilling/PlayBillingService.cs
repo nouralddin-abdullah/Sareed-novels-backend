@@ -183,7 +183,9 @@ public class PlayBillingService(
                 BalanceAfter = after,
                 Description = $"شراء {points} نقطة عبر Google Play{OrderSuffix(record.OrderId)}",
                 RelatedRequestId = record.Id,
-                CreatedAt = now
+                // Stamped once the wallet is changed (and locked), like every other row: the ledger reads back in the
+                // order the balance changed (#27).
+                CreatedAt = Now()
             });
             return after;
         }, CancellationToken.None);
