@@ -18,7 +18,10 @@ public interface INovelsRepository
     /// there is no such novel or it was already deleted.
     /// </summary>
     Task<bool> SoftDeleteAsync(Guid novelId);
-    /// <summary>Sets ChapterCount to the novel's current number of chapters in one SQL statement (no read-modify-write).</summary>
+    /// <summary>
+    /// Sets ChapterCount to the novel's current number of published chapters (what readers can open; drafts don't count)
+    /// in one SQL statement (no read-modify-write).
+    /// </summary>
     Task RefreshChapterCountAsync(Guid novelId, DateTime? lastUpdatedAt = null);
     Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber);
     Task<(IEnumerable<Novel?>, int)> GetWorks(string userId, int PageNumber, int PageSize);
@@ -27,8 +30,6 @@ public interface INovelsRepository
     Task<int> GetPublishedChaptersCountAsync(Guid novelId);
     Task<int> RecalculatePublishedSequencesAsync(Guid novelId);
     Task<List<Novel>> GetNovelsByIdsAsync(List<Guid> novelIds);
-    /// <summary>The current slug of each of these novels that still exists (deleted ones are left out).</summary>
-    Task<Dictionary<Guid, string>> GetSlugsAsync(IReadOnlyCollection<Guid> novelIds);
     /// <summary>The current slug and title of each of these novels that still exists (deleted ones are left out).</summary>
     Task<Dictionary<Guid, (string Slug, string Title)>> GetSlugsAndTitlesAsync(IReadOnlyCollection<Guid> novelIds);
     Task<List<Novel>> GetNovelsBySharedGenresAsync(List<int> genreIds, Guid excludeNovelId, int limit);

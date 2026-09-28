@@ -57,6 +57,15 @@ public class GiftRepository(ApplicationDbContext dbContext) : IGiftRepository
         return await dbContext.SaveChangesAsync() > 0;
     }
 
+    public async Task<Dictionary<Guid, string>> GetArabicNamesAsync(IReadOnlyCollection<Guid> giftIds) =>
+        giftIds.Count == 0
+            ? []
+            : await dbContext.Gifts
+                .AsNoTracking()
+                .Where(g => giftIds.Contains(g.Id))
+                .Select(g => new { g.Id, g.NameAr })
+                .ToDictionaryAsync(g => g.Id, g => g.NameAr);
+
     public async Task<bool> GiftExists(Guid id)
     {
         return await dbContext.Gifts.AnyAsync(g => g.Id == id && g.IsActive);

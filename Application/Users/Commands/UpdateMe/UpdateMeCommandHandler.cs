@@ -34,11 +34,12 @@ public class UpdateMeCommandHandler(
             };
         }
 
-        //if username is provided and not null test if it was taken before? or available
+        // A new user name must be free. Names are unique whatever their case, so a change of case only finds the member
+        // themselves, which is fine (#25: it used to be refused as taken).
         if (!string.IsNullOrEmpty(request.UserName) && request.UserName != user.UserName)
         {
             var existingUser = await userManager.FindByNameAsync(request.UserName);
-            if (existingUser != null)
+            if (existingUser != null && existingUser.Id != user.Id)
             {
                 return new OperationResult
                 {
@@ -70,7 +71,8 @@ public class UpdateMeCommandHandler(
                 {
                     Success = false,
                     Code = "UploadFailed",
-                    Message = "تعذّر رفع الصورة الشخصية. حاول مرة أخرى."
+                    Message = "تعذّر رفع الصورة الشخصية. حاول مرة أخرى.",
+                    Field = nameof(UpdateMeCommand.ProfilePhoto)
                 };
             }
         }
@@ -94,7 +96,8 @@ public class UpdateMeCommandHandler(
                 {
                     Success = false,
                     Code = "UploadFailed",
-                    Message = "تعذّر رفع صورة الغلاف. حاول مرة أخرى."
+                    Message = "تعذّر رفع صورة الغلاف. حاول مرة أخرى.",
+                    Field = nameof(UpdateMeCommand.ProfileBanner)
                 };
             }
         }
@@ -123,7 +126,8 @@ public class UpdateMeCommandHandler(
             return new OperationResult
             {
                 Success = false,
-                Code = "OperationFailed",
+                // Identity's code for the first problem (InvalidUserName, DuplicateUserName...), as register answers it.
+                Code = updatedResult.Errors.FirstOrDefault()?.Code ?? "OperationFailed",
                 Message = ArabicText.Sentences(["تعذّر تحديث الملف الشخصي", .. updatedResult.Errors.Select(e => e.Description)])
             };
         }

@@ -14,4 +14,6 @@ public interface IChaptersRepository
     Task<IEnumerable<Chapter>> GetChaptersReaderView(Guid novelId);
     Task<bool> ReorderChapters(Guid novelId, List<Guid> orderedChapterIds);
     Task<string?> GetNextChapterSlug(Guid novelId, int currentChapterIndex);
+    /// <summary>The current titles of these chapters, by id; chapters that no longer exist are left out.</summary>
+    Task<Dictionary<Guid, string>> GetTitlesAsync(IReadOnlyCollection<Guid> chapterIds);
 }

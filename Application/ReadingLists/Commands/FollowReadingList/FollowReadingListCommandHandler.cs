@@ -13,6 +13,7 @@ public class FollowReadingListCommandHandler(
     ILogger<FollowReadingListCommandHandler> logger,
     IReadingListsRepository readingListsRepository,
     IReadingListFollowersRepository followersRepository,
+    IUserBlocksRepository blocksRepository,
     IUserContext userContext,
     IServiceProvider serviceProvider) : IRequestHandler<FollowReadingListCommand, OperationResult>
 {
@@ -22,7 +23,10 @@ public class FollowReadingListCommandHandler(
         logger.LogInformation("User {UserId} trying to follow reading list {ListId}", currentUser.Id, request.ReadingListId);
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("القائمة غير موجودة", "ReadingListNotFound");
+            ?? throw new NotFoundException(ReadingListBlocks.NotFoundMessage, ReadingListBlocks.NotFoundCode);
+
+        // A list whose owner blocked the caller doesn't exist for them (and following it would notify the owner).
+        await ReadingListBlocks.EnsureNotBlockedByOwnerAsync(blocksRepository, readingList.UserId, currentUser.Id, cancellationToken);
 
         if (!readingList.IsPublic)
         {
@@ -44,18 +48,6 @@ public class FollowReadingListCommandHandler(
             };
         }
 
-        var isFollowing = await followersRepository.IsFollowingAsync(request.ReadingListId, currentUser.Id);
-
-        if (isFollowing)
-        {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "AlreadyFollowing",
-                Message = "أنت تتابع هذه القائمة بالفعل"
-            };
-        }
-
         var follower = new ReadingListFollower
         {
             ReadingListId = request.ReadingListId,
@@ -63,29 +55,24 @@ public class FollowReadingListCommandHandler(
             FollowedAt = DateTime.UtcNow
         };
 
-        var result = await followersRepository.FollowAsync(follower);
-
-        if (result)
+        // Already following, or a concurrent follow (a double tap) got there first: the same answer.
+        if (await followersRepository.IsFollowingAsync(request.ReadingListId, currentUser.Id)
+            || !await followersRepository.FollowAsync(follower))
         {
-            await readingListsRepository.AdjustFollowersCountAsync(request.ReadingListId, +1);
-            
-            // Fire-and-forget: Send notification
-            _ = SendReadingListFollowedNotificationInBackground(readingList.UserId, currentUser.Id, request.ReadingListId, readingList.Name);
-
-            logger.LogInformation("User {UserId} successfully followed reading list {ListId}", currentUser.Id, request.ReadingListId);
-
-            return new OperationResult
-            {
-                Success = true,
-                Message = $"أنت تتابع «{readingList.Name}» الآن"
-            };
+            return OperationResult.AlreadyDone("AlreadyFollowing", "أنت تتابع هذه القائمة بالفعل");
         }
+
+        await readingListsRepository.AdjustFollowersCountAsync(request.ReadingListId, +1);
+
+        // Fire-and-forget: Send notification
+        _ = SendReadingListFollowedNotificationInBackground(readingList.UserId, currentUser.Id, request.ReadingListId, readingList.Name);
+
+        logger.LogInformation("User {UserId} successfully followed reading list {ListId}", currentUser.Id, request.ReadingListId);
 
         return new OperationResult
         {
-            Success = false,
-            Code = "OperationFailed",
-            Message = "تعذّرت متابعة القائمة. حاول مرة أخرى."
+            Success = true,
+            Message = $"أنت تتابع «{readingList.Name}» الآن"
         };
     }
     

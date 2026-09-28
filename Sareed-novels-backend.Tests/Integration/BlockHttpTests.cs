@@ -213,7 +213,9 @@ public class BlockHttpTests(SardApiFactory api)
             await api.Comment(actor, chapterUrl, "تعليق على فصلي");
             Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Post, $"/api/comment/{myComment}/like", actor)).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Post, $"/api/posts/{myPost}/like", actor)).StatusCode);
-            Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Post, $"/api/readinglist/{myList}/follow", actor)).StatusCode);
+            // My lists don't exist for them at all (#25), so they can't follow one.
+            Assert.Equal(actor == them ? HttpStatusCode.NotFound : HttpStatusCode.OK,
+                (await api.Send(HttpMethod.Post, $"/api/readinglist/{myList}/follow", actor)).StatusCode);
             await api.Review(actor, novel.Id);
         }
         var fromControl = await api.WaitForNotificationsFrom(me, control, count: 5);
@@ -254,6 +256,45 @@ public class BlockHttpTests(SardApiFactory api)
         await api.Unblock(me, them);
         Assert.Equal(HttpStatusCode.OK, (await api.Get($"/api/User/{me.UserName}", them)).StatusCode);
         Assert.False((await (await api.Get($"/api/User/{them.UserName}", me)).OkJson()).GetProperty("isBlockedByMe").GetBoolean());
+    }
+
+    [Fact]
+    public async Task A_list_whose_owner_blocked_the_viewer_cannot_be_opened_or_followed_and_leaves_their_followed_lists()
+    {
+        var (me, them, other) = (await api.SignUp(), await api.SignUp(), await api.SignUp());
+        var (myList, myPrivateList, myOtherList) = (await api.ReadingList(me), await api.ReadingList(me, isPublic: false), await api.ReadingList(me));
+        var theirList = await api.ReadingList(them);
+        Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Post, $"/api/readinglist/{myList}/follow", them)).StatusCode);
+
+        await api.Block(me, them);
+
+        // To them my lists are gone: the answer for a list nobody has, a private one included (403 would say it exists).
+        var gone = await api.Get($"/api/readinglist/{myList}", them);
+        Assert.Equal(HttpStatusCode.NotFound, gone.StatusCode);
+        var missing = await api.Get($"/api/readinglist/{Guid.NewGuid()}", them);
+        Assert.Equal(await missing.Content.ReadAsStringAsync(), await gone.Content.ReadAsStringAsync());
+        Assert.Equal("ReadingListNotFound", (await gone.Error(HttpStatusCode.NotFound)).GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await api.Get($"/api/readinglist/{myPrivateList}", them)).StatusCode);
+        var follow = await api.Send(HttpMethod.Post, $"/api/readinglist/{myOtherList}/follow", them);
+        Assert.Equal("ReadingListNotFound", (await follow.Error(HttpStatusCode.NotFound)).GetProperty("code").GetString());
+        Assert.Equal(0, (await (await api.Get("/api/readinglist/followed", them)).OkJson()).GetProperty("totalItemsCount").GetInt32());
+        await using (var db = api.Db())
+        {
+            Assert.False(await db.ReadingListFollowers.AnyAsync(f => f.ReadingListId == myOtherList && f.UserId == them.Id));
+            Assert.Equal(1, (await db.ReadingLists.SingleAsync(l => l.Id == myList)).FollowersCount); // their follow stays, hidden
+        }
+
+        // I, everyone else and anonymous readers still open it, and I still open theirs.
+        Assert.Equal(HttpStatusCode.OK, (await api.Get($"/api/readinglist/{myList}", me)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await api.Get($"/api/readinglist/{myList}", other)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await api.Get($"/api/readinglist/{myList}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await api.Get($"/api/readinglist/{theirList}", me)).StatusCode);
+
+        // Unblocking brings it back, with the follow they had.
+        await api.Unblock(me, them);
+        Assert.True((await (await api.Get($"/api/readinglist/{myList}", them)).OkJson()).GetProperty("isFollowing").GetBoolean());
+        Assert.Equal(1, (await (await api.Get("/api/readinglist/followed", them)).OkJson()).GetProperty("totalItemsCount").GetInt32());
+        Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Post, $"/api/readinglist/{myOtherList}/follow", them)).StatusCode);
     }
 
     [Theory]

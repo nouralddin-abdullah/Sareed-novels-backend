@@ -12,7 +12,8 @@ namespace Application.Novels.DTOS
         public string Status { get; set; } = default!;
         public DateTime LastUpdatedAt { get; set; }
         public int TotalViews { get; set; }
-        public int TotalAverageScore { get; set; }
+        /// <summary>The average rating out of 5, with its fraction (3.75), like the other novel DTOs (#25: it was a whole number).</summary>
+        public decimal TotalAverageScore { get; set; }
         public int ChapterCount { get; set; }
         public bool IsDraft { get; set; } 
         public List<GenreSmallDto> GenresList { get; set; } = new List<GenreSmallDto>();

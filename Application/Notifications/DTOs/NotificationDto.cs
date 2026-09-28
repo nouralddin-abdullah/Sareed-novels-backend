@@ -24,6 +24,31 @@ public class NotificationDto
 
     /// <summary>The novel's current slug; null when there is no <see cref="NovelId"/> or the novel was deleted.</summary>
     public string? NovelSlug { get; set; }
+
+    // The parts the message names (#25), so clients needn't read them out of the Arabic sentence. Names are current,
+    // like NovelSlug (a rename shows here, while Message keeps the words it was sent with), and null when their thing
+    // was deleted since (clients then show Message as it is).
+
+    /// <summary>The current title of <see cref="NovelId"/>'s novel; null when there is none or it was deleted.</summary>
+    public string? NovelTitle { get; set; }
+
+    /// <summary>
+    /// The chapter the message names: the new chapter of NewChapterInLibrary, and the chapter commented on of
+    /// CommentOnChapter; null for the others. <see cref="ChapterTitle"/> is its current title (null once deleted).
+    /// </summary>
+    public Guid? ChapterId { get; set; }
+    public string? ChapterTitle { get; set; }
+
+    /// <summary>The current name of the followed list of ReadingListFollowed (its id is RelatedEntityId); null otherwise.</summary>
+    public string? ReadingListName { get; set; }
+
+    /// <summary>
+    /// GiftReceived: the gift, its Arabic name (retired gifts included) and how many were sent; null for other types
+    /// and for gift notifications from before #25.
+    /// </summary>
+    public Guid? GiftId { get; set; }
+    public string? GiftNameAr { get; set; }
+    public int? GiftCount { get; set; }
 }
 
 public class NotificationListDto

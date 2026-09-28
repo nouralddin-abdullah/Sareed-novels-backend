@@ -111,30 +111,16 @@ namespace Sareed_novels_backend.Controllers
             return Ok(result);
         }
         
+        /// <summary>204 when the caller already likes it (it was 400 AlreadyLiked).</summary>
         [HttpPost]
         [Route("{commentId}/like")]
-        public async Task<IActionResult> LikeComment([FromRoute] Guid commentId)
-        {
-            var command = new LikeCommentCommand { CommentId = commentId };
-            var result = await mediator.Send(command);
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-            return Ok(result);
-        }
+        public async Task<IActionResult> LikeComment([FromRoute] Guid commentId) =>
+            this.Answer(await mediator.Send(new LikeCommentCommand { CommentId = commentId }));
 
+        /// <summary>204 when the caller doesn't like it, or it no longer exists (it was 400 NotLiked).</summary>
         [HttpDelete]
         [Route("{commentId}/unlike")]
-        public async Task<IActionResult> UnlikeComment([FromRoute] Guid commentId)
-        {
-            var command = new UnlikeCommentCommand { CommentId = commentId };
-            var result = await mediator.Send(command);
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
-            return Ok(result);
-        }
+        public async Task<IActionResult> UnlikeComment([FromRoute] Guid commentId) =>
+            this.Answer(await mediator.Send(new UnlikeCommentCommand { CommentId = commentId }));
     }
 }

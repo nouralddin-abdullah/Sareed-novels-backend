@@ -6,9 +6,10 @@ using Domain.Entities;
 namespace Sareed_novels_backend.Tests.Integration;
 
 /// <summary>
-/// The answers clients branch on carry a stable code (#17): the idempotency answers the mobile app matched by their
-/// English text (already following, already liked...), and the refusals the web told apart by words in the message
-/// (already in the list, not published, a missing paragraph rather than a missing parent comment).
+/// The answers clients branch on carry a stable code (#17): the refusals the web told apart by words in the message
+/// (already in the list, not published, a missing paragraph rather than a missing parent comment). A repeat of an
+/// idempotent write (already following, already liked...), which the mobile app matched by its English text and then
+/// by its code, answers 204 No Content since #25: the state is already as asked.
 /// </summary>
 [Collection(ReaderApiCollection.Name)]
 public class ErrorCodesHttpTests(SardApiFactory api)
@@ -21,6 +22,13 @@ public class ErrorCodesHttpTests(SardApiFactory api)
         return body.GetProperty("code").GetString()!;
     }
 
+    /// <summary>A repeat that found the state already as asked: 204, no body (#25; it was 400 with its code).</summary>
+    private static async Task AssertAlreadyDone(HttpResponseMessage response)
+    {
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Empty(await response.Content.ReadAsStringAsync());
+    }
+
     private Task<HttpResponseMessage> Post(string url, ApiUser user, HttpContent? content = null) => api.Send(HttpMethod.Post, url, user, content);
     private Task<HttpResponseMessage> Delete(string url, ApiUser user, HttpContent? content = null) => api.Send(HttpMethod.Delete, url, user, content);
 
@@ -30,12 +38,12 @@ public class ErrorCodesHttpTests(SardApiFactory api)
         var (me, them) = (await api.SignUp(), await api.SignUp());
 
         (await api.Follow(me, them)).EnsureSuccessStatusCode();
-        Assert.Equal("AlreadyFollowing", await Code(await api.Follow(me, them), HttpStatusCode.BadRequest));
+        await AssertAlreadyDone(await api.Follow(me, them));
         Assert.Equal("CannotFollowSelf", await Code(await api.Follow(me, me), HttpStatusCode.BadRequest));
 
         var unfollow = () => Delete("/api/User/unfollow", me, JsonContent.Create(new { userToUnFollowId = them.Id }));
         (await unfollow()).EnsureSuccessStatusCode();
-        Assert.Equal("NotFollowing", await Code(await unfollow(), HttpStatusCode.BadRequest));
+        await AssertAlreadyDone(await unfollow());
     }
 
     [Fact]
@@ -45,9 +53,9 @@ public class ErrorCodesHttpTests(SardApiFactory api)
         var post = await api.Post(author);
 
         (await Post($"/api/posts/{post}/like", reader)).EnsureSuccessStatusCode();
-        Assert.Equal("AlreadyLiked", await Code(await Post($"/api/posts/{post}/like", reader), HttpStatusCode.BadRequest));
+        await AssertAlreadyDone(await Post($"/api/posts/{post}/like", reader));
         (await Delete($"/api/posts/{post}/unlike", reader)).EnsureSuccessStatusCode();
-        Assert.Equal("NotLiked", await Code(await Delete($"/api/posts/{post}/unlike", reader), HttpStatusCode.BadRequest));
+        await AssertAlreadyDone(await Delete($"/api/posts/{post}/unlike", reader));
         Assert.Equal("PostNotFound", await Code(await Post($"/api/posts/{Guid.NewGuid()}/like", reader), HttpStatusCode.BadRequest));
     }
 
@@ -59,10 +67,10 @@ public class ErrorCodesHttpTests(SardApiFactory api)
         var comment = await api.Comment(author, $"/api/comment/post/{post}");
 
         (await Post($"/api/comment/{comment}/like", reader)).EnsureSuccessStatusCode();
-        Assert.Equal("AlreadyLiked", await Code(await Post($"/api/comment/{comment}/like", reader), HttpStatusCode.BadRequest));
+        await AssertAlreadyDone(await Post($"/api/comment/{comment}/like", reader));
         Assert.Equal("CannotLikeOwnContent", await Code(await Post($"/api/comment/{comment}/like", author), HttpStatusCode.BadRequest));
         (await Delete($"/api/comment/{comment}/unlike", reader)).EnsureSuccessStatusCode();
-        Assert.Equal("NotLiked", await Code(await Delete($"/api/comment/{comment}/unlike", reader), HttpStatusCode.BadRequest));
+        await AssertAlreadyDone(await Delete($"/api/comment/{comment}/unlike", reader));
     }
 
     [Fact]
@@ -83,10 +91,10 @@ public class ErrorCodesHttpTests(SardApiFactory api)
         })), HttpStatusCode.BadRequest));
 
         (await Post($"/api/{novel.Id}/reviews/{review}/like", other)).EnsureSuccessStatusCode();
-        Assert.Equal("AlreadyLiked", await Code(await Post($"/api/{novel.Id}/reviews/{review}/like", other), HttpStatusCode.BadRequest));
+        await AssertAlreadyDone(await Post($"/api/{novel.Id}/reviews/{review}/like", other));
         Assert.Equal("CannotLikeOwnContent", await Code(await Post($"/api/{novel.Id}/reviews/{review}/like", reader), HttpStatusCode.BadRequest));
         (await Delete($"/api/{novel.Id}/reviews/{review}/unlike", other)).EnsureSuccessStatusCode();
-        Assert.Equal("NotLiked", await Code(await Delete($"/api/{novel.Id}/reviews/{review}/unlike", other), HttpStatusCode.BadRequest));
+        await AssertAlreadyDone(await Delete($"/api/{novel.Id}/reviews/{review}/unlike", other));
     }
 
     [Fact]
@@ -110,13 +118,13 @@ public class ErrorCodesHttpTests(SardApiFactory api)
         Assert.Equal("AlreadyInList", await Code(await Post($"/api/readinglist/{list}/novels/{novel.Id}", owner), HttpStatusCode.BadRequest));
         Assert.Equal("NovelNotPublished", await Code(await Post($"/api/readinglist/{list}/novels/{draft.Id}", owner), HttpStatusCode.BadRequest));
         (await Delete($"/api/readinglist/{list}/novels/{novel.Id}", owner)).EnsureSuccessStatusCode();
-        Assert.Equal("NotInList", await Code(await Delete($"/api/readinglist/{list}/novels/{novel.Id}", owner), HttpStatusCode.BadRequest));
+        await AssertAlreadyDone(await Delete($"/api/readinglist/{list}/novels/{novel.Id}", owner));
 
         Assert.Equal("CannotFollowOwnList", await Code(await Post($"/api/readinglist/{list}/follow", owner), HttpStatusCode.BadRequest));
         (await Post($"/api/readinglist/{list}/follow", other)).EnsureSuccessStatusCode();
-        Assert.Equal("AlreadyFollowing", await Code(await Post($"/api/readinglist/{list}/follow", other), HttpStatusCode.BadRequest));
+        await AssertAlreadyDone(await Post($"/api/readinglist/{list}/follow", other));
         (await Delete($"/api/readinglist/{list}/unfollow", other)).EnsureSuccessStatusCode();
-        Assert.Equal("NotFollowing", await Code(await Delete($"/api/readinglist/{list}/unfollow", other), HttpStatusCode.BadRequest));
+        await AssertAlreadyDone(await Delete($"/api/readinglist/{list}/unfollow", other));
         Assert.Equal("NotOwner", await Code(await Post($"/api/readinglist/{list}/novels/{novel.Id}", other), HttpStatusCode.Forbidden));
     }
 

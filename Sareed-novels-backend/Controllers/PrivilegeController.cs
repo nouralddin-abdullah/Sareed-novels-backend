@@ -53,22 +53,13 @@ public class PrivilegeController(IMediator mediator) : ControllerBase
     }
     
     /// <summary>
-    /// Cancel privilege subscription (authenticated users only)
+    /// Subscriptions are permanent: a subscriber is refused, 400 SubscriptionCannotBeCancelled; without a subscription
+    /// there is nothing to cancel, 204 (it was the same 400).
     /// </summary>
     [HttpDelete("subscription")]
     [Authorize]
-    public async Task<IActionResult> CancelSubscription([FromRoute] Guid novelId)
-    {
-        var command = new CancelSubscriptionCommand { NovelId = novelId };
-        var result = await mediator.Send(command);
-        
-        if (result.Success)
-        {
-            return Ok(result);
-        }
-        
-        return BadRequest(result);
-    }
+    public async Task<IActionResult> CancelSubscription([FromRoute] Guid novelId) =>
+        this.Answer(await mediator.Send(new CancelSubscriptionCommand { NovelId = novelId }));
     
     // ===== AUTHOR ENDPOINTS =====
     

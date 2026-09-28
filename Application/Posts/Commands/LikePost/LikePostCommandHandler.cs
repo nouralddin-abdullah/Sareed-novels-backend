@@ -34,12 +34,7 @@ public class LikePostCommandHandler(
         // Inserts the like and bumps LikesCount in one transaction; a concurrent duplicate is a no-op here.
         if (!await postLikesRepository.LikePost(currentUser.Id, request.PostId))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "AlreadyLiked",
-                Message = "سبق أن أعجبت بهذا المنشور"
-            };
+            return OperationResult.AlreadyDone("AlreadyLiked", "سبق أن أعجبت بهذا المنشور");
         }
 
         // Fire-and-forget: Send notification

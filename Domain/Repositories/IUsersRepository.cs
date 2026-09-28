@@ -13,7 +13,9 @@ public interface IUsersRepository
     Task<int> GetFollowingCount(User user);
     Task<bool> IsFollowingAsync(string userId, string otherUserId);
     Task<Dictionary<string, bool>> IsFollowingBulkAsync(string currentUserId, IEnumerable<string> userIds);
+    /// <summary>Adds the follow unless it exists (safe under concurrency); true when this call added it.</summary>
     Task<bool> FollowUser(string userId, string userToFollow);
+    /// <summary>Removes the follow if it exists (safe under concurrency); true when this call removed it.</summary>
     Task<bool> UnFollowUser(string userId, string userToUnFollow);
     Task<(IEnumerable<Follow>, int)> GetFollowersList(string userId, int PageSize, int PageNumber);
     Task<(IEnumerable<Follow>, int)> GetFollowingList(string userId, int PageSize, int PageNumber);

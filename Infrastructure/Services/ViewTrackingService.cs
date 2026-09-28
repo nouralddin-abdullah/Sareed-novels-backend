@@ -45,24 +45,19 @@ public class ViewTrackingService(ApplicationDbContext dbContext, ILogger<ViewTra
         }
     }
 
-    public async Task TrackChapterView(Guid chapterId, Guid novelId, string visitorKey, CancellationToken cancellationToken = default)
+    public async Task<bool> TrackChapterView(Guid chapterId, Guid novelId, string visitorKey, CancellationToken cancellationToken = default)
     {
-        try
+        // No catch here: the reader's background call logs a failure, and POST .../view answers it (the app retries).
+        var today = DateTime.UtcNow.Date;
+        if (!await TryRecordUniqueView(chapterId, today, visitorKey, novelId, ViewKind.Chapter, cancellationToken))
         {
-            var today = DateTime.UtcNow.Date;
-            if (!await TryRecordUniqueView(chapterId, today, visitorKey, novelId, ViewKind.Chapter, cancellationToken))
-            {
-                return;
-            }
+            return false;
+        }
 
-            await dbContext.Chapters
-                .Where(c => c.Id == chapterId)
-                .ExecuteUpdateAsync(s => s.SetProperty(c => c.ViewsCount, c => c.ViewsCount + 1), cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to track view for chapter {ChapterId}", chapterId);
-        }
+        await dbContext.Chapters
+            .Where(c => c.Id == chapterId)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ViewsCount, c => c.ViewsCount + 1), cancellationToken);
+        return true;
     }
 
     public Task<int> PruneUniqueViewsAsync(DateTime olderThan, CancellationToken cancellationToken = default)
