@@ -324,20 +324,6 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
             .ToDictionaryAsync(n => n.Id, n => (n.Slug, n.Title));
     }
 
-    public async Task<Dictionary<Guid, string>> GetSlugsAsync(IReadOnlyCollection<Guid> novelIds)
-    {
-        if (novelIds.Count == 0)
-        {
-            return [];
-        }
-
-        return await dbContext.Novels
-            .AsNoTracking()
-            .Where(n => novelIds.Contains(n.Id))
-            .Select(n => new { n.Id, n.Slug })
-            .ToDictionaryAsync(n => n.Id, n => n.Slug);
-    }
-
     public async Task<List<Novel>> GetNovelsBySharedGenresAsync(
         List<int> genreIds,
         Guid excludeNovelId,

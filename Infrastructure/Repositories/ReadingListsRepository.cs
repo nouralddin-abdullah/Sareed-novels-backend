@@ -138,6 +138,15 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
         return await dbContext.SaveChangesAsync() > 0;
     }
 
+    public async Task<Dictionary<Guid, string>> GetNamesAsync(IReadOnlyCollection<Guid> readingListIds) =>
+        readingListIds.Count == 0
+            ? []
+            : await dbContext.ReadingLists
+                .AsNoTracking()
+                .Where(rl => readingListIds.Contains(rl.Id))
+                .Select(rl => new { rl.Id, rl.Name })
+                .ToDictionaryAsync(rl => rl.Id, rl => rl.Name);
+
     public async Task<bool> IsNameTakenByUserAsync(string userId, string name, Guid? excludeListId = null)
     {
         var query = dbContext.ReadingLists

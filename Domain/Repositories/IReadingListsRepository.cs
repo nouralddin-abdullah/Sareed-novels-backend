@@ -24,6 +24,8 @@ public interface IReadingListsRepository
     Task<bool> UpdateAsync(ReadingList readingList);
     Task<bool> DeleteAsync(Guid id);
     Task<bool> IsNameTakenByUserAsync(string userId, string name, Guid? excludeListId = null);
+    /// <summary>The current names of these lists, by id; lists that no longer exist are left out.</summary>
+    Task<Dictionary<Guid, string>> GetNamesAsync(IReadOnlyCollection<Guid> readingListIds);
     /// <summary>Atomically adds <paramref name="delta"/> to NovelsCount (never below 0) and touches UpdatedAt.</summary>
     Task AdjustNovelsCountAsync(Guid readingListId, int delta);
     /// <summary>Atomically adds <paramref name="delta"/> to FollowersCount (never below 0).</summary>

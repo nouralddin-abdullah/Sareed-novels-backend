@@ -30,8 +30,6 @@ public interface INovelsRepository
     Task<int> GetPublishedChaptersCountAsync(Guid novelId);
     Task<int> RecalculatePublishedSequencesAsync(Guid novelId);
     Task<List<Novel>> GetNovelsByIdsAsync(List<Guid> novelIds);
-    /// <summary>The current slug of each of these novels that still exists (deleted ones are left out).</summary>
-    Task<Dictionary<Guid, string>> GetSlugsAsync(IReadOnlyCollection<Guid> novelIds);
     /// <summary>The current slug and title of each of these novels that still exists (deleted ones are left out).</summary>
     Task<Dictionary<Guid, (string Slug, string Title)>> GetSlugsAndTitlesAsync(IReadOnlyCollection<Guid> novelIds);
     Task<List<Novel>> GetNovelsBySharedGenresAsync(List<int> genreIds, Guid excludeNovelId, int limit);
