@@ -74,7 +74,10 @@ public class AdminReportDto
     public AdminReportTargetDto Target { get; set; } = default!;
     /// <summary>Open reports on the same target, this one included: an action closes them all.</summary>
     public int OpenReportsOnTarget { get; set; }
-    /// <summary>What closed it (Dismiss, RemoveContent, SuspendUser); null while open.</summary>
+    /// <summary>
+    /// What closed it (Dismiss, RemoveContent, SuspendUser, or AccountDeleted when the reported user deleted their
+    /// account, with no admin in <see cref="ResolvedById"/>); null while open.
+    /// </summary>
     public string? Action { get; set; }
     public DateTime? ResolvedAt { get; set; }
     public string? ResolvedById { get; set; }

@@ -17,8 +17,9 @@ public class ResolveReportRequestValidator : AbstractValidator<ResolveReportRequ
 {
     public ResolveReportRequestValidator()
     {
+        // AccountDeleted closes reports when their subject deletes their account; it isn't an admin's action.
         RuleFor(r => r.Action)
-            .Must(action => EnumNames.TryParse<ReportAction>(action, out _))
+            .Must(action => EnumNames.TryParse<ReportAction>(action, out var parsed) && parsed != ReportAction.AccountDeleted)
             .WithMessage("الإجراء غير صالح: Dismiss أو RemoveContent أو SuspendUser");
 
         RuleFor(r => r.SuspensionDays)

@@ -41,7 +41,12 @@ public enum ReportAction
 {
     Dismiss,
     RemoveContent,
-    SuspendUser
+    SuspendUser,
+    /// <summary>
+    /// Not an admin's action: the reported user (or the reported content's author) deleted their account, which closed
+    /// the open reports about them. Admins can't choose it.
+    /// </summary>
+    AccountDeleted
 }
 
 public static class EnumNames

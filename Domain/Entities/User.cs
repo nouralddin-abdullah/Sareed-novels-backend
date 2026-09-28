@@ -38,6 +38,13 @@ public class User : IdentityUser
     /// </summary>
     public DateTime? SuspendedUntil { get; set; }
 
+    /// <summary>
+    /// When the member deleted their account (UTC); null for a live account. The row stays, anonymized
+    /// (<see cref="Constants.DeletedAccounts"/>), so their comments, reviews and posts keep an author; it can't sign in,
+    /// its access tokens are refused and it has no profile. Set through IAccountDeletionService.
+    /// </summary>
+    public DateTime? DeletedAt { get; set; }
+
     public ICollection<Follow> Following { get; set; } = new List<Follow>();
     public ICollection<Follow> Followers { get; set; } = new List<Follow>();
     public ICollection<Novel> Novels { get; set; } = new List<Novel>();
