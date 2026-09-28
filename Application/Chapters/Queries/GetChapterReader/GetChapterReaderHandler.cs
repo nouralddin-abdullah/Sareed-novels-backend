@@ -21,8 +21,6 @@ public class GetChapterReaderHandler(
     IServiceScopeFactory scopeFactory,
     ILogger<GetChapterReaderHandler> logger) : IRequestHandler<GetChapterReaderQuery, ChapterSingleReaderDTO>
 {
-    private const string PublishedStatus = "Published";
-
     /// <summary>What a reader is told about a privilege-locked chapter (clients show it as it is; isLocked is the flag).</summary>
     public const string LockMessage = "هذا الفصل ضمن الوصول المبكر. اشترك لتقرأ الفصول المقفلة كلها فور نشرها.";
 
@@ -34,9 +32,7 @@ public class GetChapterReaderHandler(
         var currentUser = userContext.GetCurrentUser();
         var isAuthor = currentUser != null && novel.AuthorId == currentUser.Id;
 
-        // Readers only get published chapters of published novels, through the novel they belong to.
-        // (Authors can preview drafts of their own work.)
-        if (chapter.NovelId != novel.Id || (!isAuthor && (novel.IsDraft || chapter.Status != PublishedStatus)))
+        if (!ChapterAccess.IsReadable(novel, chapter, isAuthor))
         {
             throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
         }
@@ -68,6 +64,12 @@ public class GetChapterReaderHandler(
         var paragraphs = await paragraphsRepository.GetChapterParagraphs(chapter.Id);
         chapterDTO.Paragraphs = mapper.Map<List<ChapterParagraphDTO>>(paragraphs);
 
+        // A download for offline reading isn't a read: the app sends POST .../view when the chapter is opened.
+        if (!request.TrackView)
+        {
+            return chapterDTO;
+        }
+
         // Resolve the visitor now: the background task outlives the request and can't read HttpContext.
         var visitorKey = visitorContext.GetVisitorKey();
         if (visitorKey != null)
@@ -88,7 +90,8 @@ public class GetChapterReaderHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to track read for chapter {ChapterId} in background", chapterId);
+            // The reader already has the chapter; the read just isn't counted.
+            logger.LogError(ex, "Failed to track read for chapter {ChapterId} in background", chapterId);
         }
     }
 }
