@@ -44,6 +44,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     // Moderation (ModerationConfiguration.cs)
     internal DbSet<Report> Reports { get; set; }
     internal DbSet<UserBlock> UserBlocks { get; set; }
+    internal DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
 
     // Wallet System
     internal DbSet<UserWallet> UserWallets { get; set; }
@@ -980,9 +981,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.ApplyConfiguration(new NotificationPreferencesConfiguration());
         modelBuilder.ApplyConfiguration(new PushOutboxMessageConfiguration());
 
-        // Moderation: reports for the admins, and users blocking users.
+        // Moderation: reports for the admins, users blocking users, and the record of what admins did.
         modelBuilder.ApplyConfiguration(new ReportConfiguration());
         modelBuilder.ApplyConfiguration(new UserBlockConfiguration());
+        modelBuilder.ApplyConfiguration(new AdminAuditLogConfiguration());
 
         // UserWallet configuration
         modelBuilder.Entity<UserWallet>(entity =>
