@@ -15,7 +15,10 @@ public interface IReadingListsRepository
     Task<(IReadOnlyList<ReadingListSummary>, int)> GetUserPublicReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize);
     Task<(IEnumerable<ReadingList>, int)> GetPublicReadingListsAsync(int pageNumber, int pageSize);
     Task<(IEnumerable<ReadingList>, int)> GetFollowedReadingListsAsync(string userId, int pageNumber, int pageSize);
-    /// <summary>Lists the user follows that are still public; a list its owner made private drops out.</summary>
+    /// <summary>
+    /// Lists the user follows that are still public; a list its owner made private drops out, and so does one whose
+    /// owner blocked the user.
+    /// </summary>
     Task<(IReadOnlyList<ReadingListSummary>, int)> GetFollowedReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize);
     Task<bool> CreateAsync(ReadingList readingList);
     Task<bool> UpdateAsync(ReadingList readingList);

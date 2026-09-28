@@ -13,6 +13,7 @@ public class FollowReadingListCommandHandler(
     ILogger<FollowReadingListCommandHandler> logger,
     IReadingListsRepository readingListsRepository,
     IReadingListFollowersRepository followersRepository,
+    IUserBlocksRepository blocksRepository,
     IUserContext userContext,
     IServiceProvider serviceProvider) : IRequestHandler<FollowReadingListCommand, OperationResult>
 {
@@ -22,7 +23,10 @@ public class FollowReadingListCommandHandler(
         logger.LogInformation("User {UserId} trying to follow reading list {ListId}", currentUser.Id, request.ReadingListId);
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("القائمة غير موجودة", "ReadingListNotFound");
+            ?? throw new NotFoundException(ReadingListBlocks.NotFoundMessage, ReadingListBlocks.NotFoundCode);
+
+        // A list whose owner blocked the caller doesn't exist for them (and following it would notify the owner).
+        await ReadingListBlocks.EnsureNotBlockedByOwnerAsync(blocksRepository, readingList.UserId, currentUser.Id, cancellationToken);
 
         if (!readingList.IsPublic)
         {
