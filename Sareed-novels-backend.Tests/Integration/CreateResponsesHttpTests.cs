@@ -152,7 +152,7 @@ public class CreateResponsesHttpTests(SardApiFactory api)
         Assert.Equal(HttpStatusCode.BadRequest, again.StatusCode);
         var refused = await again.Content.ReadFromJsonAsync<JsonElement>();
         Assert.False(refused.GetProperty("success").GetBoolean());
-        Assert.Equal("You have already reviewed this novel", refused.GetProperty("message").GetString());
+        Assert.Equal("لقد كتبت مراجعة لهذه الرواية من قبل", refused.GetProperty("message").GetString());
     }
 
     [Fact]

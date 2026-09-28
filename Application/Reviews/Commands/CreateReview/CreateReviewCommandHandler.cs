@@ -32,7 +32,7 @@ public class CreateReviewCommandHandler(
             {
                 Success = false,
                 Code = "CannotReviewOwnNovel",
-                Message = "You cannot review your own novel"
+                Message = "لا يمكنك كتابة مراجعة لروايتك"
             };
         }
         var existingReview = await reviewsRepository.GetUserReviewForNovel(currentUser.Id, request.NovelId);
@@ -42,7 +42,7 @@ public class CreateReviewCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyReviewed",
-                Message = "You have already reviewed this novel"
+                Message = "لقد كتبت مراجعة لهذه الرواية من قبل"
             };
         }
         var review = mapper.Map<Review>(request);
@@ -58,7 +58,7 @@ public class CreateReviewCommandHandler(
             {
                 Success = false,
                 Code = "OperationFailed",
-                Message = "Failed to create review"
+                Message = "تعذّر نشر مراجعتك. حاول مرة أخرى."
             };
         }
 
@@ -73,7 +73,7 @@ public class CreateReviewCommandHandler(
         return new CreateReviewResult
         {
             Success = true,
-            Message = "Review was created",
+            Message = "تم نشر مراجعتك",
             Review = reviewDtos.Single()
         };
 

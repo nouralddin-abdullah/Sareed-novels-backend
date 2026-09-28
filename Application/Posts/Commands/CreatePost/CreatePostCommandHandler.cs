@@ -30,7 +30,7 @@ public class CreatePostCommandHandler(
                 {
                     Success = false,
                     Code = "NovelNotFound",
-                    Message = "Novel not found"
+                    Message = "الرواية غير موجودة"
                 };
             }
         }
@@ -64,7 +64,7 @@ public class CreatePostCommandHandler(
         return new CreatePostResult
         {
             Success = true,
-            Message = "Post created successfully",
+            Message = "نُشر منشورك",
             // Through GET /api/posts/{id} itself, so the app gets the post exactly as the post pages and lists return it.
             Post = await sender.Send(new GetPostQuery(post.Id), cancellationToken)
         };

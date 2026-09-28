@@ -47,7 +47,7 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
             {
                 Success = false,
                 Code = "CannotLikeOwnContent",
-                Message = "You cannot like your own comment"
+                Message = "لا يمكنك الإعجاب بتعليقك"
             };
         }
 
@@ -58,7 +58,7 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
             {
                 Success = false,
                 Code = "AlreadyLiked",
-                Message = "You already liked this comment"
+                Message = "سبق أن أعجبت بهذا التعليق"
             };
         }
 
@@ -71,7 +71,7 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
         return new OperationResult
         {
             Success = true,
-            Message = "Comment liked successfully"
+            Message = "حُفظ إعجابك بالتعليق"
         };
     }
     

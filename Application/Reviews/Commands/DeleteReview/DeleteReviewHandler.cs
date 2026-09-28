@@ -30,7 +30,7 @@ internal class DeleteReviewHandler(
             {
                 Success = false,
                 Code = "OperationFailed",
-                Message = "Failed to delete review"
+                Message = "تعذّر حذف مراجعتك. حاول مرة أخرى."
             };
         }
 
@@ -40,7 +40,7 @@ internal class DeleteReviewHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Review deleted successfully"
+            Message = "تم حذف مراجعتك"
         };
     }
 }

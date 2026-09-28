@@ -63,7 +63,7 @@ public class CreateCommentCommandHandler(
             {
                 Success = false,
                 Code = "CommentTargetRequired",
-                Message = "Either ChapterId, ParagraphId, or PostId must be provided"
+                Message = "حدد مكان التعليق: فصل أو فقرة أو منشور"
             };
         }
         
@@ -81,7 +81,7 @@ public class CreateCommentCommandHandler(
             // where its parent does.
             if (parentComment.ParentCommentId.HasValue)
             {
-                return new CreateCommentResult { Success = false, Code = "NestedReplyNotAllowed", Message = "Replies can only be added to top-level comments" };
+                return new CreateCommentResult { Success = false, Code = "NestedReplyNotAllowed", Message = "يمكن الرد على التعليقات فقط، لا على الردود" };
             }
 
             var sameLocation = request.PostId.HasValue ? parentComment.PostId == request.PostId
@@ -89,7 +89,7 @@ public class CreateCommentCommandHandler(
                 : parentComment.ChapterId == request.ChapterId && parentComment.ParagraphId == null;
             if (!sameLocation)
             {
-                return new CreateCommentResult { Success = false, Code = "ParentCommentElsewhere", Message = "The parent comment belongs to a different chapter, paragraph or post" };
+                return new CreateCommentResult { Success = false, Code = "ParentCommentElsewhere", Message = "التعليق الذي تردّ عليه في فصل أو فقرة أو منشور آخر" };
             }
         }
         
@@ -133,7 +133,7 @@ public class CreateCommentCommandHandler(
         return new CreateCommentResult
         {
             Success = true,
-            Message = "Comment created successfully",
+            Message = "نُشر تعليقك",
             Comment = commentDtos.Single()
         };
     }

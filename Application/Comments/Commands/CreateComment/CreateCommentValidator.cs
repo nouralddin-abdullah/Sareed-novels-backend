@@ -9,16 +9,16 @@ public class CreateCommentValidator : AbstractValidator<CreateCommentRequest>
     {
         RuleFor(x => x.Content)
             .NotEmpty()
-            .WithMessage("Comment content is required")
+            .WithMessage("اكتب تعليقك أولًا")
             .MaximumLength(2000)
-            .WithMessage("Comment content cannot exceed 2000 characters")
+            .WithMessage("التعليق يجب ألّا يتجاوز 2000 حرف")
             .MinimumLength(1)
-            .WithMessage("Comment content must be at least 1 character");
+            .WithMessage("اكتب تعليقك أولًا");
 
         // Validate image file if provided
         RuleFor(x => x.AttachedImage)
             .Must(ImageValidationUtils.IsValidImageFile)
-            .WithMessage("Invalid image file. Allowed types: JPEG, PNG, WebP. Max size: 5MB")
+            .WithMessage("الصورة يجب أن تكون بصيغة JPEG أو PNG أو WebP، وحجمها 5 ميغابايت أو أقل")
             .When(x => x.AttachedImage != null);
 
     }

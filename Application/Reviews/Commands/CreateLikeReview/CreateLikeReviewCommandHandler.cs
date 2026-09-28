@@ -27,7 +27,7 @@ internal class CreateLikeReviewCommandHandler(
             {
                 Success = false,
                 Code = "CannotLikeOwnContent",
-                Message = "You cannot like your own review"
+                Message = "لا يمكنك الإعجاب بمراجعتك"
             };
         }
         // Inserts the like and bumps LikeCount in one transaction; a concurrent duplicate is a no-op here.
@@ -37,7 +37,7 @@ internal class CreateLikeReviewCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyLiked",
-                Message = "You already liked this review"
+                Message = "سبق أن أعجبت بهذه المراجعة"
             };
         }
         
@@ -47,7 +47,7 @@ internal class CreateLikeReviewCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Review Liked successfully"
+            Message = "حُفظ إعجابك بالمراجعة"
         };
     }
     

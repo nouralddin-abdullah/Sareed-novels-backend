@@ -20,14 +20,14 @@ public class DeleteReviewLikeCommandHandler(ILogger<DeleteReviewLikeCommandHandl
             {
                 Success = false,
                 Code = "NotLiked",
-                Message = "You haven't liked this review"
+                Message = "لم تُبدِ إعجابك بهذه المراجعة"
             };
         }
 
         return new OperationResult
         {
             Success = true,
-            Message = "Review unliked successfully"
+            Message = "أُلغي إعجابك بالمراجعة"
         };
 
     }

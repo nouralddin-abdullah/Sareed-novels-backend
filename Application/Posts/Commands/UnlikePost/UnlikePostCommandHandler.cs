@@ -24,7 +24,7 @@ public class UnlikePostCommandHandler(
             {
                 Success = false,
                 Code = "PostNotFound",
-                Message = "Post not found"
+                Message = "هذا المنشور لم يعد موجودًا"
             };
         }
 
@@ -34,7 +34,7 @@ public class UnlikePostCommandHandler(
             {
                 Success = false,
                 Code = "NotLiked",
-                Message = "Post not liked yet"
+                Message = "لم تُبدِ إعجابك بهذا المنشور"
             };
         }
 
@@ -43,7 +43,7 @@ public class UnlikePostCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Post unliked successfully"
+            Message = "أُلغي إعجابك بالمنشور"
         };
     }
 }

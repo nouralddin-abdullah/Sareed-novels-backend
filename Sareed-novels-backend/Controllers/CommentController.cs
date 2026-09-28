@@ -66,7 +66,7 @@ namespace Sareed_novels_backend.Controllers
             if (!result)
             {
                 // Deleted by another request in the meantime.
-                return NotFound(new ApiError("CommentNotFound", "This comment wasn't found!"));
+                return NotFound(new ApiError("CommentNotFound", "هذا التعليق لم يعد موجودًا"));
             }
             return NoContent();
         }

@@ -23,7 +23,7 @@ public class DeletePostCommandHandler(
             {
                 Success = false,
                 Code = "PostNotFound",
-                Message = "Post not found"
+                Message = "هذا المنشور لم يعد موجودًا"
             };
         }
 
@@ -39,7 +39,7 @@ public class DeletePostCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Post deleted successfully"
+            Message = "حُذف المنشور"
         };
     }
 }
