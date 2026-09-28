@@ -167,15 +167,15 @@ public class PushDeliveryTests(SqlServerDatabase database) : IClassFixture<SqlSe
         Expect(NotificationType.NewFollower, "social", "NewFollower", actorName);
         Expect(NotificationType.CommentOnChapter, "social", $"CommentOnChapter:{chapter.Id}",
             [actorName, ("commentId", Id(onMyChapter.Id)), ("chapterId", Id(chapter.Id)), .. novelIds]);
-        Expect(NotificationType.CommentOnPost, "social", $"CommentOnPost:{post.Id}",
-            actorName, ("commentId", Id(onMyPost.Id)), ("postId", Id(post.Id)));
+        var myPost = new[] { ("postId", Id(post.Id)), ("postAuthorUserName", me.UserName!) };
+        Expect(NotificationType.CommentOnPost, "social", $"CommentOnPost:{post.Id}", [actorName, ("commentId", Id(onMyPost.Id)), .. myPost]);
         Expect(NotificationType.ReplyToComment, "social", $"ReplyToComment:{mine.Id}",
             [actorName, ("commentId", Id(replyToMine.Id)), ("parentCommentId", Id(mine.Id)), ("chapterId", Id(chapter.Id)), .. novelIds]);
         Expect(NotificationType.NewChapterInLibrary, "chapters", $"NewChapterInLibrary:{novel.Id}",
             [("chapterId", Id(chapter.Id)), .. novelIds]);
         Expect(NotificationType.ReviewOnNovel, "social", $"ReviewOnNovel:{novel.Id}",
             [actorName, ("reviewId", Id(reviewOfMyNovel.Id)), .. novelIds]);
-        Expect(NotificationType.LikeOnPost, "social", $"LikeOnPost:{post.Id}", actorName, ("postId", Id(post.Id)));
+        Expect(NotificationType.LikeOnPost, "social", $"LikeOnPost:{post.Id}", [actorName, .. myPost]);
         Expect(NotificationType.LikeOnComment, "social", $"LikeOnComment:{mineOnParagraph.Id}",
             [actorName, ("commentId", Id(mineOnParagraph.Id)), ("paragraphId", Id(paragraph.Id)), ("chapterId", Id(chapter.Id)), .. novelIds]);
         Expect(NotificationType.LikeOnReview, "social", $"LikeOnReview:{myReview.Id}",
@@ -186,6 +186,39 @@ public class PushDeliveryTests(SqlServerDatabase database) : IClassFixture<SqlSe
         Expect(NotificationType.PrivilegeSubscribed, "support", $"PrivilegeSubscribed:{novel.Id}", [actorName, .. novelIds]);
 
         Assert.All(await Outbox(), o => Assert.Equal(PushOutboxStatus.Sent, o.Status));
+    }
+
+    [Fact]
+    public async Task A_reply_or_like_under_someone_elses_post_names_the_posts_author()
+    {
+        var world = await SeedWorld();
+        var (me, actor) = (world.Recipient, world.Actor);
+
+        // Noor's post; I commented on it, the actor replies to my comment and likes it.
+        await using var db = database.CreateContext();
+        var noor = Seed.User();
+        var post = new Post { Id = Guid.NewGuid(), UserId = noor.Id, Content = "منشور" };
+        var mine = new Comments { Id = Guid.NewGuid(), UserId = me.Id, Content = "تعليقي", PostId = post.Id };
+        var reply = new Comments { Id = Guid.NewGuid(), UserId = actor.Id, Content = "ردّ", PostId = post.Id, ParentCommentId = mine.Id };
+        db.AddRange(noor, post, mine, reply);
+        await db.SaveChangesAsync();
+
+        await Notify(s => s.SendReplyToCommentNotification(me.Id, actor, reply.Id, mine, postAuthorUsername: noor.UserName));
+        await Notify(s => s.SendLikeOnCommentNotification(me.Id, actor, mine.Id, mine, postAuthorUsername: noor.UserName));
+        await Drain();
+
+        var pushes = fcm.Requests.ToDictionary(p => p.Data["type"]);
+        var replied = pushes[NotificationType.ReplyToComment].Data;
+        Assert.Equal(noor.UserName, replied["postAuthorUserName"]);
+        Assert.Equal(post.Id.ToString(), replied["postId"]);
+        Assert.Equal(reply.Id.ToString(), replied["commentId"]);
+        Assert.Equal(mine.Id.ToString(), replied["parentCommentId"]);
+        Assert.Equal(actor.UserName, replied["actorUserName"]);
+        var liked = pushes[NotificationType.LikeOnComment].Data;
+        Assert.Equal(noor.UserName, liked["postAuthorUserName"]);
+        Assert.Equal(post.Id.ToString(), liked["postId"]);
+        Assert.Equal(mine.Id.ToString(), liked["commentId"]);
+        Assert.All(pushes.Values, p => Assert.Equal(PushMessages.DataKeys.Order(), p.Data.Keys.Order()));
     }
 
     [Fact]

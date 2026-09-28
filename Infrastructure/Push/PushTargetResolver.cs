@@ -7,7 +7,7 @@ namespace Infrastructure.Push;
 /// <summary>
 /// Finds the ids behind a batch of notifications (<see cref="PushTarget"/>) with a few set-based queries: a
 /// notification only stores its actor and one related entity (see NotificationService), e.g. a reply's comment id,
-/// from which this gets the thread, chapter and novel or the post.
+/// from which this gets the thread, chapter and novel or the post and its author.
 /// </summary>
 public sealed class PushTargetResolver(ApplicationDbContext dbContext)
 {
@@ -57,6 +57,19 @@ public sealed class PushTargetResolver(ApplicationDbContext dbContext)
             .Where(n => novelIds.Contains(n.Id))
             .Select(n => new { n.Id, n.Slug })
             .ToDictionaryAsync(n => n.Id, n => n.Slug, cancellationToken);
+
+        // A post's author, for a post or a comment on one: the app opens a post from its author's profile. Deleted posts
+        // still say whose they were.
+        var postIds = Related("Post")
+            .Concat(comments.Values.Select(c => c.PostId).OfType<Guid>())
+            .Distinct()
+            .ToList();
+        var postAuthors = postIds.Count == 0 ? new Dictionary<Guid, string?>() : await dbContext.Posts
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => postIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.User.UserName })
+            .ToDictionaryAsync(p => p.Id, p => p.UserName, cancellationToken);
 
         // The actor is a user, except for new chapters (the novel).
         var actorIds = notifications.Select(n => n.ActorId).Distinct().ToList();
@@ -112,6 +125,10 @@ public sealed class PushTargetResolver(ApplicationDbContext dbContext)
             if (target.NovelId is { } id)
             {
                 target = target with { NovelSlug = novelSlugs.GetValueOrDefault(id) };
+            }
+            if (target.PostId is { } postId)
+            {
+                target = target with { PostAuthorUserName = postAuthors.GetValueOrDefault(postId) };
             }
             targets[n.Id] = target;
         }

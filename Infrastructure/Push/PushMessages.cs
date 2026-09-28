@@ -20,6 +20,13 @@ public sealed record PushTarget
     /// <summary>For a reply (or a like on one): the top-level comment of the thread.</summary>
     public Guid? ParentCommentId { get; init; }
     public Guid? PostId { get; init; }
+
+    /// <summary>
+    /// The user name of the post's author when the notification is about a post or a comment on one (a reply or like
+    /// under someone else's post included), since the app opens a post from its author's profile.
+    /// </summary>
+    public string? PostAuthorUserName { get; init; }
+
     public Guid? ReviewId { get; init; }
     public Guid? ReadingListId { get; init; }
 }
@@ -27,12 +34,22 @@ public sealed record PushTarget
 /// <summary>How a notification looks as a push: Arabic title per type, its message as the body, channel and data.</summary>
 public static class PushMessages
 {
-    /// <summary>Every key is always present (empty when it doesn't apply), and every value is a string.</summary>
+    /// <summary>
+    /// The keys of a push's data. Every key is always present (empty when it doesn't apply), and every value is a
+    /// string. <c>notificationId</c>, <c>type</c>, <c>relatedEntityId</c>, <c>relatedEntityType</c> and
+    /// <c>actorId</c> are the notification's own; <c>unreadCount</c> is the recipient's unread notifications. The
+    /// rest are what the app opens (<see cref="PushTarget"/>): <c>actorUserName</c> (a follower's or commenter's
+    /// profile), <c>novelId</c> and <c>novelSlug</c>, <c>chapterId</c>, <c>paragraphId</c>, <c>commentId</c> (for a
+    /// reply: the reply) and <c>parentCommentId</c> (its thread), <c>postId</c> with <c>postAuthorUserName</c> (the
+    /// post's author, whose profile the post is opened from: for a comment on a post, a reply under one or a like on
+    /// either, also when the post is someone else's), <c>reviewId</c> and <c>readingListId</c>. Keys may be added
+    /// later: a client ignores the ones it doesn't know.
+    /// </summary>
     public static readonly IReadOnlyList<string> DataKeys =
     [
         "notificationId", "type", "relatedEntityId", "relatedEntityType", "actorId", "actorUserName",
-        "novelId", "novelSlug", "chapterId", "paragraphId", "commentId", "parentCommentId", "postId", "reviewId",
-        "readingListId", "unreadCount"
+        "novelId", "novelSlug", "chapterId", "paragraphId", "commentId", "parentCommentId", "postId",
+        "postAuthorUserName", "reviewId", "readingListId", "unreadCount"
     ];
 
     // apns-collapse-id may be at most 64 bytes.
@@ -107,6 +124,7 @@ public static class PushMessages
             ["commentId"] = Id(target.CommentId),
             ["parentCommentId"] = Id(target.ParentCommentId),
             ["postId"] = Id(target.PostId),
+            ["postAuthorUserName"] = target.PostAuthorUserName ?? "",
             ["reviewId"] = Id(target.ReviewId),
             ["readingListId"] = Id(target.ReadingListId),
             ["unreadCount"] = unreadCount.ToString(CultureInfo.InvariantCulture)

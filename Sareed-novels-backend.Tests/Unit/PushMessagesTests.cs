@@ -53,18 +53,32 @@ public class PushMessagesTests
     public void The_data_carries_every_key_as_a_string_empty_when_it_does_not_apply()
     {
         var comment = Guid.NewGuid();
-        var target = new PushTarget { ActorUserName = "sara", CommentId = comment, PostId = Guid.NewGuid() };
+        var post = Guid.NewGuid();
+        var target = new PushTarget { ActorUserName = "sara", CommentId = comment, PostId = post, PostAuthorUserName = "noor" };
 
         var data = PushMessages.DataFor(Notification(NotificationType.CommentOnPost, comment), target, 7);
 
         Assert.Equal(PushMessages.DataKeys.Order(), data.Keys.Order());
         Assert.Equal(comment.ToString(), data["commentId"]);
+        Assert.Equal(post.ToString(), data["postId"]);
+        Assert.Equal("noor", data["postAuthorUserName"]);
         Assert.Equal(comment.ToString(), data["relatedEntityId"]);
         Assert.Equal("sara", data["actorUserName"]);
         Assert.Equal("7", data["unreadCount"]);
         Assert.Equal("", data["novelId"]);
         Assert.Equal("", data["chapterId"]);
         Assert.Equal("", data["relatedEntityType"]);
+    }
+
+    [Fact]
+    public void A_notification_about_no_post_carries_an_empty_post_author()
+    {
+        var data = PushMessages.DataFor(Notification(NotificationType.NewFollower), new PushTarget { ActorUserName = "sara" }, 1);
+
+        Assert.Contains("postAuthorUserName", PushMessages.DataKeys);
+        Assert.Equal("", data["postAuthorUserName"]);
+        Assert.Equal("", data["postId"]);
+        Assert.All(data.Values, Assert.NotNull);
     }
 
     [Fact]
