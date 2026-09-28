@@ -1,5 +1,6 @@
 ﻿using Application.Users.Commands.BlockUser;
 using Application.Users.Commands.ChangePassword;
+using Application.Users.Commands.DeleteAccount;
 using Application.Users.Commands.FollowUser;
 using Application.Users.Commands.UnblockUser;
 using Application.Users.Commands.UnFollowUser;
@@ -12,6 +13,7 @@ using Application.Users.Queries.GetUserProfile;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Sareed_novels_backend.Controllers
 {
@@ -94,6 +96,20 @@ namespace Sareed_novels_backend.Controllers
         [HttpGet("blocked")]
         public async Task<IActionResult> GetBlockedUsers([FromQuery] int? pageNumber, [FromQuery] int? pageSize) =>
             Ok(await mediator.Send(new GetBlockedUsersQuery(pageNumber ?? 1, pageSize ?? 20)));
+
+        /// <summary>
+        /// Deletes the signed-in member's account for good (IAccountDeletionService): 204 when done; every token of the
+        /// account is refused from then on (401). The body confirms it's them: {"password"} for an account with a
+        /// password, {"googleIdToken"} from a fresh Google sign-in, or nothing for an account without a password whose
+        /// token comes from a sign-in in the last 10 minutes. 403 ReauthenticationFailed, ReauthenticationRequired or
+        /// AdminCannotDeleteAccount; 429 TooManyDeletionAttempts (5 attempts an hour per account).
+        /// </summary>
+        [HttpDelete("me")]
+        public async Task<IActionResult> DeleteMe([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] DeleteAccountCommand? command)
+        {
+            await mediator.Send(command ?? new DeleteAccountCommand());
+            return NoContent();
+        }
 
         [HttpGet("followers-list/{userId}")]
         [AllowAnonymous]

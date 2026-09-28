@@ -18,4 +18,7 @@ public static class TransactionType
     // Google Play point packs
     public const string PlayPurchase = "PlayPurchase"; // Points bought in the Android app through Google Play Billing
     public const string PlayRefund = "PlayRefund"; // Google voided a Play purchase (refund, chargeback): its points taken back, even below zero
+
+    // Account deletion
+    public const string BalanceForfeited = "BalanceForfeited"; // The member deleted their account: the balance went to zero (from above or below)
 }

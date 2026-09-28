@@ -15,7 +15,8 @@ public class UserDTOS : Profile
         //Get User Query
         CreateMap<User, UserIsProfile>()
             .ForMember(dest => dest.TotalFollowers, opt => opt.Ignore())
-            .ForMember(dest => dest.TotalFollowing, opt => opt.Ignore());
+            .ForMember(dest => dest.TotalFollowing, opt => opt.Ignore())
+            .ForMember(dest => dest.HasPassword, opt => opt.MapFrom(src => src.PasswordHash != null));
 
         CreateMap<User, UserProfile>()
             .ForMember(dest => dest.TotalFollowers, opt => opt.Ignore())

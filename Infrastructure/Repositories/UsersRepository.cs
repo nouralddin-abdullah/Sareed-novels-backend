@@ -44,16 +44,18 @@ namespace Infrastructure.Repositories
                 .ToListAsync();
         }
 
+        // Deleted accounts are left out of follower and following lists and totals. Deleting an account removes its
+        // follows; these filters also cover a follow that raced the deletion.
         public async Task<int> GetFollowersCount(User user)
         {
             return await dbContext.Follows
-                .CountAsync(f => f.FollowedId == user.Id);
+                .CountAsync(f => f.FollowedId == user.Id && f.Follower.DeletedAt == null);
         }
 
         public async Task<int> GetFollowingCount(User user)
         {
             return await dbContext.Follows
-                .CountAsync(f => f.FollowerId == user.Id);
+                .CountAsync(f => f.FollowerId == user.Id && f.Followed.DeletedAt == null);
         }
 
         public async Task<bool> IsFollowingAsync(string userId, string otherUserId)
@@ -106,7 +108,7 @@ namespace Infrastructure.Repositories
 
         public async Task<(IEnumerable<Follow>, int)> GetFollowersList(string userId, int PageSize, int PageNumber)
         {
-            var followers = dbContext.Follows.Where(f => f.FollowedId == userId).Include(f => f.Follower).AsQueryable();
+            var followers = dbContext.Follows.Where(f => f.FollowedId == userId && f.Follower.DeletedAt == null).Include(f => f.Follower).AsQueryable();
             var totalCount = await followers.CountAsync();
             if (PageNumber > 0 && PageSize > 0)
             {
@@ -118,7 +120,7 @@ namespace Infrastructure.Repositories
 
         public async Task<(IEnumerable<Follow>, int)> GetFollowingList(string userId, int PageSize, int PageNumber)
         {
-            var following = dbContext.Follows.Where(f => f.FollowerId == userId).Include(f => f.Followed).AsQueryable();
+            var following = dbContext.Follows.Where(f => f.FollowerId == userId && f.Followed.DeletedAt == null).Include(f => f.Followed).AsQueryable();
             var totalCount = await following.CountAsync();
             if (PageNumber > 0 && PageSize > 0)
             {
@@ -142,13 +144,13 @@ namespace Infrastructure.Repositories
         public async Task<int> GetFollowersCount(string userId)
         {
             return await dbContext.Follows
-                .CountAsync(f => f.FollowedId == userId);
+                .CountAsync(f => f.FollowedId == userId && f.Follower.DeletedAt == null);
         }
 
         public async Task<int> GetFollowingCount(string userId)
         {
             return await dbContext.Follows
-                .CountAsync(f => f.FollowerId == userId);
+                .CountAsync(f => f.FollowerId == userId && f.Followed.DeletedAt == null);
         }
 
         public async Task<int> GetNovelsCount(string userId)
@@ -169,7 +171,9 @@ namespace Infrastructure.Repositories
                 .Select(c => c.UserId)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            return userId == null ? null : await userManager.FindByIdAsync(userId);
+            // A deleted account's old names were removed with it; a deleted account is never found this way.
+            var user = userId == null ? null : await userManager.FindByIdAsync(userId);
+            return user?.DeletedAt == null ? user : null;
         }
 
         public async Task<Dictionary<string, User>> GetByIdsAsync(IReadOnlyCollection<string> userIds, CancellationToken cancellationToken = default)
