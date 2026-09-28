@@ -9,8 +9,14 @@ public class NotificationProfile : Profile
     public NotificationProfile()
     {
         CreateMap<Notification, NotificationDto>()
-            .ForMember(dest => dest.NovelId, opt => opt.Ignore()) // set by GetNotificationsQueryHandler
-            .ForMember(dest => dest.NovelSlug, opt => opt.Ignore());
+            // Set by GetNotificationsQueryHandler (GiftId and GiftCount are the row's own).
+            .ForMember(dest => dest.NovelId, opt => opt.Ignore())
+            .ForMember(dest => dest.NovelSlug, opt => opt.Ignore())
+            .ForMember(dest => dest.NovelTitle, opt => opt.Ignore())
+            .ForMember(dest => dest.ChapterId, opt => opt.Ignore())
+            .ForMember(dest => dest.ChapterTitle, opt => opt.Ignore())
+            .ForMember(dest => dest.ReadingListName, opt => opt.Ignore())
+            .ForMember(dest => dest.GiftNameAr, opt => opt.Ignore());
         
         CreateMap<Domain.Entities.Comments, CommentDto>()
             .ForMember(dest => dest.User, opt => opt.MapFrom(src => src.User));

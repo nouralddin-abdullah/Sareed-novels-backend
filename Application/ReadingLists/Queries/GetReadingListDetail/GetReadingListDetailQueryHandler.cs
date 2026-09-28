@@ -11,6 +11,7 @@ public class GetReadingListDetailQueryHandler(
     ILogger<GetReadingListDetailQueryHandler> logger,
     IReadingListsRepository readingListsRepository,
     IReadingListFollowersRepository followersRepository,
+    IUserBlocksRepository blocksRepository,
     IUserContext userContext) : IRequestHandler<GetReadingListDetailQuery, ReadingListDetailDTO>
 {
     public async Task<ReadingListDetailDTO> Handle(GetReadingListDetailQuery request, CancellationToken cancellationToken)
@@ -19,7 +20,11 @@ public class GetReadingListDetailQueryHandler(
         logger.LogInformation("Getting details for reading list {ListId}", request.ReadingListId);
 
         var readingList = await readingListsRepository.GetByIdWithDetailsAsync(request.ReadingListId)
-            ?? throw new NotFoundException("القائمة غير موجودة", "ReadingListNotFound");
+            ?? throw new NotFoundException(ReadingListBlocks.NotFoundMessage, ReadingListBlocks.NotFoundCode);
+
+        // As the owner's profile and lists: to someone the owner blocked, the list doesn't exist (the same 404 as a
+        // missing list, before the private check, which would tell them it is there).
+        await ReadingListBlocks.EnsureNotBlockedByOwnerAsync(blocksRepository, readingList.UserId, currentUser?.Id, cancellationToken);
 
         if (!readingList.IsPublic && (currentUser == null || readingList.UserId != currentUser.Id))
         {

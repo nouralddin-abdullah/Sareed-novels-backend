@@ -109,6 +109,39 @@ public class UpdateMeHttpTests(SardApiFactory api)
         Assert.Equal(JsonValueKind.Null, profile.GetProperty("userBio").ValueKind); // nothing of a refused update applies
     }
 
+    [Theory]
+    [MemberData(nameof(Transports))]
+    public async Task Changing_only_the_case_of_ones_own_user_name_is_allowed(string transport)
+    {
+        // It was refused as taken: the lookup ignores case and found the member themselves (#25).
+        var update = Transport(transport);
+        var user = await api.SignUp();
+        var recased = user.UserName.ToUpperInvariant();
+
+        var response = await update(user, [("UserName", recased)]);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(recased, (await Profile(user)).GetProperty("userName").GetString());
+        await using var db = api.Db();
+        Assert.False(await db.UserNameChanges.AnyAsync(c => c.UserId == user.Id)); // not a new name: nothing to redirect
+    }
+
+    [Fact]
+    public async Task Another_members_name_in_any_case_is_taken_and_identitys_refusals_keep_their_code()
+    {
+        var (user, other) = (await api.SignUp(), await api.SignUp());
+
+        var taken = await (await ByForm(user, ("UserName", other.UserName.ToUpperInvariant()))).Error(HttpStatusCode.BadRequest);
+        Assert.Equal("UserNameTaken", taken.GetProperty("code").GetString());
+
+        // Arabic letters pass the length and reserved-name checks, and Identity refuses them: its code, not OperationFailed.
+        var invalid = await (await ByForm(user, ("UserName", "اسم عربي"))).Error(HttpStatusCode.BadRequest);
+        Assert.Equal("InvalidUserName", invalid.GetProperty("code").GetString());
+        Assert.StartsWith("تعذّر تحديث الملف الشخصي", invalid.GetProperty("message").GetString());
+        Assert.False(invalid.GetProperty("success").GetBoolean());
+        Assert.Equal(user.UserName, (await Profile(user)).GetProperty("userName").GetString());
+    }
+
     [Fact]
     public async Task Sign_up_refuses_a_user_name_that_starts_like_a_deleted_accounts()
     {

@@ -54,6 +54,40 @@ public class ApiErrorsHttpTests(SardApiFactory api)
     }
 
     [Fact]
+    public async Task A_refused_sign_up_has_the_error_shape_with_every_identity_problem_and_keeps_result()
+    {
+        // The name (in another case) and the email are both taken: it used to answer only the first problem, and only
+        // inside result (#25).
+        var taken = await api.SignUp();
+        using var form = ReaderApi.Form(("UserName", taken.UserName.ToUpperInvariant()), ("Email", $"{taken.UserName}@example.test"),
+            ("Password", "Correct-horse-1"), ("DisplayName", "قارئ جديد"));
+
+        var body = await (await api.Client().PostAsync("/api/identity/Register", form)).Error(HttpStatusCode.BadRequest);
+
+        Assert.Equal("DuplicateUserName", body.GetProperty("code").GetString());
+        Assert.StartsWith("تعذّر إنشاء الحساب", body.GetProperty("message").GetString());
+        var errors = body.GetProperty("errors").EnumerateArray().ToList();
+        Assert.Equal(["DuplicateUserName", "DuplicateEmail"], errors.Select(e => e.GetProperty("code").GetString()));
+        Assert.All(errors, e => Assert.Contains(e.GetProperty("description").GetString()!, body.GetProperty("message").GetString()));
+        // What the web reads is still there, the same.
+        var result = body.GetProperty("result");
+        Assert.False(result.GetProperty("success").GetBoolean());
+        Assert.Equal("DuplicateUserName", result.GetProperty("code").GetString());
+        Assert.Equal(body.GetProperty("message").GetString(), result.GetProperty("message").GetString());
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("accessToken").ValueKind);
+
+        // A successful sign-up has none of the three.
+        var name = "u" + Guid.NewGuid().ToString("N")[..10];
+        using var fresh = ReaderApi.Form(("UserName", name), ("Email", $"{name}@example.test"), ("Password", "Correct-horse-1"),
+            ("DisplayName", "قارئ جديد"));
+        var created = await (await api.Client().PostAsync("/api/identity/Register", fresh)).OkJson();
+        Assert.True(created.GetProperty("result").GetProperty("success").GetBoolean());
+        Assert.False(created.TryGetProperty("code", out _));
+        Assert.False(created.TryGetProperty("message", out _));
+        Assert.False(created.TryGetProperty("errors", out _));
+    }
+
+    [Fact]
     public async Task A_missing_item_is_json_with_a_code()
     {
         var user = await api.SignUp();

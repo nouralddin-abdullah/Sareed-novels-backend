@@ -109,7 +109,10 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
 
     public Task<(IReadOnlyList<ReadingListSummary>, int)> GetFollowedReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize) =>
         PageWithPreviews(
-            dbContext.ReadingLists.Where(rl => rl.IsPublic && rl.Followers.Any(f => f.UserId == userId)),
+            dbContext.ReadingLists.Where(rl => rl.IsPublic
+                && rl.Followers.Any(f => f.UserId == userId)
+                // A list whose owner blocked the user doesn't exist for them (#25); the follow stays for an unblock.
+                && !dbContext.UserBlocks.Any(b => b.BlockerId == rl.UserId && b.BlockedId == userId)),
             pageNumber,
             pageSize);
 
@@ -134,6 +137,15 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
         dbContext.ReadingLists.Remove(readingList);
         return await dbContext.SaveChangesAsync() > 0;
     }
+
+    public async Task<Dictionary<Guid, string>> GetNamesAsync(IReadOnlyCollection<Guid> readingListIds) =>
+        readingListIds.Count == 0
+            ? []
+            : await dbContext.ReadingLists
+                .AsNoTracking()
+                .Where(rl => readingListIds.Contains(rl.Id))
+                .Select(rl => new { rl.Id, rl.Name })
+                .ToDictionaryAsync(rl => rl.Id, rl => rl.Name);
 
     public async Task<bool> IsNameTakenByUserAsync(string userId, string name, Guid? excludeListId = null)
     {

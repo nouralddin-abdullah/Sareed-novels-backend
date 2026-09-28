@@ -131,42 +131,27 @@ public class ReadingListController(IMediator mediator) : ControllerBase
         return BadRequest(result);
     }
 
+    /// <summary>204 when removed, and when the list doesn't have the novel (it was 400 NotInList).</summary>
     [HttpDelete("{readingListId}/novels/{novelId}")]
     public async Task<IActionResult> RemoveNovelFromReadingList([FromRoute] Guid readingListId, [FromRoute] Guid novelId)
     {
         var command = new RemoveNovelFromListCommand(readingListId, novelId);
         var result = await mediator.Send(command);
         
-        if (result.Success)
+        if (result.Success || result.Unchanged)
         {
             return NoContent();
         }
         return BadRequest(result);
     }
 
+    /// <summary>204 when the caller already follows it (it was 400 AlreadyFollowing).</summary>
     [HttpPost("{readingListId}/follow")]
-    public async Task<IActionResult> FollowReadingList([FromRoute] Guid readingListId)
-    {
-        var command = new FollowReadingListCommand(readingListId);
-        var result = await mediator.Send(command);
-        
-        if (result.Success)
-        {
-            return Ok(result);
-        }
-        return BadRequest(result);
-    }
+    public async Task<IActionResult> FollowReadingList([FromRoute] Guid readingListId) =>
+        this.Answer(await mediator.Send(new FollowReadingListCommand(readingListId)));
 
+    /// <summary>204 when the caller doesn't follow it (it was 400 NotFollowing).</summary>
     [HttpDelete("{readingListId}/unfollow")]
-    public async Task<IActionResult> UnfollowReadingList([FromRoute] Guid readingListId)
-    {
-        var command = new UnfollowReadingListCommand(readingListId);
-        var result = await mediator.Send(command);
-        
-        if (result.Success)
-        {
-            return Ok(result);
-        }
-        return BadRequest(result);
-    }
+    public async Task<IActionResult> UnfollowReadingList([FromRoute] Guid readingListId) =>
+        this.Answer(await mediator.Send(new UnfollowReadingListCommand(readingListId)));
 }

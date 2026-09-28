@@ -30,25 +30,16 @@ public class UnFollowUserCommandHandler(
                 Message = "لا يمكنك إلغاء متابعة نفسك",
             };
         }
-        var isFollowing = await usersRepository.IsFollowingAsync(currentUser.Id, userToUnFollow.Id);
-
-        if (!isFollowing)
+        // Not following, or a concurrent unfollow got there first: the same answer.
+        if (!await usersRepository.UnFollowUser(currentUser.Id, userToUnFollow.Id))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotFollowing",
-                Message = "أنت لا تتابع هذا المستخدم",
-            };
+            return OperationResult.AlreadyDone("NotFollowing", "أنت لا تتابع هذا المستخدم");
         }
 
-        var result = await usersRepository.UnFollowUser(currentUser.Id, userToUnFollow.Id);
-
-        string message = result ? $"ألغيت متابعة {userToUnFollow.DisplayName}" : "تعذّر إلغاء المتابعة. حاول مرة أخرى.";
         return new OperationResult
         {
-            Success = result,
-            Message = message
+            Success = true,
+            Message = $"ألغيت متابعة {userToUnFollow.DisplayName}"
         };
     }
 }

@@ -37,12 +37,7 @@ public class UnlikeCommentCommandHandler : IRequestHandler<UnlikeCommentCommand,
         var result = await _commentLikesRepository.UnLikeComment(currentUser.Id, request.CommentId);
         if (!result)
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotLiked",
-                Message = "لم تُبدِ إعجابك بهذا التعليق، أو لم يعد موجودًا"
-            };
+            return OperationResult.AlreadyDone("NotLiked", "لم تُبدِ إعجابك بهذا التعليق، أو لم يعد موجودًا");
         }
 
         _logger.LogInformation("Comment {CommentId} unliked successfully by user {UserId}",

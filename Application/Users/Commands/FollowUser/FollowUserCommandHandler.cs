@@ -43,32 +43,20 @@ public class FollowUserCommandHandler(
             throw new ForbidException("ألغِ حظر هذا المستخدم أولاً لتتمكن من متابعته", "Blocked");
         }
 
-        var isFollowing = await usersRepository.IsFollowingAsync(currentUser.Id, userToFollow.Id);
-
-        if (isFollowing)
+        // Already following, or a concurrent follow (a double tap) got there first: the same answer.
+        if (await usersRepository.IsFollowingAsync(currentUser.Id, userToFollow.Id)
+            || !await usersRepository.FollowUser(currentUser.Id, userToFollow.Id))
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "AlreadyFollowing",
-                Message = "أنت تتابع هذا المستخدم بالفعل",
-            };
+            return OperationResult.AlreadyDone("AlreadyFollowing", "أنت تتابع هذا المستخدم بالفعل");
         }
 
-        var result = await usersRepository.FollowUser(currentUser.Id, userToFollow.Id);
-        
-        if (result)
-        {
-            // Fire-and-forget: Send notification
-            _ = SendNewFollowerNotificationInBackground(userToFollow.Id, currentUser.Id);
-            
-        }
+        // Fire-and-forget: Send notification
+        _ = SendNewFollowerNotificationInBackground(userToFollow.Id, currentUser.Id);
 
-        var message = result ? $"أنت تتابع {userToFollow.DisplayName} الآن" : "تعذّرت المتابعة. حاول مرة أخرى.";
         return new OperationResult
         {
-            Success = result,
-            Message = message
+            Success = true,
+            Message = $"أنت تتابع {userToFollow.DisplayName} الآن"
         };
     }
     

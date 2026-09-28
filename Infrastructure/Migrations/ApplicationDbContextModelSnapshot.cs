@@ -871,6 +871,12 @@ namespace Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("GiftCount")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("GiftId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<bool>("IsRead")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")

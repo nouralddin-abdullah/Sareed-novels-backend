@@ -17,7 +17,14 @@ public class Notification
     // Optional: For grouping/context (Phase 2)
     public Guid? RelatedEntityId { get; set; }
     public string? RelatedEntityType { get; set; }
-    
+
+    /// <summary>
+    /// A GiftReceived notification's gift and how many were sent (#25), which the message only names in words; null for
+    /// other types (and gift notifications from before). No foreign key: gifts are retired, not deleted.
+    /// </summary>
+    public Guid? GiftId { get; set; }
+    public int? GiftCount { get; set; }
+
     public void MarkAsRead()
     {
         IsRead = true;

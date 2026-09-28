@@ -17,13 +17,8 @@ public partial class GetAppConfigQueryHandler(IConfiguration configuration) : IR
     {
         var config = configuration.GetSection(Section).Get<AppConfigDto>() ?? new AppConfigDto();
 
-        var min = ParseVersion(config.Android.MinVersion, "Android:MinVersion");
-        var latest = ParseVersion(config.Android.LatestVersion, "Android:LatestVersion");
-        if (min > latest)
-        {
-            throw new InvalidOperationException(
-                $"{Section}:Android:MinVersion ({config.Android.MinVersion}) is above {Section}:Android:LatestVersion ({config.Android.LatestVersion})");
-        }
+        CheckVersions("Android", config.Android.MinVersion, config.Android.LatestVersion);
+        CheckVersions("Ios", config.Ios.MinVersion, config.Ios.LatestVersion);
 
         if (string.IsNullOrWhiteSpace(config.Maintenance.MessageAr))
         {
@@ -31,6 +26,17 @@ public partial class GetAppConfigQueryHandler(IConfiguration configuration) : IR
         }
 
         return Task.FromResult(config);
+    }
+
+    private static void CheckVersions(string platform, string minVersion, string latestVersion)
+    {
+        var min = ParseVersion(minVersion, $"{platform}:MinVersion");
+        var latest = ParseVersion(latestVersion, $"{platform}:LatestVersion");
+        if (min > latest)
+        {
+            throw new InvalidOperationException(
+                $"{Section}:{platform}:MinVersion ({minVersion}) is above {Section}:{platform}:LatestVersion ({latestVersion})");
+        }
     }
 
     private static Version ParseVersion(string? value, string key) =>

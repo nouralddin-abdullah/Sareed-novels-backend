@@ -395,6 +395,9 @@ public class NotificationService(
                 IsRead = false,
                 RelatedEntityId = novel.Id,
                 RelatedEntityType = "Gift",
+                // What the message says in words, for clients (#25).
+                GiftId = gift.Id,
+                GiftCount = count,
                 CreatedAt = DateTime.UtcNow
             };
 
