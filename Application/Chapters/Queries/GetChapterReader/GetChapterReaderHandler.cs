@@ -23,6 +23,9 @@ public class GetChapterReaderHandler(
 {
     private const string PublishedStatus = "Published";
 
+    /// <summary>What a reader is told about a privilege-locked chapter (clients show it as it is; isLocked is the flag).</summary>
+    public const string LockMessage = "هذا الفصل مقفل بنظام الامتيازات. اشترك لفتح جميع الفصول المقفلة!";
+
     public async Task<ChapterSingleReaderDTO> Handle(GetChapterReaderQuery request, CancellationToken cancellationToken)
     {
         var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
@@ -55,7 +58,7 @@ public class GetChapterReaderHandler(
         {
             // Chapter is locked - don't return content
             chapterDTO.IsLocked = true;
-            chapterDTO.LockMessage = "This chapter is locked by the privilege system. Subscribe to unlock all privilege chapters!";
+            chapterDTO.LockMessage = LockMessage;
             chapterDTO.Paragraphs = new List<ChapterParagraphDTO>(); // Empty paragraphs
 
             return chapterDTO;
