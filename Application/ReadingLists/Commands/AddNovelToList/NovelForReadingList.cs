@@ -16,8 +16,8 @@ internal static class NovelForReadingList
     public static async Task<string?> WhyNotAddable(INovelsRepository novelsRepository, Guid novelId)
     {
         var novel = await novelsRepository.GetOne(novelId)
-            ?? throw new NotFoundException("Novel not found", "NovelNotFound");
+            ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
 
-        return novel.IsPubliclyVisible ? null : "Cannot add deleted or draft novels to reading list";
+        return novel.IsPubliclyVisible ? null : "لا يمكن إضافة رواية غير منشورة";
     }
 }

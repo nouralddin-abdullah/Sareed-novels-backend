@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Application.Users;
+using Microsoft.EntityFrameworkCore;
 
 namespace Sareed_novels_backend.Tests.Integration;
 
@@ -87,6 +89,41 @@ public class UpdateMeHttpTests(SardApiFactory api)
         Assert.Equal(user.UserName, profile.GetProperty("userName").GetString());
         Assert.Equal(user.UserName, profile.GetProperty("displayName").GetString());
         Assert.Equal("نبذة", profile.GetProperty("userBio").GetString()); // nothing of a refused update applies
+    }
+
+    [Theory]
+    [MemberData(nameof(Transports))]
+    public async Task A_user_name_that_starts_like_a_deleted_accounts_is_refused_with_its_code(string transport)
+    {
+        var update = Transport(transport);
+        var user = await api.SignUp();
+
+        var response = await update(user, [("UserName", "Deleted-" + Guid.NewGuid().ToString("N")[..8]), ("UserBio", "نبذة")]);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(UserNameRules.DeletedPrefixCode, body.GetProperty("code").GetString());
+        Assert.Equal(UserNameRules.DeletedPrefixMessage, body.GetProperty("message").GetString());
+        var profile = await Profile(user);
+        Assert.Equal(user.UserName, profile.GetProperty("userName").GetString());
+        Assert.Equal(JsonValueKind.Null, profile.GetProperty("userBio").ValueKind); // nothing of a refused update applies
+    }
+
+    [Fact]
+    public async Task Sign_up_refuses_a_user_name_that_starts_like_a_deleted_accounts()
+    {
+        var name = "deleted-" + Guid.NewGuid().ToString("N")[..8];
+        using var form = ReaderApi.Form(("UserName", name), ("Email", $"{name}@example.test"), ("Password", "Correct-horse-1"),
+            ("DisplayName", "قارئ جديد"));
+
+        var response = await api.Client().PostAsync("/api/identity/Register", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var result = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("result");
+        Assert.Equal(UserNameRules.DeletedPrefixCode, result.GetProperty("code").GetString());
+        Assert.Contains(UserNameRules.DeletedPrefixMessage, result.GetProperty("message").GetString());
+        await using var db = api.Db();
+        Assert.False(await db.Users.AnyAsync(u => u.UserName == name));
     }
 
     [Fact]

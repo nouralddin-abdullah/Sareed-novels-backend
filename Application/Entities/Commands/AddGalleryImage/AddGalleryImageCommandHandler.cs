@@ -17,18 +17,18 @@ public class AddGalleryImageCommandHandler(
 {
     public async Task<OperationResult> Handle(AddGalleryImageCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var entity = await entityRepository.GetEntityByIdAsync(request.EntityId);
         if (entity == null)
         {
-            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "Entity not found" };
+            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "هذا المدخل غير موجود" };
         }
 
         // Verify user owns the novel (using included Novel)
         if (entity.Novel == null || entity.Novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "هذا الإجراء متاح لكاتب الرواية فقط" };
         }
 
         // Upload image to Cloudflare R2
@@ -53,6 +53,6 @@ public class AddGalleryImageCommandHandler(
 
         logger.LogInformation("Gallery image added to entity {EntityId}", entity.Id);
 
-        return new OperationResult { Success = true, Message = "Gallery image added successfully" };
+        return new OperationResult { Success = true, Message = "أُضيفت الصورة إلى معرض الصور" };
     }
 }

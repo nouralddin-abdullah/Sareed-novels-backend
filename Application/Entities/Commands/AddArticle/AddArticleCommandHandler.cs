@@ -16,7 +16,7 @@ public class AddArticleCommandHandler(
 {
     public async Task<OperationResult> Handle(AddArticleCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var entity = await entityRepository.GetEntityByIdAsync(request.EntityId);
         if (entity == null)
@@ -25,7 +25,7 @@ public class AddArticleCommandHandler(
             {
                 Success = false,
                 Code = "EntityNotFound",
-                Message = "Entity not found"
+                Message = "هذا المدخل غير موجود"
             };
         }
 
@@ -36,7 +36,7 @@ public class AddArticleCommandHandler(
             {
                 Success = false,
                 Code = "NotOwner",
-                Message = "You don't have permission to add articles to this entity"
+                Message = "إضافة المقالات متاحة لكاتب الرواية فقط"
             };
         }
 
@@ -58,7 +58,7 @@ public class AddArticleCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Article added successfully"
+            Message = "أُضيف المقال"
         };
     }
 }

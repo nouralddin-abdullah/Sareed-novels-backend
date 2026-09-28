@@ -33,15 +33,15 @@ public class SendGiftCommandHandler(
             {
                 Success = false,
                 Code = "InvalidGiftCount",
-                Message = "Count must be between 1 and 100"
+                Message = "عدد الهدايا يجب أن يكون من 1 إلى 100"
             };
         }
 
         var currentUser = userContext.GetCurrentUser()
-            ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+            ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var gift = await giftRepository.GetGiftById(request.GiftId)
-            ?? throw new NotFoundException("Gift not found", "GiftNotFound");
+            ?? throw new NotFoundException("الهدية غير موجودة", "GiftNotFound");
 
         if (!gift.IsActive)
         {
@@ -49,12 +49,12 @@ public class SendGiftCommandHandler(
             {
                 Success = false,
                 Code = "GiftUnavailable",
-                Message = "This gift is no longer available"
+                Message = "هذه الهدية لم تعد متاحة"
             };
         }
 
         var novel = await novelsRepository.GetOne(request.NovelId)
-            ?? throw new NotFoundException("Novel not found", "NovelNotFound");
+            ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
 
         // Prevent users from gifting their own novels
         if (novel.AuthorId == currentUser.Id)
@@ -63,7 +63,7 @@ public class SendGiftCommandHandler(
             {
                 Success = false,
                 Code = "CannotGiftOwnNovel",
-                Message = "You cannot gift your own novel"
+                Message = "لا يمكنك إرسال هدية إلى روايتك"
             };
         }
 
@@ -77,7 +77,7 @@ public class SendGiftCommandHandler(
             {
                 Success = false,
                 Code = "InsufficientBalance",
-                Message = "Insufficient points balance"
+                Message = "رصيدك من النقاط غير كافٍ"
             };
         }
 
@@ -121,7 +121,7 @@ public class SendGiftCommandHandler(
             {
                 Success = false,
                 Code = "InsufficientBalance",
-                Message = "Insufficient points balance"
+                Message = "رصيدك من النقاط غير كافٍ"
             };
         }
         catch (Exception ex)
@@ -132,7 +132,7 @@ public class SendGiftCommandHandler(
             {
                 Success = false,
                 Code = "OperationFailed",
-                Message = "Failed to send gift. No points were deducted. Please try again."
+                Message = "تعذّر إرسال الهدية، ولم تُخصم أي نقاط. حاول مرة أخرى."
             };
         }
 
@@ -157,7 +157,7 @@ public class SendGiftCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = $"Successfully sent {request.Count}x {gift.Name} to {novel.Title}!"
+            Message = $"أرسلت {request.Count}× {gift.NameAr} إلى رواية «{novel.Title}»"
         };
     }
 

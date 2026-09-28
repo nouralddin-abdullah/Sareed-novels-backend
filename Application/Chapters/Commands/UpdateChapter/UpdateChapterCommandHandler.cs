@@ -28,14 +28,14 @@ public class UpdateChapterCommandHandler(
     {
         logger.LogInformation("Updating chapter {ChapterId} of novel {NovelId}", request.ChapterId, request.NovelId);
         
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
-        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("Chapter wasn't found", "ChapterNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
+        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
         
-        if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel", "NotOwner");
+        if (novel.AuthorId != currentUser.Id) throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
 
         // The chapter must belong to the novel the caller owns; otherwise any author could edit any chapter.
-        if (chapter.NovelId != novel.Id) throw new NotFoundException("Chapter wasn't found", "ChapterNotFound");
+        if (chapter.NovelId != novel.Id) throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
         
         // Track if status is changing to/from Published
         var oldStatus = chapter.Status;
@@ -91,7 +91,7 @@ public class UpdateChapterCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = "Update chapter is successful"
+                Message = "حُفظ الفصل"
             };
         }
         
@@ -99,7 +99,7 @@ public class UpdateChapterCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Update chapter is not successful"
+            Message = "تعذّر حفظ الفصل. حاول مرة أخرى."
         };
     }
     

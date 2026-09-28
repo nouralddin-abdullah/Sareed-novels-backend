@@ -32,7 +32,7 @@ public class UnlikeCommentCommandHandler : IRequestHandler<UnlikeCommentCommand,
         _logger.LogInformation("Unliking comment {CommentId}", request.CommentId);
 
         var currentUser = _userContext.GetCurrentUser()
-            ?? throw new ForbidException("User not signed in", "NotSignedIn");
+            ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var result = await _commentLikesRepository.UnLikeComment(currentUser.Id, request.CommentId);
         if (!result)
@@ -41,7 +41,7 @@ public class UnlikeCommentCommandHandler : IRequestHandler<UnlikeCommentCommand,
             {
                 Success = false,
                 Code = "NotLiked",
-                Message = "You haven't liked this comment or it doesn't exist"
+                Message = "لم تُبدِ إعجابك بهذا التعليق، أو لم يعد موجودًا"
             };
         }
 
@@ -51,7 +51,7 @@ public class UnlikeCommentCommandHandler : IRequestHandler<UnlikeCommentCommand,
         return new OperationResult
         {
             Success = true,
-            Message = "Comment unliked successfully"
+            Message = "أُلغي إعجابك بالتعليق"
         };
     }
 }

@@ -82,7 +82,7 @@ public class EntityController(IMediator mediator) : ControllerBase
     {
         var query = new GetEntityByIdQuery(entityId);
         var result = await mediator.Send(query);
-        if (result == null) return NotFound(new ApiError("EntityNotFound", "Entity not found"));
+        if (result == null) return NotFound(new ApiError("EntityNotFound", "هذا المدخل غير موجود"));
         return Ok(result);
     }
 
@@ -154,7 +154,7 @@ public class EntityController(IMediator mediator) : ControllerBase
             OrderedArticleIds = request.OrderedArticleIds
         };
         var result = await mediator.Send(command);
-        if (!result) return BadRequest(new ApiError("OperationFailed", "Failed to reorder articles"));
+        if (!result) return BadRequest(new ApiError("OperationFailed", "تعذّر حفظ ترتيب المقالات. حاول مرة أخرى."));
         return Ok();
     }
 
@@ -226,7 +226,7 @@ public class EntityController(IMediator mediator) : ControllerBase
             OrderedImageIds = request.OrderedImageIds
         };
         var result = await mediator.Send(command);
-        if (!result) return BadRequest(new ApiError("OperationFailed", "Failed to reorder gallery images"));
+        if (!result) return BadRequest(new ApiError("OperationFailed", "تعذّر حفظ ترتيب صور المعرض. حاول مرة أخرى."));
         return Ok();
     }
 }

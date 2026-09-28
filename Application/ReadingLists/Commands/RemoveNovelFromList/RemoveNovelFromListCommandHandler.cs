@@ -16,14 +16,14 @@ public class RemoveNovelFromListCommandHandler(
 {
     public async Task<OperationResult> Handle(RemoveNovelFromListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
+            ?? throw new NotFoundException("القائمة غير موجودة", "ReadingListNotFound");
 
         if (readingList.UserId != currentUser.Id)
         {
-            throw new ForbidException("You don't own this reading list", "NotOwner");
+            throw new ForbidException("هذا الإجراء متاح لصاحب القائمة فقط", "NotOwner");
         }
 
         if (!await readingListNovelsRepository.IsNovelInListAsync(request.ReadingListId, request.NovelId))
@@ -32,7 +32,7 @@ public class RemoveNovelFromListCommandHandler(
             {
                 Success = false,
                 Code = "NotInList",
-                Message = "Novel is not in this reading list"
+                Message = "هذه الرواية ليست في القائمة"
             };
         }
         var result = await readingListNovelsRepository.RemoveNovelAsync(request.ReadingListId, request.NovelId);
@@ -45,7 +45,7 @@ public class RemoveNovelFromListCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = "Novel removed from reading list"
+                Message = "أُزيلت الرواية من القائمة"
             };
         }
 
@@ -53,7 +53,7 @@ public class RemoveNovelFromListCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Failed to remove novel from reading list"
+            Message = "تعذّرت إزالة الرواية من القائمة. حاول مرة أخرى."
         };
     }
 }

@@ -51,7 +51,7 @@ public class MigratePublishedSequencesCommandHandler(
         return new OperationResult
         {
             Success = errorCount == 0,
-            Message = $"Migration completed. Processed: {processedCount} novels, Errors: {errorCount}"
+            Message = $"اكتمل تحديث أرقام الفصول. الروايات المعالجة: {processedCount}، والأخطاء: {errorCount}"
         };
     }
 }

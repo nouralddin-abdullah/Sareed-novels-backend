@@ -19,7 +19,7 @@ public class RequestWithdrawalCommandHandler(
 {
     public async Task<OperationResult> Handle(RequestWithdrawalCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         // Validate minimum points
         if (request.PointsRequested < PointsConstants.MinimumWithdrawal)
@@ -28,7 +28,7 @@ public class RequestWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "BelowMinimumWithdrawal",
-                Message = $"Minimum withdrawal is {PointsConstants.MinimumWithdrawal} points"
+                Message = $"الحد الأدنى للسحب {PointsConstants.MinimumWithdrawal} نقطة"
             };
         }
 
@@ -41,7 +41,7 @@ public class RequestWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "InvalidPaymentMethod",
-                Message = "Invalid withdrawal method. Use VodafoneCash, InstaPay, or PayPal"
+                Message = "طريقة السحب غير صالحة. اختر فودافون كاش أو إنستاباي أو باي بال"
             };
         }
 
@@ -52,7 +52,7 @@ public class RequestWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "PaymentDetailsRequired",
-                Message = "Payment details are required (phone number or email)"
+                Message = "اكتب بيانات الاستلام: رقم الهاتف أو البريد الإلكتروني"
             };
         }
 
@@ -63,7 +63,7 @@ public class RequestWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "InsufficientBalance",
-                Message = $"Insufficient balance. You need at least {request.PointsRequested} points."
+                Message = $"رصيدك من النقاط غير كافٍ. يلزم {request.PointsRequested} نقطة على الأقل."
             };
         }
 
@@ -95,7 +95,7 @@ public class RequestWithdrawalCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = $"Withdrawal request submitted successfully. You will receive {netAmount} EGP (after {tax} EGP tax). Please wait 12-24 hours for processing."
+            Message = $"أُرسل طلب السحب. ستستلم {RequestMessages.Egp(netAmount)} جنيه بعد خصم ضريبة قدرها {RequestMessages.Egp(tax)} جنيه. تتم مراجعة الطلب خلال 12 إلى 24 ساعة."
         };
     }
 }

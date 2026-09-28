@@ -24,15 +24,15 @@ public class CreateReviewCommandHandler(
     public async Task<CreateReviewResult> Handle(CreateReviewCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Creating new review {@review}", request);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
         if (novel.AuthorId == currentUser.Id)
         {
             return new CreateReviewResult
             {
                 Success = false,
                 Code = "CannotReviewOwnNovel",
-                Message = "You cannot review your own novel"
+                Message = "لا يمكنك كتابة مراجعة لروايتك"
             };
         }
         var existingReview = await reviewsRepository.GetUserReviewForNovel(currentUser.Id, request.NovelId);
@@ -42,7 +42,7 @@ public class CreateReviewCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyReviewed",
-                Message = "You have already reviewed this novel"
+                Message = "لقد كتبت مراجعة لهذه الرواية من قبل"
             };
         }
         var review = mapper.Map<Review>(request);
@@ -58,7 +58,7 @@ public class CreateReviewCommandHandler(
             {
                 Success = false,
                 Code = "OperationFailed",
-                Message = "Failed to create review"
+                Message = "تعذّر نشر مراجعتك. حاول مرة أخرى."
             };
         }
 
@@ -73,7 +73,7 @@ public class CreateReviewCommandHandler(
         return new CreateReviewResult
         {
             Success = true,
-            Message = "Review was created",
+            Message = "تم نشر مراجعتك",
             Review = reviewDtos.Single()
         };
 

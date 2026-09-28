@@ -36,10 +36,10 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
         _logger.LogInformation("Liking comment {CommentId}", request.CommentId);
 
         var currentUser = _userContext.GetCurrentUser()
-            ?? throw new ForbidException("User not signed in", "NotSignedIn");
+            ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var comment = await _commentsRepository.GetCommentById(request.CommentId)
-            ?? throw new NotFoundException("Comment not found", "CommentNotFound");
+            ?? throw new NotFoundException("هذا التعليق لم يعد موجودًا", "CommentNotFound");
 
         if (comment.UserId == currentUser.Id)
         {
@@ -47,7 +47,7 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
             {
                 Success = false,
                 Code = "CannotLikeOwnContent",
-                Message = "You cannot like your own comment"
+                Message = "لا يمكنك الإعجاب بتعليقك"
             };
         }
 
@@ -58,7 +58,7 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
             {
                 Success = false,
                 Code = "AlreadyLiked",
-                Message = "You already liked this comment"
+                Message = "سبق أن أعجبت بهذا التعليق"
             };
         }
 
@@ -71,7 +71,7 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
         return new OperationResult
         {
             Success = true,
-            Message = "Comment liked successfully"
+            Message = "حُفظ إعجابك بالتعليق"
         };
     }
     

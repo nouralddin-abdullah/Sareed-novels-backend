@@ -96,7 +96,7 @@ public class GetChapterReaderHandlerTests
         var result = await Handler().Handle(new GetChapterReaderQuery(novel.Id, chapter.Id), CancellationToken.None);
 
         Assert.True(result.IsLocked);
-        Assert.Equal("هذا الفصل مقفل بنظام الامتيازات. اشترك لفتح جميع الفصول المقفلة!", result.LockMessage);
+        Assert.Equal("هذا الفصل ضمن الوصول المبكر. اشترك لتقرأ الفصول المقفلة كلها فور نشرها.", result.LockMessage);
         Assert.Empty(result.Paragraphs);
         await paragraphs.DidNotReceive().GetChapterParagraphs(Arg.Any<Guid>());
     }

@@ -27,7 +27,7 @@ public class GetSiteWideRankingQueryHandler(
         if (rankingType == null || !SiteWideTypes.Contains(rankingType))
         {
             throw new NotFoundException(
-                $"Invalid ranking type '{request.RankingType}'. Valid types: {string.Join(", ", SiteWideTypes)}",
+                $"نوع الترتيب «{request.RankingType}» غير صالح. الأنواع المتاحة: {string.Join("، ", SiteWideTypes)}",
                 "InvalidRankingType");
         }
 

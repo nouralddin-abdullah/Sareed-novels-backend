@@ -19,15 +19,15 @@ internal class CreateLikeReviewCommandHandler(
     public async Task<OperationResult> Handle(CreateLikeReviewCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Liking a review {@review}", request);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
-        var review = await reviewsRepository.GetReviewById(request.ReviewId) ?? throw new NotFoundException("Review not found", "ReviewNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
+        var review = await reviewsRepository.GetReviewById(request.ReviewId) ?? throw new NotFoundException("المراجعة غير موجودة", "ReviewNotFound");
         if (review.ReviewerId == currentUser.Id)
         {
             return new OperationResult
             {
                 Success = false,
                 Code = "CannotLikeOwnContent",
-                Message = "You cannot like your own review"
+                Message = "لا يمكنك الإعجاب بمراجعتك"
             };
         }
         // Inserts the like and bumps LikeCount in one transaction; a concurrent duplicate is a no-op here.
@@ -37,7 +37,7 @@ internal class CreateLikeReviewCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyLiked",
-                Message = "You already liked this review"
+                Message = "سبق أن أعجبت بهذه المراجعة"
             };
         }
         
@@ -47,7 +47,7 @@ internal class CreateLikeReviewCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Review Liked successfully"
+            Message = "حُفظ إعجابك بالمراجعة"
         };
     }
     

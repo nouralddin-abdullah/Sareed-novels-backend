@@ -21,7 +21,7 @@ public class GetCompetitionDetailQueryHandler(
 
         if (competition == null)
         {
-            throw new NotFoundException("Competition not found", "CompetitionNotFound");
+            throw new NotFoundException("المسابقة غير موجودة", "CompetitionNotFound");
         }
 
         // If loaded by slug, we need to load with participants

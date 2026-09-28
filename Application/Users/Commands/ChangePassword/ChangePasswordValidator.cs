@@ -9,7 +9,8 @@ public class ChangePasswordValidator : AbstractValidator<ChangePasswordCommand>
     {
         RuleFor(d => d.NewPassword)
             .NotNull()
+            .WithMessage("اكتب كلمة المرور الجديدة")
             .MinimumLength(8)
-            .WithMessage("New password cannot be empty or less than 8 characters.");
+            .WithMessage("يجب أن تحتوي كلمة المرور الجديدة على 8 أحرف على الأقل");
     }
 }

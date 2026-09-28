@@ -70,7 +70,7 @@ public class PrivilegeManualUnlockTests
         var result = await Service().ManuallyUnlockChapterAsync(chapter.Id, AuthorId);
 
         Assert.True(result.Success);
-        Assert.Contains("11-13", result.Message);
+        Assert.Contains("من 11 إلى 13", result.Message);
         Assert.Equal(14, privilege.PrivilegeStartSequence);
         Assert.Equal(2, privilege.CurrentLockedCount);
         Assert.False(Service().IsChapterLockedBySequence(13, privilege));

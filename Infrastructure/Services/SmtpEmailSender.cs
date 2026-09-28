@@ -100,13 +100,13 @@ public class SmtpEmailSender : IEmailSender
             case "confirm-email":
                 var confirmationLink = GetPropertyValue<string>(templateData, "confirmationLink");
                 htmlContent = EmailTemplates.GetConfirmEmailTemplate(confirmationLink);
-                subject = "Confirm Your Email - Sard Novels";
+                subject = "أكّد بريدك الإلكتروني في سرد";
                 break;
 
             case "reset-password":
                 var resetPasswordLink = GetPropertyValue<string>(templateData, "resetPasswordLink");
                 htmlContent = EmailTemplates.GetResetPasswordTemplate(resetPasswordLink);
-                subject = "Reset Your Password - Sard Novels";
+                subject = "تعيين كلمة مرور جديدة لحسابك في سرد";
                 break;
 
             case "password-removed":

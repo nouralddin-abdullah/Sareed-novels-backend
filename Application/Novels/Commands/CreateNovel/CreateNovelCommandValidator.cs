@@ -6,22 +6,22 @@ namespace Application.Novels.Commands.CreateNovel
 {
     public class CreateNovelCommandValidator : AbstractValidator<CreateNovelCommand>
     {
-        public const string CoverRequiredMessage = "صورة الغلاف مطلوبة (JPEG أو PNG أو WebP، بحد أقصى 5 ميجابايت).";
-        public const string CoverInvalidMessage = "يجب أن يكون الغلاف صورة JPEG أو PNG أو WebP لا يتجاوز حجمها 5 ميجابايت.";
+        public const string CoverRequiredMessage = "صورة الغلاف مطلوبة (JPEG أو PNG أو WebP، بحد أقصى 5 ميغابايت).";
+        public const string CoverInvalidMessage = "يجب أن يكون الغلاف صورة JPEG أو PNG أو WebP لا يتجاوز حجمها 5 ميغابايت.";
 
         public CreateNovelCommandValidator()
         {
             RuleFor(dto => dto.Title)
-            .Length(4, 40)
-            .NotNull()
             .NotEmpty()
-            .WithMessage("A novel should have valid title");
+            .WithMessage("اكتب عنوان الرواية")
+            .Length(4, 40)
+            .WithMessage("يجب أن يكون عنوان الرواية من 4 إلى 40 حرفًا");
 
             RuleFor(dto => dto.Summary)
-            .Length(4, 2000)
-            .NotNull()
             .NotEmpty()
-            .WithMessage("A novel should have valid Summary");
+            .WithMessage("اكتب نبذة الرواية")
+            .Length(4, 2000)
+            .WithMessage("يجب أن تكون نبذة الرواية من 4 إلى 2000 حرف");
 
             // Every novel is stored with a cover (Novel.CoverImageUrl is NOT NULL), so a missing file is a 400,
             // not a failed insert. The two rules are separate so the null check isn't switched off by a When().
@@ -36,11 +36,11 @@ namespace Application.Novels.Commands.CreateNovel
 
             RuleFor(x => x.GenreIds)
             .NotEmpty()
-            .WithMessage("At least one genre is required")
+            .WithMessage("اختر تصنيفًا واحدًا على الأقل")
             .Must(genres => genres.Count >= 1 && genres.Count <= 4)
-            .WithMessage("A novel must have between 1 and 4 genres")
+            .WithMessage("اختر من 1 إلى 4 تصنيفات")
             .Must(genres => genres.Distinct().Count() == genres.Count)
-            .WithMessage("A genre can only be selected once");
+            .WithMessage("اختر كل تصنيف مرة واحدة فقط");
 
         }
     }

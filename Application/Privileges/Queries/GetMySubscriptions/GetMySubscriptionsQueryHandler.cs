@@ -21,7 +21,7 @@ public class GetMySubscriptionsQueryHandler(
         logger.LogDebug("Getting subscriptions for current user");
         
         var currentUser = userContext.GetCurrentUser() 
-            ?? throw new ForbidException("User not signed in", "NotSignedIn");
+            ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         var (subscriptions, totalCount) = await subscriptionRepository.GetUserSubscriptionsAsync(

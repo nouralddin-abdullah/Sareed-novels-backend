@@ -20,7 +20,7 @@ public class CreateEntityCommandHandler(
 {
     public async Task<OperationResult> Handle(CreateEntityCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         logger.LogInformation(
             "User {UserId} creating entity '{Name}' for novel {NovelId}",
@@ -37,7 +37,7 @@ public class CreateEntityCommandHandler(
             {
                 Success = false,
                 Code = "NovelNotFound",
-                Message = "Novel not found"
+                Message = "الرواية غير موجودة"
             };
         }
 
@@ -47,7 +47,7 @@ public class CreateEntityCommandHandler(
             {
                 Success = false,
                 Code = "NotOwner",
-                Message = "You don't have permission to add entities to this novel"
+                Message = "إضافة المداخل إلى الموسوعة متاحة لكاتب الرواية فقط"
             };
         }
 
@@ -59,7 +59,7 @@ public class CreateEntityCommandHandler(
             {
                 Success = false,
                 Code = "InvalidIcon",
-                Message = $"Invalid icon. Valid icons are: {string.Join(", ", EntityIconValidator.GetValidIcons())}"
+                Message = $"الأيقونة غير صالحة. الأيقونات المتاحة: {string.Join("، ", EntityIconValidator.GetValidIcons())}"
             };
         }
 
@@ -98,7 +98,7 @@ public class CreateEntityCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Entity created successfully"
+            Message = "أُضيف المدخل إلى الموسوعة"
         };
     }
 }

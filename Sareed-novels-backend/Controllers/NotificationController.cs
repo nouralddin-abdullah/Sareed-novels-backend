@@ -71,8 +71,14 @@ public class NotificationController(IMediator mediator) : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Unregisters the caller's FCM token (on sign-out). The token must be URL-encoded.</summary>
+    /// <summary>
+    /// Unregisters an FCM token (on sign-out); the token must be URL-encoded. Works without a valid session too (the
+    /// app signed out after a 401, or offline): then the token is removed whoever registered it, as knowing it is the
+    /// proof. With one, only the caller's own registration is removed. Always 204; rate-limited per IP.
+    /// </summary>
     [HttpDelete("devices/{token}")]
+    [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Devices)]
     public async Task<IActionResult> UnregisterDevice([FromRoute] string token)
     {
         await mediator.Send(new UnregisterDeviceCommand(token));

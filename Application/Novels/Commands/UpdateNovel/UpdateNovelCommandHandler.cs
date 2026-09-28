@@ -21,12 +21,12 @@ public class UpdateNovelCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateNovelCommand request, CancellationToken cancellationToken)
     {
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel was not found", "NovelNotFound");
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("This user not signed in", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("Updating data for novel {NovelId}", novel.Id);
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("Forbidden", "NotOwner");
+            throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         }
 
         // Validate the genres before changing anything, so a bad genre list can't leave a half-applied update.
@@ -40,7 +40,7 @@ public class UpdateNovelCommandHandler(
                 return new OperationResult
                 {
                     Code = "InvalidGenres",
-                    Message = "A novel must have between 1 and 4 different, existing genres",
+                    Message = "اختر من 1 إلى 4 تصنيفات مختلفة من التصنيفات المتاحة",
                     Success = false
                 };
             }
@@ -62,7 +62,7 @@ public class UpdateNovelCommandHandler(
             return new OperationResult
             {
                 Code = "OperationFailed",
-                Message = "Novel wasn't updated successfully",
+                Message = "تعذّر تحديث الرواية. حاول مرة أخرى.",
                 Success = false
             };
         }
@@ -74,7 +74,7 @@ public class UpdateNovelCommandHandler(
                 return new OperationResult
                 {
                     Code = "InvalidGenres",
-                    Message = "Novel was updated but failed to update genres. Please check that all selected genres exist.",
+                    Message = "حُدّثت الرواية، لكن تعذّر تحديث تصنيفاتها. تأكد من أن التصنيفات المختارة متاحة.",
                     Success = false
                 };
             }
@@ -85,7 +85,7 @@ public class UpdateNovelCommandHandler(
 
         return new OperationResult
         {
-            Message = "Novel was updated successfully",
+            Message = "تم تحديث الرواية",
             Success = true
         };
     }

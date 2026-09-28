@@ -16,7 +16,7 @@ internal static class IdentityErrors
         return new
         {
             code = first?.Code ?? "OperationFailed",
-            message = first?.Description ?? "Failed",
+            message = first?.Description ?? "تعذّر إتمام العملية. حاول مرة أخرى.",
             succeeded = false,
             errors = result.Errors
         };

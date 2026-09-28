@@ -15,7 +15,7 @@ public class RejectWithdrawalCommandHandler(
 {
     public async Task<OperationResult> Handle(RejectWithdrawalCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var withdrawalRequest = await withdrawalRepository.GetByIdAsync(request.RequestId);
         if (withdrawalRequest == null)
@@ -24,7 +24,7 @@ public class RejectWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "RequestNotFound",
-                Message = "Withdrawal request not found"
+                Message = "طلب السحب غير موجود"
             };
         }
 
@@ -34,7 +34,7 @@ public class RejectWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyProcessed",
-                Message = $"Request already {withdrawalRequest.Status.ToLower()}"
+                Message = RequestMessages.AlreadyDecided(withdrawalRequest.Status)
             };
         }
 
@@ -44,7 +44,7 @@ public class RejectWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "RejectionReasonRequired",
-                Message = "Rejection reason is required"
+                Message = "اكتب سبب الرفض"
             };
         }
 
@@ -54,7 +54,7 @@ public class RejectWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyProcessed",
-                Message = "Request was already processed"
+                Message = RequestMessages.AlreadyProcessed
             };
         }
 
@@ -66,7 +66,7 @@ public class RejectWithdrawalCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Withdrawal request rejected successfully"
+            Message = "رُفض طلب السحب"
         };
     }
 }

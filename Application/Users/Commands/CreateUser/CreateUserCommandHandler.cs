@@ -1,4 +1,5 @@
-﻿using Application.Services;
+﻿using Application.Common;
+using Application.Services;
 using AutoMapper;
 using Domain.Entities;
 using Domain.Repositories;
@@ -51,7 +52,7 @@ namespace Application.Users.Commands.CreateUser
                     {
                         // ASP.NET Identity's code for the first problem: DuplicateUserName, DuplicateEmail, InvalidUserName...
                         Code = result.Errors.FirstOrDefault()?.Code ?? "OperationFailed",
-                        Message = $"User creation failed: {string.Join("; ", result.Errors.Select(e => e.Description))}",
+                        Message = ArabicText.Sentences(["تعذّر إنشاء الحساب", .. result.Errors.Select(e => e.Description)]),
                         Success = false
                     }
                 };
@@ -64,7 +65,7 @@ namespace Application.Users.Commands.CreateUser
             {
                 Result = new FollowUser.OperationResult
                 {
-                    Message = "User creation succeed",
+                    Message = "تم إنشاء حسابك. أهلًا بك في سرد!",
                     Success = true
                 },
                 AccessToken = jWTService.GenerateAccessToken(user!),

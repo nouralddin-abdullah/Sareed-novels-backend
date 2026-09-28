@@ -15,7 +15,7 @@ public class RejectRechargeCommandHandler(
 {
     public async Task<OperationResult> Handle(RejectRechargeCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var rechargeRequest = await rechargeRepository.GetByIdAsync(request.RequestId);
         if (rechargeRequest == null)
@@ -24,7 +24,7 @@ public class RejectRechargeCommandHandler(
             {
                 Success = false,
                 Code = "RequestNotFound",
-                Message = "Recharge request not found"
+                Message = "طلب الشحن غير موجود"
             };
         }
 
@@ -34,7 +34,7 @@ public class RejectRechargeCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyProcessed",
-                Message = $"Request already {rechargeRequest.Status.ToLower()}"
+                Message = RequestMessages.AlreadyDecided(rechargeRequest.Status)
             };
         }
 
@@ -44,7 +44,7 @@ public class RejectRechargeCommandHandler(
             {
                 Success = false,
                 Code = "RejectionReasonRequired",
-                Message = "Rejection reason is required"
+                Message = "اكتب سبب الرفض"
             };
         }
 
@@ -54,7 +54,7 @@ public class RejectRechargeCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyProcessed",
-                Message = "Request was already processed"
+                Message = RequestMessages.AlreadyProcessed
             };
         }
 
@@ -66,7 +66,7 @@ public class RejectRechargeCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Recharge request rejected successfully"
+            Message = "رُفض طلب الشحن"
         };
     }
 }

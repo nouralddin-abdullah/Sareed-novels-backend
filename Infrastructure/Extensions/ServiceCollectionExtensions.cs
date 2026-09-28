@@ -59,6 +59,9 @@ public static class ServiceCollectionExtensions
         })
         .AddEntityFrameworkStores<ApplicationDbContext>()
         .AddClaimsPrincipalFactory<SardUserClaimsPrincipalFactory>()
+        .AddErrorDescriber<ArabicIdentityErrorDescriber>()
+        // "deleted-..." user names belong to deleted accounts (UserNameRules.LooksDeleted).
+        .AddUserValidator<ReservedUserNameValidator>()
         .AddDefaultTokenProviders();
 
         services.AddScoped<IUsersRepository, UsersRepositories>();

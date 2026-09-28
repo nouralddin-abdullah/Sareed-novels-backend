@@ -77,7 +77,7 @@ public class NovelRecommendationService(ApplicationDbContext dbContext, IMemoryC
             .Where(n => n.Id == novelId)
             .Select(n => new { n.AuthorId, GenreIds = n.NovelGenres.Select(g => g.GenreId).ToList() })
             .FirstOrDefaultAsync()
-            ?? throw new NotFoundException("This novel was not found", "NovelNotFound");
+            ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
 
         var readerIds = dbContext.UserNovelProgress
             .Where(p => p.NovelId == novelId && p.UserId != source.AuthorId)

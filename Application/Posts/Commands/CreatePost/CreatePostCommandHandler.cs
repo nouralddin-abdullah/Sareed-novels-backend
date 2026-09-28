@@ -19,7 +19,7 @@ public class CreatePostCommandHandler(
 {
     public async Task<CreatePostResult> Handle(CreatePostCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         if (request.NovelId.HasValue)
         {
@@ -30,7 +30,7 @@ public class CreatePostCommandHandler(
                 {
                     Success = false,
                     Code = "NovelNotFound",
-                    Message = "Novel not found"
+                    Message = "الرواية غير موجودة"
                 };
             }
         }
@@ -64,7 +64,7 @@ public class CreatePostCommandHandler(
         return new CreatePostResult
         {
             Success = true,
-            Message = "Post created successfully",
+            Message = "نُشر منشورك",
             // Through GET /api/posts/{id} itself, so the app gets the post exactly as the post pages and lists return it.
             Post = await sender.Send(new GetPostQuery(post.Id), cancellationToken)
         };

@@ -14,15 +14,15 @@ public class DeleteReadingListCommandHandler(
 {
     public async Task<OperationResult> Handle(DeleteReadingListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("Deleting reading list {ListId} for user {UserId}", request.ReadingListId, currentUser.Id);
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
+            ?? throw new NotFoundException("القائمة غير موجودة", "ReadingListNotFound");
 
         if (readingList.UserId != currentUser.Id)
         {
-            throw new ForbidException("You don't own this reading list", "NotOwner");
+            throw new ForbidException("هذا الإجراء متاح لصاحب القائمة فقط", "NotOwner");
         }
 
         var result = await readingListsRepository.DeleteAsync(request.ReadingListId);
@@ -33,7 +33,7 @@ public class DeleteReadingListCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = "Reading list deleted successfully"
+                Message = "حُذفت القائمة"
             };
         }
 
@@ -41,7 +41,7 @@ public class DeleteReadingListCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Failed to delete reading list"
+            Message = "تعذّر حذف القائمة. حاول مرة أخرى."
         };
     }
 }

@@ -73,7 +73,7 @@ public class GiftController(IMediator mediator) : ControllerBase
     {
         if (period != "Weekly" && period != "AllTime")
         {
-            return BadRequest(new ApiError("InvalidPeriod", "Period must be 'Weekly' or 'AllTime'"));
+            return BadRequest(new ApiError("InvalidPeriod", "الفترة غير صالحة: Weekly لهذا الأسبوع أو AllTime لكل الأوقات"));
         }
 
         var query = new GetGlobalLeaderboardQuery(period, pageNumber, pageSize);
@@ -115,9 +115,9 @@ public class GiftController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command);
         if (!result)
         {
-            return NotFound(new ApiError("GiftNotFound", "Gift not found"));
+            return NotFound(new ApiError("GiftNotFound", "الهدية غير موجودة"));
         }
-        return Ok(new { success = true, message = "Gift updated successfully" });
+        return Ok(new { success = true, message = "حُفظت الهدية" });
     }
 
     [HttpDelete("admin/{giftId}")]
@@ -128,9 +128,9 @@ public class GiftController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command);
         if (!result)
         {
-            return NotFound(new ApiError("GiftNotFound", "Gift not found"));
+            return NotFound(new ApiError("GiftNotFound", "الهدية غير موجودة"));
         }
-        return Ok(new { success = true, message = "Gift deleted successfully" });
+        return Ok(new { success = true, message = "حُذفت الهدية" });
     }
 
     [HttpPost("admin/recalculate-weekly")]
@@ -139,7 +139,7 @@ public class GiftController(IMediator mediator) : ControllerBase
     {
         var command = new RecalculateWeeklyLeaderboardCommand();
         await mediator.Send(command);
-        return Ok(new { success = true, message = "Weekly leaderboard recalculated successfully" });
+        return Ok(new { success = true, message = "أُعيد حساب كبار الداعمين لهذا الأسبوع" });
     }
 
     [HttpPost("admin/recalculate-alltime")]
@@ -148,6 +148,6 @@ public class GiftController(IMediator mediator) : ControllerBase
     {
         var command = new RecalculateAllTimeLeaderboardCommand();
         await mediator.Send(command);
-        return Ok(new { success = true, message = "All-time leaderboard recalculated successfully" });
+        return Ok(new { success = true, message = "أُعيد حساب كبار الداعمين لكل الأوقات" });
     }
 }

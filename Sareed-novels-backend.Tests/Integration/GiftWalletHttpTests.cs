@@ -82,7 +82,7 @@ public class GiftWalletHttpTests(SardApiFactory api)
 
         // The author's notification names the gift in Arabic (it used to embed "Rose").
         var notification = Assert.Single(await api.WaitForNotificationsFrom(author, reader));
-        Assert.Equal($"{reader.UserName} أرسل لك 3x وردة على رواية '{novel.Title}'", notification.Message);
+        Assert.Equal($"{reader.UserName} أرسل وردة ×3 إلى روايتك «{novel.Title}»", notification.Message);
     }
 
     private static void AssertAbout(JsonElement entry, Novel novel, Guid? giftId, int? count)

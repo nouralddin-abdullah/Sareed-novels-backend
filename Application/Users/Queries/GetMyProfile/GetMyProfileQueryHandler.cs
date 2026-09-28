@@ -14,9 +14,9 @@ public class GetMyProfileQueryHandler(ILogger<GetMyProfileQueryHandler> logger, 
 {
     public async Task<UserIsProfile> Handle(GetMyProfileQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User is not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("Getting self profile for {UserId}", currentUser.Id);
-        var user = await userManager.FindByIdAsync(currentUser.Id) ?? throw new NotFoundException("User is not found", "UserNotFound");
+        var user = await userManager.FindByIdAsync(currentUser.Id) ?? throw new NotFoundException("المستخدم غير موجود", "UserNotFound");
 
 
         // Only get total counts (no recent followers/following)

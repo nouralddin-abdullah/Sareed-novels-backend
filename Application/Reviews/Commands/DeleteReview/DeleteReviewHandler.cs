@@ -15,8 +15,8 @@ internal class DeleteReviewHandler(
     public async Task<OperationResult> Handle(DeleteReviewCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Deleting review on novel {@novel}", request);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
-        var existingReview = await reviewsRepository.GetUserReviewForNovel(currentUser.Id, request.NovelId) ?? throw new NotFoundException("No review found for this user", "ReviewNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
+        var existingReview = await reviewsRepository.GetUserReviewForNovel(currentUser.Id, request.NovelId) ?? throw new NotFoundException("ليست لك مراجعة على هذه الرواية", "ReviewNotFound");
 
         // Deletes the review's likes with it, uncounts it for the user and recomputes the novel's review stats.
         var result = await reviewsRepository.DeleteReview(existingReview);
@@ -30,7 +30,7 @@ internal class DeleteReviewHandler(
             {
                 Success = false,
                 Code = "OperationFailed",
-                Message = "Failed to delete review"
+                Message = "تعذّر حذف مراجعتك. حاول مرة أخرى."
             };
         }
 
@@ -40,7 +40,7 @@ internal class DeleteReviewHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Review deleted successfully"
+            Message = "تم حذف مراجعتك"
         };
     }
 }

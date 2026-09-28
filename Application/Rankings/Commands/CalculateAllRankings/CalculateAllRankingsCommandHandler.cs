@@ -21,7 +21,7 @@ internal class CalculateAllRankingsCommandHandler(IRankingService rankingService
             return new CalculateAllRankingsResult
             {
                 Success = true,
-                Message = "All genre rankings calculated successfully",
+                Message = "أُعيد حساب ترتيب كل التصنيفات",
                 ExecutionTimeMs = duration.TotalMilliseconds,
                 Timestamp = DateTime.UtcNow
             };
@@ -33,7 +33,7 @@ internal class CalculateAllRankingsCommandHandler(IRankingService rankingService
             {
                 Success = false,
                 Code = "OperationFailed",
-                Message = "Failed to calculate rankings",
+                Message = "تعذّر حساب الترتيب",
                 ExecutionTimeMs = 0,
                 Timestamp = DateTime.UtcNow,
                 Error = ex.Message

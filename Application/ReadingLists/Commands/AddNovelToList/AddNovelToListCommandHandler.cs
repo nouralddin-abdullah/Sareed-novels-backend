@@ -17,14 +17,14 @@ public class AddNovelToListCommandHandler(
 {
     public async Task<OperationResult> Handle(AddNovelToListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
+            ?? throw new NotFoundException("القائمة غير موجودة", "ReadingListNotFound");
 
         if (readingList.UserId != currentUser.Id)
         {
-            throw new ForbidException("You don't own this reading list", "NotOwner");
+            throw new ForbidException("هذا الإجراء متاح لصاحب القائمة فقط", "NotOwner");
         }
 
         var refusal = await NovelForReadingList.WhyNotAddable(novelsRepository, request.NovelId);
@@ -45,7 +45,7 @@ public class AddNovelToListCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyInList",
-                Message = "Novel is already in this reading list"
+                Message = "هذه الرواية موجودة في القائمة بالفعل"
             };
         }
 
@@ -68,7 +68,7 @@ public class AddNovelToListCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = "Novel added to reading list"
+                Message = $"أُضيفت الرواية إلى «{readingList.Name}»"
             };
         }
 
@@ -76,7 +76,7 @@ public class AddNovelToListCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Failed to add novel to reading list"
+            Message = "تعذّرت إضافة الرواية إلى القائمة. حاول مرة أخرى."
         };
     }
 }

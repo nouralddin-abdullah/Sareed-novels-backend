@@ -222,7 +222,7 @@ public class WalletFlowTests(SqlServerDatabase database) : IClassFixture<SqlServ
         });
 
         Assert.Equal(3, results.Count(r => r.Success));
-        Assert.All(results.Where(r => !r.Success), r => Assert.Equal("Insufficient points balance", r.Message));
+        Assert.All(results.Where(r => !r.Success), r => Assert.Equal("رصيدك من النقاط غير كافٍ", r.Message));
         Assert.Equal(100m, await Balance(sender.Id));
         Assert.Equal(900m, await Balance(author.Id));
 

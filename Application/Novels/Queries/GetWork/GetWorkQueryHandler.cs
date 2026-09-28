@@ -13,12 +13,12 @@ public class GetWorkQueryHandler(ILogger<GetMyWorksQueryHandler> logger, IUserCo
 {
     public async Task<WorkDTO> Handle(GetWorkQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
-        var novel = await novelsRepository.GetOne(request.WorkGuid) ?? throw new NotFoundException("No work was found with this id", "NovelNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.WorkGuid) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
         logger.LogInformation("Getting work {NovelId}", novel.Id);
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("Forbidden", "NotOwner");
+            throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         }
         var result = mapper.Map<WorkDTO>(novel);
         return result;

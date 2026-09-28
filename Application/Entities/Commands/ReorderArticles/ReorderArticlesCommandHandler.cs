@@ -16,7 +16,7 @@ public class ReorderArticlesCommandHandler(
     {
         logger.LogInformation("Reordering articles for entity {EntityId}", request.EntityId);
         
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         // Get entity with articles
         var entity = await entityRepository.GetEntityByIdAsync(request.EntityId);
@@ -30,7 +30,7 @@ public class ReorderArticlesCommandHandler(
         var novel = await novelsRepository.GetOne(entity.NovelId);
         if (novel == null || novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("User doesn't own this novel", "NotOwner");
+            throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         }
         
         // Reorder articles

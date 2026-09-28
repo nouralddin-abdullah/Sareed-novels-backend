@@ -12,7 +12,7 @@ public class ConfirmEmailCommandHandler(ILogger<ConfirmEmailCommandHandler> logg
     public async Task<IdentityResult> Handle(ConfirmEmailCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Trying to confirm email for {userid}", request.UserId);
-        var user = await userManager.FindByIdAsync(request.UserId) ?? throw new NotFoundException("The user trying to verify email for it not found.", "UserNotFound");
+        var user = await userManager.FindByIdAsync(request.UserId) ?? throw new NotFoundException("المستخدم غير موجود", "UserNotFound");
         return await usersRepository.ConfirmEmail(user, request.Token);
 
     }

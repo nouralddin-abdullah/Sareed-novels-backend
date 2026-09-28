@@ -15,24 +15,24 @@ public class UpdateRelationshipCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateRelationshipCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var relationship = await entityRepository.GetRelationshipByIdAsync(request.RelationshipId);
         if (relationship == null)
         {
-            return new OperationResult { Success = false, Code = "RelationshipNotFound", Message = "Relationship not found" };
+            return new OperationResult { Success = false, Code = "RelationshipNotFound", Message = "العلاقة غير موجودة" };
         }
 
         var sourceEntity = await entityRepository.GetEntityByIdAsync(relationship.SourceEntityId);
         if (sourceEntity == null)
         {
-            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "Source entity not found" };
+            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "هذا المدخل غير موجود" };
         }
 
         // Verify user owns the novel (using included Novel)
         if (sourceEntity.Novel == null || sourceEntity.Novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "هذا الإجراء متاح لكاتب الرواية فقط" };
         }
 
         // Update only provided fields
@@ -45,6 +45,6 @@ public class UpdateRelationshipCommandHandler(
 
         logger.LogInformation("Relationship {RelationshipId} updated", relationship.Id);
 
-        return new OperationResult { Success = true, Message = "Relationship updated successfully" };
+        return new OperationResult { Success = true, Message = "حُفظت العلاقة" };
     }
 }

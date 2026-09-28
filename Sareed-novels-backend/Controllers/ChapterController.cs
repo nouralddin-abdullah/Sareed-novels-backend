@@ -34,7 +34,7 @@ namespace Sareed_novels_backend.Controllers
             {
                 return NoContent();
             }
-            return BadRequest(new ApiError("OperationFailed", "Failed to delete the chapter"));
+            return BadRequest(new ApiError("OperationFailed", "تعذّر حذف الفصل. حاول مرة أخرى."));
         }
         [HttpPatch("{chapterId}")]
         [Authorize]

@@ -100,9 +100,9 @@ public class PushNotificationHttpTests(PushApiFactory push) : IClassFixture<Push
             .Select(d => (d.UserId, d.Platform, d.AppVersion)).ToList();
     }
 
+    // DELETE /api/notifications/devices/{token} doesn't: see Unregistering_without_a_session_*.
     [Theory]
     [InlineData("POST", "/api/notifications/devices")]
-    [InlineData("DELETE", "/api/notifications/devices/some-token")]
     [InlineData("GET", "/api/notifications/preferences")]
     [InlineData("PATCH", "/api/notifications/preferences")]
     public async Task Device_and_preference_endpoints_need_a_signed_in_user(string method, string url)
@@ -131,8 +131,8 @@ public class PushNotificationHttpTests(PushApiFactory push) : IClassFixture<Push
 
         foreach (var (method, url) in new[]
                  {
-                     (HttpMethod.Post, "/api/notifications/devices"), (HttpMethod.Delete, "/api/notifications/devices/some-token"),
-                     (HttpMethod.Get, "/api/notifications/preferences"), (HttpMethod.Patch, "/api/notifications/preferences")
+                     (HttpMethod.Post, "/api/notifications/devices"), (HttpMethod.Get, "/api/notifications/preferences"),
+                     (HttpMethod.Patch, "/api/notifications/preferences")
                  })
         {
             var response = await client.SendAsync(As(earlier, method, url, new { token = FcmToken(), platform = "android", social = false }));
@@ -141,6 +141,67 @@ public class PushNotificationHttpTests(PushApiFactory push) : IClassFixture<Push
 
         // The phone that signed-out session registered no longer gets the account's pushes.
         Assert.Empty(await DevicesWith(phone));
+
+        // Unregistering answers as it does without a session.
+        var unregister = await client.SendAsync(As(earlier, HttpMethod.Delete, $"/api/notifications/devices/{Uri.EscapeDataString(phone)}"));
+        Assert.Equal(HttpStatusCode.NoContent, unregister.StatusCode);
+    }
+
+    [Fact]
+    public async Task Unregistering_without_a_session_removes_the_token_whoever_registered_it()
+    {
+        var me = await SignUp();
+        var (phone, other) = (FcmToken(), FcmToken());
+        var client = Client();
+        await client.SendAsync(As(me, HttpMethod.Post, "/api/notifications/devices", new { token = phone, platform = "android" }));
+        await client.SendAsync(As(me, HttpMethod.Post, "/api/notifications/devices", new { token = other, platform = "ios" }));
+
+        // Signed out on the phone (the stored token already cleared): the DELETE goes without Authorization.
+        var removed = await client.SendAsync(As(null, HttpMethod.Delete, $"/api/notifications/devices/{Uri.EscapeDataString(phone)}"));
+        var again = await client.SendAsync(As(null, HttpMethod.Delete, $"/api/notifications/devices/{Uri.EscapeDataString(phone)}"));
+        var unknown = await client.SendAsync(As(null, HttpMethod.Delete, $"/api/notifications/devices/{Uri.EscapeDataString(FcmToken())}"));
+
+        // Always 204: the answer doesn't say whether a token was registered.
+        Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, again.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, unknown.StatusCode);
+        Assert.Empty(await DevicesWith(phone));
+        Assert.Single(await DevicesWith(other));
+    }
+
+    [Fact]
+    public async Task Unregistering_with_an_expired_session_removes_the_token_too()
+    {
+        var me = await SignUp();
+        var phone = FcmToken();
+        var client = Client();
+        await client.SendAsync(As(me, HttpMethod.Post, "/api/notifications/devices", new { token = phone, platform = "android" }));
+
+        // The 60-day token ran out: the app got a 401, signed out, and unregisters with the token it still has.
+        var jwtKey = push.Factory.Services.GetRequiredService<IConfiguration>()["Jwt:Key"]!;
+        var expired = me with { Token = TokenFactory.Write(me.Id, DateTime.UtcNow.AddDays(-61), DateTime.UtcNow.AddDays(-1), jwtKey) };
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(As(expired, HttpMethod.Get, "/api/notifications/preferences"))).StatusCode);
+
+        var response = await client.SendAsync(As(expired, HttpMethod.Delete, $"/api/notifications/devices/{Uri.EscapeDataString(phone)}"));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Empty(await DevicesWith(phone));
+    }
+
+    [Fact]
+    public async Task Unregistering_is_rate_limited_per_ip()
+    {
+        var client = Client();
+
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 31; i++)
+        {
+            var response = await client.SendAsync(As(null, HttpMethod.Delete, $"/api/notifications/devices/{Uri.EscapeDataString(FcmToken())}"));
+            statuses.Add(response.StatusCode);
+        }
+
+        Assert.All(statuses.Take(30), s => Assert.Equal(HttpStatusCode.NoContent, s));
+        Assert.Equal(HttpStatusCode.TooManyRequests, statuses[30]);
     }
 
     [Fact]

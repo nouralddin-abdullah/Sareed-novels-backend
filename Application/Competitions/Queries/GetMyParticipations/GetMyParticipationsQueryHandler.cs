@@ -15,7 +15,7 @@ public class GetMyParticipationsQueryHandler(
     public async Task<List<MyCompetitionParticipationDto>> Handle(GetMyParticipationsQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser()
-            ?? throw new ForbidException("You must be logged in", "NotSignedIn");
+            ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var participations = await participantRepository.GetByAuthorIdAsync(currentUser.Id);
 

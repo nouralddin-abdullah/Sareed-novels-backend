@@ -44,4 +44,9 @@ public class UserDevicesRepository(ApplicationDbContext dbContext) : IUserDevice
         dbContext.UserDevices
             .Where(d => d.Token == token && d.UserId == userId)
             .ExecuteDeleteAsync();
+
+    public Task RemoveToken(string token) =>
+        dbContext.UserDevices
+            .Where(d => d.Token == token)
+            .ExecuteDeleteAsync();
 }

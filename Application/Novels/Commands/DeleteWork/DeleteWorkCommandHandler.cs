@@ -16,12 +16,12 @@ public class DeleteWorkCommandHandler(
 {
     public async Task<OperationResult> Handle(DeleteWorkCommand request, CancellationToken cancellationToken)
     {
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel was not found", "NovelNotFound");
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("This user not signed in", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("Forbidden", "NotOwner");
+            throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         }
         
         // Soft delete, out of the rankings too: the same path as a moderator removing a reported novel.
@@ -39,7 +39,7 @@ public class DeleteWorkCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = "Novel has been deleted successfully"
+                Message = "حُذفت الرواية"
             };
         }
 
@@ -47,7 +47,7 @@ public class DeleteWorkCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Novel has not been deleted"
+            Message = "تعذّر حذف الرواية. حاول مرة أخرى."
         };
     }
 }

@@ -5,15 +5,15 @@ public static class EmailTemplates
     public static string GetConfirmEmailTemplate(string confirmationLink)
     {
         return $@"<!DOCTYPE html>
-<html lang=""en"">
+<html lang=""ar"" dir=""rtl"">
 <head>
     <meta charset=""UTF-8"">
-    <title>Confirm Your Email - Sard</title>
+    <title>تأكيد بريدك الإلكتروني - سرد</title>
     <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
     <style>
         body {{
             background: #f7f7f7;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Tahoma, 'Segoe UI', Arial, sans-serif;
             margin: 0;
             padding: 0;
         }}
@@ -31,7 +31,6 @@ public static class EmailTemplates
             color: #2d6cdf;
             font-weight: bold;
             margin-bottom: 16px;
-            letter-spacing: 2px;
         }}
         .title {{
             font-size: 1.3rem;
@@ -42,6 +41,7 @@ public static class EmailTemplates
         .message {{
             font-size: 1rem;
             color: #444;
+            line-height: 1.8;
             margin-bottom: 24px;
             text-align: center;
         }}
@@ -72,16 +72,16 @@ public static class EmailTemplates
 </head>
 <body>
     <div class=""container"">
-        <div class=""logo"">Sard Novels</div>
-        <div class=""title"">Confirm Your Email</div>
+        <div class=""logo"">سرد</div>
+        <div class=""title"">أكّد بريدك الإلكتروني</div>
         <div class=""message"">
-            Thank you for joining <b>Sard</b>!<br>
-            To activate your account, please click the button below to confirm your email address.
+            شكرًا لانضمامك إلى <b>سرد</b>!<br>
+            لتفعيل حسابك، اضغط الزر أدناه لتأكيد بريدك الإلكتروني.
         </div>
-        <a href=""{confirmationLink}"" class=""button"">Confirm Email Address</a>
+        <a href=""{confirmationLink}"" class=""button"">تأكيد البريد الإلكتروني</a>
         <div class=""footer"">
-            If you didn't create this account, you can safely ignore this message.<br>
-            Sard Team
+            إن لم تنشئ حسابًا في سرد فتجاهل هذه الرسالة.<br>
+            فريق سرد
         </div>
     </div>
 </body>
@@ -91,15 +91,15 @@ public static class EmailTemplates
     public static string GetResetPasswordTemplate(string resetPasswordLink)
     {
         return $@"<!DOCTYPE html>
-<html lang=""en"">
+<html lang=""ar"" dir=""rtl"">
 <head>
     <meta charset=""UTF-8"">
-    <title>Reset Your Password - Sard</title>
+    <title>تعيين كلمة مرور جديدة - سرد</title>
     <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
     <style>
         body {{
             background: #f7f7f7;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Tahoma, 'Segoe UI', Arial, sans-serif;
             margin: 0;
             padding: 0;
         }}
@@ -117,7 +117,6 @@ public static class EmailTemplates
             color: #2d6cdf;
             font-weight: bold;
             margin-bottom: 16px;
-            letter-spacing: 2px;
         }}
         .title {{
             font-size: 1.3rem;
@@ -128,6 +127,7 @@ public static class EmailTemplates
         .message {{
             font-size: 1rem;
             color: #444;
+            line-height: 1.8;
             margin-bottom: 24px;
             text-align: center;
         }}
@@ -158,16 +158,16 @@ public static class EmailTemplates
 </head>
 <body>
     <div class=""container"">
-        <div class=""logo"">Sard Novels</div>
-        <div class=""title"">Reset Your Password</div>
+        <div class=""logo"">سرد</div>
+        <div class=""title"">تعيين كلمة مرور جديدة</div>
         <div class=""message"">
-            A password reset was requested for your account at <b>Sard</b>.<br>
-            To continue, please click the button below to create a new password.
+            طُلب تعيين كلمة مرور جديدة لحسابك في <b>سرد</b>.<br>
+            للمتابعة، اضغط الزر أدناه واختر كلمة مرور جديدة. الرابط صالح ليوم واحد.
         </div>
-        <a href=""{resetPasswordLink}"" class=""button"">Reset Password</a>
+        <a href=""{resetPasswordLink}"" class=""button"">تعيين كلمة مرور جديدة</a>
         <div class=""footer"">
-            If you didn't request a password reset, you can safely ignore this message.<br>
-            Sard Team
+            إن لم تطلب ذلك فتجاهل هذه الرسالة، ولن تتغير كلمة المرور.<br>
+            فريق سرد
         </div>
     </div>
 </body>

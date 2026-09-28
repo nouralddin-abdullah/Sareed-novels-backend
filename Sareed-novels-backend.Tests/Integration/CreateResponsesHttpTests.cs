@@ -152,7 +152,7 @@ public class CreateResponsesHttpTests(SardApiFactory api)
         Assert.Equal(HttpStatusCode.BadRequest, again.StatusCode);
         var refused = await again.Content.ReadFromJsonAsync<JsonElement>();
         Assert.False(refused.GetProperty("success").GetBoolean());
-        Assert.Equal("You have already reviewed this novel", refused.GetProperty("message").GetString());
+        Assert.Equal("لقد كتبت مراجعة لهذه الرواية من قبل", refused.GetProperty("message").GetString());
     }
 
     [Fact]
@@ -224,7 +224,7 @@ public class CreateResponsesHttpTests(SardApiFactory api)
         Assert.Equal(HttpStatusCode.BadRequest, withDraft.StatusCode);
         var refused = await withDraft.Content.ReadFromJsonAsync<JsonElement>();
         Assert.False(refused.GetProperty("success").GetBoolean());
-        Assert.Equal("Cannot add deleted or draft novels to reading list", refused.GetProperty("message").GetString());
+        Assert.Equal("لا يمكن إضافة رواية غير منشورة", refused.GetProperty("message").GetString());
         Assert.Equal(HttpStatusCode.NotFound, withUnknown.StatusCode);
         var mine = await (await api.Get("/api/readinglist/my-lists", reader)).OkJson();
         Assert.Equal(0, mine.GetProperty("totalItemsCount").GetInt32());

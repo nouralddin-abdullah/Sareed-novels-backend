@@ -19,7 +19,7 @@ public class CreateReadingListCommandHandler(
 {
     public async Task<CreateReadingListResult> Handle(CreateReadingListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("Creating new reading list for {user}: ", currentUser.UserName);
 
         if (await readingListsRepository.IsNameTakenByUserAsync(currentUser.Id, request.Name))
@@ -28,7 +28,7 @@ public class CreateReadingListCommandHandler(
             {
                 Success = false,
                 Code = "DuplicateListName",
-                Message = $"You already have a reading list named '{request.Name}'"
+                Message = $"لديك قائمة قراءة باسم «{request.Name}» بالفعل"
             };
         }
 
@@ -85,7 +85,7 @@ public class CreateReadingListCommandHandler(
             return new CreateReadingListResult
             {
                 Success = true,
-                Message = "Reading list was created successfully.",
+                Message = $"أُنشئت «{readlingList.Name}»",
                 ReadingList = summary.ToPreviewDto(isOwner: true, isFollowing: false)
             };
         }
@@ -93,7 +93,7 @@ public class CreateReadingListCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Failed to create reading list."
+            Message = "تعذّر إنشاء القائمة. حاول مرة أخرى."
         };
     }
 }

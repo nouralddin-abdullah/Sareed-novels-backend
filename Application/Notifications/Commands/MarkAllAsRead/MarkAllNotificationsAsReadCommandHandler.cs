@@ -13,7 +13,7 @@ public class MarkAllNotificationsAsReadCommandHandler(
 {
     public async Task<int> Handle(MarkAllNotificationsAsReadCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         // Nothing unread is a success too: the answer is the same however often it is asked (it used to be a 400).
         var marked = await notificationsRepository.MarkAllAsRead(currentUser.Id);

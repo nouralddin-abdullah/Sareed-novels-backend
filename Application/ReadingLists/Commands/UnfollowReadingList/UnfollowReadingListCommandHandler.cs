@@ -15,11 +15,11 @@ public class UnfollowReadingListCommandHandler(
 {
     public async Task<OperationResult> Handle(UnfollowReadingListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("User {UserId} trying to unfollow reading list {ListId}", currentUser.Id, request.ReadingListId);
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
+            ?? throw new NotFoundException("القائمة غير موجودة", "ReadingListNotFound");
 
         if (readingList.UserId == currentUser.Id)
         {
@@ -27,7 +27,7 @@ public class UnfollowReadingListCommandHandler(
             {
                 Success = false,
                 Code = "CannotUnfollowOwnList",
-                Message = "You cannot unfollow your own reading list"
+                Message = "هذه قائمتك، فلا يمكنك إلغاء متابعتها"
             };
         }
 
@@ -39,7 +39,7 @@ public class UnfollowReadingListCommandHandler(
             {
                 Success = false,
                 Code = "NotFollowing",
-                Message = "You are not following this reading list"
+                Message = "أنت لا تتابع هذه القائمة"
             };
         }
 
@@ -54,7 +54,7 @@ public class UnfollowReadingListCommandHandler(
             return new OperationResult
             {
                 Success = true,
-                Message = $"Successfully unfollowed '{readingList.Name}'"
+                Message = $"ألغيت متابعة «{readingList.Name}»"
             };
         }
 
@@ -62,7 +62,7 @@ public class UnfollowReadingListCommandHandler(
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Failed to unfollow reading list"
+            Message = "تعذّر إلغاء متابعة القائمة. حاول مرة أخرى."
         };
     }
 }

@@ -27,7 +27,7 @@ public class CreateCommentCommandHandler(
 {
     public async Task<CreateCommentResult> Handle(CreateCommentCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         Guid? chapterId = null;
         Guid? postId = null;
@@ -35,20 +35,20 @@ public class CreateCommentCommandHandler(
         if (request.ParagraphId.HasValue)
         {
             logger.LogInformation("Creating comment for paragraph {ParagraphId}", request.ParagraphId);
-            var paragraph = await paragraphsRepository.GetParagraphById(request.ParagraphId.Value) ?? throw new NotFoundException("Paragraph not found", "ParagraphNotFound");
+            var paragraph = await paragraphsRepository.GetParagraphById(request.ParagraphId.Value) ?? throw ParagraphGone.Exception();
             chapterId = paragraph.ChapterId;
         }
         else if (request.ChapterId.HasValue)
         {
             logger.LogInformation("Creating comment for chapter {ChapterId}", request.ChapterId);
-            var chapter = await chaptersRepository.GetChapterById(request.ChapterId.Value) ?? throw new NotFoundException("Chapter not found", "ChapterNotFound");
+            var chapter = await chaptersRepository.GetChapterById(request.ChapterId.Value) ?? throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
             chapterId = chapter.Id;
         }
         else if (request.PostId.HasValue)
         {
             logger.LogInformation("Creating comment for post {PostId}", request.PostId);
             // The query filter hides deleted posts, so they are "not found" too.
-            var post = await postsRepository.GetPostById(request.PostId.Value) ?? throw new NotFoundException("Post not found", "PostNotFound");
+            var post = await postsRepository.GetPostById(request.PostId.Value) ?? throw new NotFoundException("هذا المنشور لم يعد موجودًا", "PostNotFound");
             postId = post.Id;
 
             // A post's author who blocked someone gets no comments (or replies) from them on it.
@@ -63,13 +63,13 @@ public class CreateCommentCommandHandler(
             {
                 Success = false,
                 Code = "CommentTargetRequired",
-                Message = "Either ChapterId, ParagraphId, or PostId must be provided"
+                Message = "حدد مكان التعليق: فصل أو فقرة أو منشور"
             };
         }
         
         if (request.ParentCommentId.HasValue)
         {
-            var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId.Value) ?? throw new NotFoundException("Parent comment not found!", "ParentCommentNotFound");
+            var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId.Value) ?? throw new NotFoundException("التعليق الذي تردّ عليه لم يعد موجودًا", "ParentCommentNotFound");
 
             // Nor replies to their comments.
             if (parentComment.UserId != currentUser.Id && await blocksRepository.IsBlockedAsync(parentComment.UserId, currentUser.Id, cancellationToken))
@@ -81,7 +81,7 @@ public class CreateCommentCommandHandler(
             // where its parent does.
             if (parentComment.ParentCommentId.HasValue)
             {
-                return new CreateCommentResult { Success = false, Code = "NestedReplyNotAllowed", Message = "Replies can only be added to top-level comments" };
+                return new CreateCommentResult { Success = false, Code = "NestedReplyNotAllowed", Message = "يمكن الرد على التعليقات فقط، لا على الردود" };
             }
 
             var sameLocation = request.PostId.HasValue ? parentComment.PostId == request.PostId
@@ -89,7 +89,7 @@ public class CreateCommentCommandHandler(
                 : parentComment.ChapterId == request.ChapterId && parentComment.ParagraphId == null;
             if (!sameLocation)
             {
-                return new CreateCommentResult { Success = false, Code = "ParentCommentElsewhere", Message = "The parent comment belongs to a different chapter, paragraph or post" };
+                return new CreateCommentResult { Success = false, Code = "ParentCommentElsewhere", Message = "التعليق الذي تردّ عليه في فصل أو فقرة أو منشور آخر" };
             }
         }
         
@@ -117,7 +117,8 @@ public class CreateCommentCommandHandler(
             );
         }
         
-        // Saves the comment and bumps the user's and the post/chapter/paragraph's counters in one transaction.
+        // Saves the comment and bumps the user's and the post/chapter/paragraph's counters in one transaction. An edit
+        // removing the paragraph at this moment makes it a 404 ParagraphNotFound too (CommentsRepository).
         var createdComment = await commentsRepository.CreateComment(comment);
         
         // Fire-and-forget: Send notifications
@@ -133,7 +134,7 @@ public class CreateCommentCommandHandler(
         return new CreateCommentResult
         {
             Success = true,
-            Message = "Comment created successfully",
+            Message = "نُشر تعليقك",
             Comment = commentDtos.Single()
         };
     }

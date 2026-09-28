@@ -65,6 +65,13 @@ exponential backoff (honoring `Retry-After`) up to 8 attempts, removes device to
 invalid, and skips groups the user switched off (`/api/notifications/preferences`). Finished rows are deleted after
 3 days.
 
+Devices: the app registers its FCM token with `POST /api/notifications/devices` (signed in) and unregisters it on
+sign-out with `DELETE /api/notifications/devices/{token}` (URL-encoded). The DELETE also works without a valid session
+(signed out by a 401, or offline and sent later): then it removes the token whoever registered it, since the token is
+a secret only that phone knows and removing it only stops pushes to it. With a valid session it removes only the
+caller's own registration, so a pending unregister of a previous account's token goes without the `Authorization`
+header. Always 204; both endpoints share a limit of 30 requests a minute per IP.
+
 ### Google Play point packs (Play Billing)
 
 The Android app (`com.sardnovels.app`) sells point packs as Google Play consumable in-app products. The server
@@ -232,3 +239,7 @@ adjusted), privilege subscriptions, devices, preferences and blocks are deleted;
 name and photo. Open reports about them close as `AccountDeleted`. The wallet balance is forfeited (set to zero, ledger
 type `BalanceForfeited`) and pending withdrawals are cancelled; the ledger and Play purchases stay. Deleted accounts
 have no profile (404) and are left out of search, supporters and follower lists.
+
+The `deleted-` user name prefix is reserved for them (`UserNameRules.LooksDeleted`, ignoring case), so a client can tell
+a deleted author by `userName` alone and hide the profile link, report and block: sign-up, Google sign-up and renames
+to such a name are refused with code `ReservedUserName` (register: 400 `result.code`; update-me: 400 `code`).

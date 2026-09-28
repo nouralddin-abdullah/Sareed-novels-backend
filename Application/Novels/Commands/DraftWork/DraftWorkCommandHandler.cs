@@ -10,11 +10,11 @@ public class DraftWorkCommandHandler(INovelsRepository novelsRepository, IUserCo
 {
     public async Task<OperationResult> Handle(DraftWorkCommand request, CancellationToken cancellationToken)
     {
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel was not found", "NovelNotFound");
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("This user not signed in", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("Forbidden", "NotOwner");
+            throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         }
         novel.IsDraft = true;
         novel.IsEligibleForRanking = false;
@@ -24,7 +24,7 @@ public class DraftWorkCommandHandler(INovelsRepository novelsRepository, IUserCo
             return new OperationResult
             {
                 Success = true,
-                Message = "Novel has been drafted successfully"
+                Message = "أصبحت الرواية مسودة، ولن تظهر للقرّاء"
             };
         }
 
@@ -32,7 +32,7 @@ public class DraftWorkCommandHandler(INovelsRepository novelsRepository, IUserCo
         {
             Success = false,
             Code = "OperationFailed",
-            Message = "Novel has not been drafted"
+            Message = "تعذّر تحويل الرواية إلى مسودة. حاول مرة أخرى."
         };
     }
 }

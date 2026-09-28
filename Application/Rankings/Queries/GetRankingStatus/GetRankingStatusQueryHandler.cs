@@ -25,7 +25,7 @@ public class GetRankingStatusQueryHandler(IRankingRepository rankingRepository, 
             return new GetRankingStatusResult
             {
                 Success = true,
-                Message = "Ranking status retrieved successfully",
+                Message = "هذه حالة قوائم الترتيب الآن",
                 Timestamp = DateTime.UtcNow,
                 TotalRankingLists = rankingListStatuses.Count,
                 RankingLists = rankingListStatuses
@@ -38,7 +38,7 @@ public class GetRankingStatusQueryHandler(IRankingRepository rankingRepository, 
             {
                 Success = false,
                 Code = "OperationFailed",
-                Message = "Failed to get ranking status",
+                Message = "تعذّر تحميل حالة الترتيب",
                 Timestamp = DateTime.UtcNow,
                 TotalRankingLists = 0,
                 RankingLists = new List<RankingListStatus>()

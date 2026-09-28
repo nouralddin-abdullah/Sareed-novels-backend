@@ -136,7 +136,7 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
         var result = await SendGift(request, reader).Handle(new SendGiftCommand { GiftId = gift.Id, NovelId = novel.Id, Count = 1 }, CancellationToken.None);
 
         Assert.False(result.Success);
-        Assert.Equal("Insufficient points balance", result.Message);
+        Assert.Equal("رصيدك من النقاط غير كافٍ", result.Message);
         Assert.Equal(-700m, await Balance(reader.Id));
         Assert.Equal(ledgerBefore, await LedgerCount(reader.Id));
     }
@@ -158,7 +158,7 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
         var result = await Privileges(request).SubscribeToPrivilegeAsync(novel.Id, reader.Id);
 
         Assert.False(result.Success);
-        Assert.StartsWith("Insufficient balance. Required: 100", result.Message);
+        Assert.Equal("رصيدك من النقاط غير كافٍ. سعر الاشتراك 100 نقطة.", result.Message);
         Assert.Equal(-700m, await Balance(reader.Id));
         await using var check = database.CreateContext();
         Assert.False(await check.NovelPrivilegeSubscriptions.AnyAsync(s => s.UserId == reader.Id));

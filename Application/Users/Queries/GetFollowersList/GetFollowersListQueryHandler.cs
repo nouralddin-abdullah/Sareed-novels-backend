@@ -19,7 +19,7 @@ public class GetFollowersListQueryHandler(
 {
     public async Task<PagedResult<FollowerDto>> Handle(GetFollowersListQuery request, CancellationToken cancellationToken)
     {
-        var user = await userManager.FindByIdAsync(request.UserId) ?? throw new NotFoundException("This user is not found", "UserNotFound");
+        var user = await userManager.FindByIdAsync(request.UserId) ?? throw new NotFoundException("المستخدم غير موجود", "UserNotFound");
         logger.LogInformation("Getting followers list for user {username}", user.DisplayName);
         
         // A size of 0 or less used to return every row.

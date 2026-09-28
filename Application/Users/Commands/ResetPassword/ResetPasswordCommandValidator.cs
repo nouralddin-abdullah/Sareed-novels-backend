@@ -8,13 +8,17 @@ public class ResetPasswordCommandValidator : AbstractValidator<ResetPasswordComm
     {
         RuleFor(d => d.NewPassword)
             .NotNull()
+            .WithMessage("اكتب كلمة المرور الجديدة")
             .MinimumLength(8)
-            .WithMessage("New password cannot be empty or less than 8 characters.");
+            .WithMessage("يجب أن تحتوي كلمة المرور الجديدة على 8 أحرف على الأقل");
 
+        // Both come from the link in the email.
         RuleFor(d => d.UserId)
-            .NotNull();
+            .NotNull()
+            .WithMessage("رابط تعيين كلمة المرور ناقص. اطلب رابطًا جديدًا.");
 
         RuleFor(d => d.Token)
-            .NotNull();
+            .NotNull()
+            .WithMessage("رابط تعيين كلمة المرور ناقص. اطلب رابطًا جديدًا.");
     }
 }

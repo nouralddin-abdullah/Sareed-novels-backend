@@ -15,24 +15,24 @@ public class UpdateGalleryImageCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateGalleryImageCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var image = await entityRepository.GetGalleryImageByIdAsync(request.ImageId);
         if (image == null)
         {
-            return new OperationResult { Success = false, Code = "GalleryImageNotFound", Message = "Gallery image not found" };
+            return new OperationResult { Success = false, Code = "GalleryImageNotFound", Message = "الصورة غير موجودة في معرض الصور" };
         }
 
         var entity = await entityRepository.GetEntityByIdAsync(image.EntityId);
         if (entity == null)
         {
-            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "Entity not found" };
+            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "هذا المدخل غير موجود" };
         }
 
         // Verify user owns the novel (using included Novel)
         if (entity.Novel == null || entity.Novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "هذا الإجراء متاح لكاتب الرواية فقط" };
         }
 
         // Update caption if provided
@@ -45,6 +45,6 @@ public class UpdateGalleryImageCommandHandler(
 
         logger.LogInformation("Gallery image {ImageId} caption updated", image.Id);
 
-        return new OperationResult { Success = true, Message = "Gallery image updated successfully" };
+        return new OperationResult { Success = true, Message = "حُفظت الصورة" };
     }
 }

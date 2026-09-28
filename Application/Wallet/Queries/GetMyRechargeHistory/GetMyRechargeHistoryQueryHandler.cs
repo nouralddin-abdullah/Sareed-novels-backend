@@ -15,7 +15,7 @@ public class GetMyRechargeHistoryQueryHandler(
 {
     public async Task<(IEnumerable<RechargeRequestDto>, int)> Handle(GetMyRechargeHistoryQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         
         var (requests, totalCount) = await rechargeRepository.GetUserRequestsAsync(

@@ -9,17 +9,17 @@ public class UpdateReadingListCommandValidator : AbstractValidator<UpdateReading
     {
         RuleFor(x => x.Name)
             .Length(1, 100)
-            .WithMessage("Reading list name must be between 1 and 100 characters")
+            .WithMessage("يجب أن يكون اسم القائمة من 1 إلى 100 حرف")
             .When(x => x.Name != null);
 
         RuleFor(x => x.Description)
             .MaximumLength(1000)
-            .WithMessage("Description cannot exceed 1000 characters")
+            .WithMessage("يجب ألا يتجاوز وصف القائمة 1000 حرف")
             .When(x => !string.IsNullOrWhiteSpace(x.Description));
 
         RuleFor(x => x.CoverImage)
             .Must(ImageValidationUtils.IsValidImageFile)
-            .WithMessage("Invalid image file. Allowed types: JPEG, PNG, WebP. Max size: 5MB")
+            .WithMessage("صورة القائمة يجب أن تكون بصيغة JPEG أو PNG أو WebP، وحجمها 5 ميغابايت أو أقل")
             .When(x => x.CoverImage != null);
     }
 }

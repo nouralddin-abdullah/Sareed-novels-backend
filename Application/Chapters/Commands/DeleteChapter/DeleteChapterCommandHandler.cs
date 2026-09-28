@@ -22,14 +22,14 @@ public class DeleteChapterCommandHandler(
     public async Task<bool> Handle(DeleteChapterCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Deleting chapter {@chapter}", request);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
-        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new  NotFoundException("Chapter wasn't found");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
+        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new  NotFoundException("الفصل غير موجود");
         
-        if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel", "NotOwner");
+        if (novel.AuthorId != currentUser.Id) throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
 
         // The chapter must belong to the novel the caller owns; otherwise any author could delete any chapter.
-        if (chapter.NovelId != novel.Id) throw new NotFoundException("Chapter wasn't found", "ChapterNotFound");
+        if (chapter.NovelId != novel.Id) throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
         
         var wasPublished = chapter.Status == "Published";
         var publishedSequence = chapter.PublishedChapterSequence;

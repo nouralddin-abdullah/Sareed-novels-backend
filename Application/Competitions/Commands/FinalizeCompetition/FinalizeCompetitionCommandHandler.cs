@@ -23,7 +23,7 @@ public class FinalizeCompetitionCommandHandler(
             // winners, instead of both seeing none and inserting two sets.
             if (!await competitionRepository.LockForUpdateAsync(request.CompetitionId))
             {
-                throw new NotFoundException("Competition not found", "CompetitionNotFound");
+                throw new NotFoundException("المسابقة غير موجودة", "CompetitionNotFound");
             }
 
             // Already finalized: return the existing winners

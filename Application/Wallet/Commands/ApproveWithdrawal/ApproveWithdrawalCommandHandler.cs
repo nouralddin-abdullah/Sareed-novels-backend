@@ -18,7 +18,7 @@ public class ApproveWithdrawalCommandHandler(
 {
     public async Task<OperationResult> Handle(ApproveWithdrawalCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
 
         var withdrawalRequest = await withdrawalRepository.GetByIdAsync(request.RequestId);
         if (withdrawalRequest == null)
@@ -27,7 +27,7 @@ public class ApproveWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "RequestNotFound",
-                Message = "Withdrawal request not found"
+                Message = "طلب السحب غير موجود"
             };
         }
 
@@ -37,7 +37,7 @@ public class ApproveWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyProcessed",
-                Message = $"Request already {withdrawalRequest.Status.ToLower()}"
+                Message = RequestMessages.AlreadyDecided(withdrawalRequest.Status)
             };
         }
 
@@ -48,7 +48,7 @@ public class ApproveWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "InsufficientBalance",
-                Message = "User no longer has sufficient balance for this withdrawal"
+                Message = "لم يعد رصيد المستخدم يكفي لهذا السحب"
             };
         }
 
@@ -81,7 +81,7 @@ public class ApproveWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "InsufficientBalance",
-                Message = "User no longer has sufficient balance for this withdrawal"
+                Message = "لم يعد رصيد المستخدم يكفي لهذا السحب"
             };
         }
 
@@ -91,7 +91,7 @@ public class ApproveWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyProcessed",
-                Message = "Request was already processed"
+                Message = RequestMessages.AlreadyProcessed
             };
         }
 
@@ -103,7 +103,7 @@ public class ApproveWithdrawalCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = $"Withdrawal approved. {withdrawalRequest.PointsRequested} points deducted. User receives {withdrawalRequest.NetAmountEGP} EGP."
+            Message = $"قُبل طلب السحب، وخُصمت {withdrawalRequest.PointsRequested} نقطة. يستلم المستخدم {RequestMessages.Egp(withdrawalRequest.NetAmountEGP)} جنيه."
         };
     }
 }

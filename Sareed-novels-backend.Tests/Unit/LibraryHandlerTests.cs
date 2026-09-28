@@ -108,7 +108,7 @@ public class LibraryHandlerTests
         var result = await handler.Handle(new CreateReadingListCommand { Name = "Favourites" }, CancellationToken.None);
 
         Assert.False(result.Success);
-        Assert.Contains("already", result.Message);
+        Assert.Contains("بالفعل", result.Message);
         await lists.DidNotReceiveWithAnyArgs().CreateAsync(default!);
     }
 }

@@ -48,7 +48,7 @@ public class DeleteAccountCommandHandler(
 
     public async Task Handle(DeleteAccountCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة");
 
         // Every attempt counts, before the password is checked: this is what stops password guessing here.
         if (!attempts.TryAcquire(currentUser.Id))

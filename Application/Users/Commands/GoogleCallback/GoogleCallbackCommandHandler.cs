@@ -41,7 +41,7 @@ namespace Application.Users.Commands.GoogleCallback
                 {
                     var errorContent = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
                     logger.LogError("Failed to exchange authorization code: {error}", errorContent);
-                    throw new ForbidException("Failed to exchange authorization code", "GoogleSignInFailed");
+                    throw new ForbidException("تعذّر تسجيل الدخول عبر Google. حاول مرة أخرى.", "GoogleSignInFailed");
                 }
 
                 var tokenContent = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -50,7 +50,7 @@ namespace Application.Users.Commands.GoogleCallback
                 var idToken = tokenData.GetProperty("id_token").GetString();
                 if (string.IsNullOrEmpty(idToken))
                 {
-                    throw new ForbidException("No ID token received from Google", "GoogleSignInFailed");
+                    throw new ForbidException("تعذّر تسجيل الدخول عبر Google. حاول مرة أخرى.", "GoogleSignInFailed");
                 }
 
                 logger.LogInformation("Successfully received ID token from Google");

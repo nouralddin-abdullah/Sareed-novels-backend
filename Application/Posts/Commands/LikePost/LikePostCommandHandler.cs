@@ -18,7 +18,7 @@ public class LikePostCommandHandler(
 {
     public async Task<OperationResult> Handle(LikePostCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
         var post = await postsRepository.GetPostById(request.PostId);
         if (post == null || post.IsDeleted)
@@ -27,7 +27,7 @@ public class LikePostCommandHandler(
             {
                 Success = false,
                 Code = "PostNotFound",
-                Message = "Post not found"
+                Message = "هذا المنشور لم يعد موجودًا"
             };
         }
 
@@ -38,7 +38,7 @@ public class LikePostCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyLiked",
-                Message = "Already liked this post"
+                Message = "سبق أن أعجبت بهذا المنشور"
             };
         }
 
@@ -50,7 +50,7 @@ public class LikePostCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = "Post liked successfully"
+            Message = "حُفظ إعجابك بالمنشور"
         };
     }
     
