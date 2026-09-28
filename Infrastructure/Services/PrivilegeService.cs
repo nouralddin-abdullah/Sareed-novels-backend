@@ -6,6 +6,7 @@ using Domain.Exceptions;
 using Domain.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Application.Common;
 
 namespace Infrastructure.Services;
 
@@ -645,7 +646,7 @@ public class PrivilegeService(
         }
 
         logger.LogInformation(
-            "User {UserId} subscribed to privilege for novel {NovelId}: {Cost} points (PERMANENT)",
+            "User {UserId} subscribed to privilege for novel {NovelId}: {Cost} points (permanent)",
             userId, novelId, cost);
 
         // Notify AFTER the commit (best effort), in a scope of its own: the task outlives the request, whose DbContext
@@ -677,36 +678,7 @@ public class PrivilegeService(
         return new OperationResult
         {
             Success = true,
-            Message = $"Subscribed successfully! All privilege chapters are now unlocked. (Cost: {cost} points, PERMANENT)"
-        };
-    }
-    
-    public async Task<OperationResult> CancelSubscriptionAsync(Guid novelId, string userId)
-    {
-        var subscription = await subscriptionRepository.GetActiveSubscriptionAsync(novelId, userId);
-        if (subscription == null)
-        {
-            return new OperationResult
-            {
-                Success = false,
-                Message = "You don't have an active subscription to this novel"
-            };
-        }
-        
-        subscription.IsActive = false;
-        subscription.CancelledAt = DateTime.UtcNow;
-        subscription.CancellationReason = "UserCancelled";
-        
-        await subscriptionRepository.UpdateAsync(subscription);
-        
-        logger.LogInformation(
-            "User {UserId} cancelled privilege subscription for novel {NovelId}",
-            userId, novelId);
-        
-        return new OperationResult
-        {
-            Success = true,
-            Message = "Subscription cancelled. You will no longer have access to privilege chapters. (No refund)"
+            Message = $"تم الاشتراك! فُتحت لك كل فصول الامتياز في هذه الرواية بشكل دائم، مقابل {Points.Format(cost)} نقطة."
         };
     }
     

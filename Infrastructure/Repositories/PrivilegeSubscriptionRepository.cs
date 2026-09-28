@@ -91,6 +91,13 @@ public class PrivilegeSubscriptionRepository(ApplicationDbContext dbContext) : I
                 s.IsActive); // No expiration check - permanent subscriptions!
     }
 
+    public async Task<DateTime?> GetActiveSubscriptionDateAsync(Guid novelId, string userId) =>
+        await dbContext.NovelPrivilegeSubscriptions
+            .Where(s => s.NovelId == novelId && s.UserId == userId && s.IsActive)
+            .OrderBy(s => s.SubscribedAt)
+            .Select(s => (DateTime?)s.SubscribedAt)
+            .FirstOrDefaultAsync();
+
     public async Task<List<NovelPrivilegeSubscription>> GetExpiredSubscriptionsAsync()
     {
         // No expiration for permanent subscriptions - return empty list

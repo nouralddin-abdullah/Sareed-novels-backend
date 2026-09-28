@@ -11,6 +11,7 @@ public class GetPrivilegeInfoQueryHandler(
     ILogger<GetPrivilegeInfoQueryHandler> logger,
     IUserContext userContext,
     IPrivilegeService privilegeService,
+    IPrivilegeSubscriptionRepository subscriptionRepository,
     INovelsRepository novelsRepository) : IRequestHandler<GetPrivilegeInfoQuery, PrivilegeInfoDto?>
 {
     public async Task<PrivilegeInfoDto?> Handle(GetPrivilegeInfoQuery request, CancellationToken cancellationToken)
@@ -21,17 +22,11 @@ public class GetPrivilegeInfoQueryHandler(
         if (privilege == null || !privilege.IsEnabled)
             return null;
         
+        // The signed-in reader's active subscription, and when it began (this was always null).
         var currentUser = userContext.GetCurrentUser();
-        var isSubscribed = false;
-        DateTime? subscribedAt = null;
-        
-        if (currentUser != null)
-        {
-            var subscription = await privilegeService.HasActiveSubscriptionAsync(
-                request.NovelId, 
-                currentUser.Id);
-            isSubscribed = subscription;
-        }
+        var subscribedAt = currentUser == null
+            ? null
+            : await subscriptionRepository.GetActiveSubscriptionDateAsync(request.NovelId, currentUser.Id);
         
         var totalPublished = await novelsRepository.GetPublishedChaptersCountAsync(request.NovelId);
         
@@ -42,7 +37,7 @@ public class GetPrivilegeInfoQueryHandler(
             LockedChaptersCount = privilege.CurrentLockedCount,
             PrivilegeStartSequence = privilege.PrivilegeStartSequence,
             TotalPublishedChapters = totalPublished,
-            IsSubscribed = isSubscribed,
+            IsSubscribed = subscribedAt.HasValue,
             SubscribedAt = subscribedAt
         };
     }
