@@ -16,6 +16,12 @@ public class WithdrawalRequestDto
     public DateTime? ProcessedAt { get; set; }
     public string? RejectionReason { get; set; }
 
+    /// <summary>
+    /// The member cancelled it themselves (#27, DELETE /api/wallet/withdraw/{id}): its status is Rejected, with the
+    /// rejection reason «ألغاه صاحب الطلب», so apps can show it as cancelled rather than refused.
+    /// </summary>
+    public bool CancelledByOwner { get; set; }
+
     // For admin view
     public string? UserId { get; set; }
     public string? UserDisplayName { get; set; }

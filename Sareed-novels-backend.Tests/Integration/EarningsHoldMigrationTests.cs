@@ -56,7 +56,7 @@ public class EarningsHoldMigrationTests(EmptySqlServerDatabase database) : IClas
 
         // The author can withdraw all of their earnings now (1700 of the 3700 balance), none is on hold.
         var withdrawable = await WalletTesting.Wallet(db).GetWithdrawableAsync(author.Id);
-        Assert.Equal((3700m, 1700m, 0m, 1700m), (withdrawable.Balance, withdrawable.ReleasedEarnings, withdrawable.PendingEarnings,
+        Assert.Equal((3700m, 1700m, 0m, 1700m), (withdrawable.Balance, withdrawable.Released, withdrawable.PendingEarnings,
             withdrawable.Withdrawable));
 
         // An earning row without a release date is refused from now on.

@@ -2,18 +2,25 @@
 
 namespace Domain.Repositories;
 
-/// <summary>A user's earnings at a given moment (#22).</summary>
-/// <param name="Released">Earnings whose hold has ended.</param>
-/// <param name="ReversedReleased">What EarningReversed rows took back of released earnings (or of a row that can't be
-/// found, counted here to be safe).</param>
-/// <param name="Held">Earnings still on hold, less what was reversed of them.</param>
-/// <param name="NextReleaseAt">The earliest release among held earnings with something left; null when there is none.</param>
-public sealed record EarningsTotals(decimal Released, decimal ReversedReleased, decimal Held, DateTime? NextReleaseAt);
+/// <summary>
+/// A ledger row as the wallet's pools read it (#27): what it was, how much, when, and for an earning when it is released or
+/// for the author's side of a reversal which earning it took back.
+/// </summary>
+public sealed record LedgerEntry(
+    Guid Id,
+    string Type,
+    decimal Amount,
+    decimal BalanceBefore,
+    decimal BalanceAfter,
+    DateTime CreatedAt,
+    DateTime? AvailableAt = null,
+    Guid? ReversedTransactionId = null);
 
-/// <summary>An author's earning still on hold that a reader's gift or privilege subscription paid for (#22 rule 4).</summary>
+/// <summary>An author's earning still on hold that a gift or privilege subscription paid for (#22 rule 4, #27).</summary>
 /// <param name="EarningId">The GiftReceived or PrivilegeRevenue row.</param>
+/// <param name="AuthorId">Who received it.</param>
 /// <param name="Remaining">Its amount less what earlier reversals already took back.</param>
-/// <param name="PaidAt">When the reader paid (the GiftSent or PrivilegeSubscription row).</param>
+/// <param name="PaidAt">When it was paid for (the GiftSent or PrivilegeSubscription row).</param>
 public sealed record HeldEarning(
     Guid EarningId,
     string AuthorId,
@@ -28,15 +35,16 @@ public interface IPointTransactionRepository
     Task<PointTransaction> CreateAsync(PointTransaction transaction);
     Task<(IEnumerable<PointTransaction>, int)> GetUserTransactionsAsync(string userId, int pageNumber, int pageSize);
 
-    /// <summary>The user's earnings at <paramref name="now"/>: released, held, and what refunds reversed of each.</summary>
-    Task<EarningsTotals> GetEarningsTotalsAsync(string userId, DateTime now);
+    /// <summary>Every ledger row of the user, in no particular order (the wallet's pools order them, #27).</summary>
+    Task<IReadOnlyList<LedgerEntry>> GetLedgerAsync(string userId);
 
     /// <summary>
-    /// The earnings still on hold at <paramref name="now"/> that <paramref name="buyerId"/> paid for with gifts or privilege
-    /// subscriptions since <paramref name="paidSince"/>, newest payment first, with what is left of each. Payments from
-    /// before #22 aren't paired with their earning (and those earnings are all released anyway).
+    /// The earnings still on hold at <paramref name="now"/> that <paramref name="payerId"/> paid for with gifts or privilege
+    /// subscriptions, whenever they were paid (the hold bounds how far back that is), newest payment first, with what is
+    /// left of each. Earnings of deleted accounts are left out: their balance was forfeited already. Payments from before
+    /// #22 aren't paired with their earning (and those earnings are all released anyway).
     /// </summary>
-    Task<IReadOnlyList<HeldEarning>> GetHeldEarningsPaidByAsync(string buyerId, DateTime paidSince, DateTime now);
+    Task<IReadOnlyList<HeldEarning>> GetHeldEarningsPaidByAsync(string payerId, DateTime now);
 
     /// <summary>The EarningReversed rows of these users since <paramref name="since"/>, newest first, at most
     /// <paramref name="perUser"/> each.</summary>

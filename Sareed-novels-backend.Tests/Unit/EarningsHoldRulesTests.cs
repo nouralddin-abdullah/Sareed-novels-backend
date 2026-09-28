@@ -6,16 +6,18 @@ using Domain.Repositories;
 namespace Sareed_novels_backend.Tests.Unit;
 
 /// <summary>
-/// The arithmetic of #22: what can be withdrawn (rule 3), how a refund's deficit is taken back from held earnings
-/// (rule 4), and the Arabic refusal. The same rules against SQL Server: Integration/EarningsHoldTests.
+/// The arithmetic of #22 and #27: what can be withdrawn from the pools (rule 3), how a refund's deficit is taken back from
+/// held earnings (rule 4), and the Arabic refusal. How the pools come from the ledger: WalletPoolsTests; the clawback's
+/// cascade: ClawbackPlanTests; the same rules against SQL Server: Integration/EarningsHoldTests.
 /// </summary>
 public class EarningsHoldRulesTests
 {
     private static readonly DateTime Now = new(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
 
-    private static WithdrawableBalance Wallet(decimal balance, decimal released = 0, decimal reversed = 0, decimal withdrawn = 0,
-        decimal pendingWithdrawals = 0, decimal pendingEarnings = 0, DateTime? nextReleaseAt = null, int holdDays = 30) =>
-        new(balance, released, reversed, withdrawn, pendingWithdrawals, pendingEarnings, nextReleaseAt, holdDays, Now);
+    private static WithdrawableBalance Wallet(decimal balance, decimal released = 0, decimal pendingWithdrawals = 0,
+        decimal pendingEarnings = 0, DateTime? nextReleaseAt = null, int holdDays = 30, decimal deficit = 0) =>
+        new(balance, Math.Max(0, balance - released - pendingEarnings), released, pendingEarnings, nextReleaseAt, deficit,
+            pendingWithdrawals, holdDays, Now);
 
     // ===== Rule 3: what is withdrawable =====
 
@@ -29,22 +31,11 @@ public class EarningsHoldRulesTests
     }
 
     [Fact]
-    public void Spending_comes_out_of_bought_points_first_and_only_then_out_of_earnings()
+    public void Released_earnings_are_withdrawable_less_what_pending_requests_reserve()
     {
-        // 1500 earned and 3500 bought.
-        Assert.Equal(1500, Wallet(5000, released: 1500).Withdrawable);
-        // 3000 spent: all of it bought points.
-        Assert.Equal(1500, Wallet(2000, released: 1500).Withdrawable);
-        // 3800 spent: the bought points ran out, 300 came out of earnings.
-        Assert.Equal(1200, Wallet(1200, released: 1500).Withdrawable);
-    }
+        var wallet = Wallet(4000, released: 3500, pendingWithdrawals: 1500);
 
-    [Fact]
-    public void Withdrawals_paid_or_pending_and_reversed_earnings_come_off()
-    {
-        var wallet = Wallet(4000, released: 5000, withdrawn: 1000, reversed: 500, pendingWithdrawals: 1500);
-
-        Assert.Equal(3500, wallet.Payable); // min(4000, 5000 - 1000 - 500)
+        Assert.Equal(3500, wallet.Payable);
         Assert.Equal(2000, wallet.Withdrawable);
     }
 
@@ -52,11 +43,18 @@ public class EarningsHoldRulesTests
     public void Pending_requests_reserve_the_balance_as_well_as_the_earnings()
     {
         // 2000 earned, 500 spent, 1000 requested: once that is paid the balance holds 500.
-        var wallet = Wallet(1500, released: 2000, pendingWithdrawals: 1000);
+        var wallet = Wallet(1500, released: 1500, pendingWithdrawals: 1000);
 
         Assert.Equal(500, wallet.Withdrawable);
         // An approval checks against what is left before any request is paid.
         Assert.Equal(1500, wallet.Payable);
+    }
+
+    [Fact]
+    public void Never_more_than_the_balance()
+    {
+        // The pools add up to the balance, so this can't happen; if it ever did, the balance is the limit.
+        Assert.Equal(1200, Wallet(1200, released: 1500).Payable);
     }
 
     [Theory]
@@ -71,9 +69,25 @@ public class EarningsHoldRulesTests
     [Fact]
     public void Never_below_zero()
     {
-        // Withdrew bought points before #22: more withdrawn than ever earned.
-        Assert.Equal(0, Wallet(3000, released: 1000, withdrawn: 2000).Withdrawable);
+        // Requests made before #22 against bought points: more reserved than there is to pay.
         Assert.Equal(0, Wallet(3000, released: 1000, pendingWithdrawals: 2000).Withdrawable);
+    }
+
+    [Fact]
+    public void The_record_takes_its_amounts_from_the_pools()
+    {
+        var pools = WalletPools.Fold(1800,
+        [
+            new LedgerEntry(Guid.NewGuid(), TransactionType.GiftReceived, 1000, 0, 1000, Now.AddDays(-40), Now.AddDays(-10)),
+            new LedgerEntry(Guid.NewGuid(), TransactionType.GiftReceived, 800, 1000, 1800, Now.AddDays(-2), Now.AddDays(28))
+        ], Now);
+
+        var wallet = WithdrawableBalance.From(1800, pools, 300, 30, Now);
+
+        Assert.Equal((1800m, 0m, 1000m, 800m, 0m, 300m), (wallet.Balance, wallet.Bought, wallet.Released, wallet.PendingEarnings,
+            wallet.Deficit, wallet.PendingWithdrawals));
+        Assert.Equal(Now.AddDays(28), wallet.NextReleaseAt);
+        Assert.Equal((1000m, 700m), (wallet.Payable, wallet.Withdrawable));
     }
 
     [Fact]

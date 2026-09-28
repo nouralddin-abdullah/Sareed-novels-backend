@@ -102,12 +102,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPointTransactionRepository, PointTransactionRepository>();
         services.AddScoped<IPointCalculationService, PointCalculationService>();
         services.AddScoped<IWalletService, WalletService>();
-        // How long earnings are held before they can be withdrawn (#22). A value that isn't a whole number of days from
-        // 0 to 365 stops the API at startup, rather than holding earnings for a length nobody chose.
-        services.AddOptions<WalletSettings>()
-            .Bind(configuration.GetSection(WalletSettings.SectionName))
-            .Validate(s => s.EarningsHoldDays is >= 0 and <= 365, "Wallet:EarningsHoldDays must be a whole number of days from 0 to 365")
-            .ValidateOnStart();
+        // How long earnings are held before they can be withdrawn (#22): 0 to 365 days, at least 30 in Production (#27).
+        services.AddWalletSettings(configuration);
         services.AddPlayBilling(configuration); // point packs bought in the Android app (Infrastructure/PlayBilling)
         
         // Gift System
