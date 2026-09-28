@@ -124,7 +124,7 @@ public class PushDeliveryTests(SqlServerDatabase database) : IClassFixture<SqlSe
         await Notify(s => s.SendLikeOnReviewNotification(me.Id, actor, myReview.Id, otherNovel));
         await Notify(s => s.SendReadingListFollowedNotification(me.Id, actor, readingList.Id, readingList.Name));
         await Notify(s => s.SendGiftReceivedNotification(me.Id, actor, novel, gift, 3));
-        await Notify(s => s.SendPrivilegeSubscribedNotification(me.Id, actor, novel, 150m));
+        await Notify(s => s.SendPrivilegeSubscribedNotification(me.Id, actor, novel));
 
         await Drain();
 

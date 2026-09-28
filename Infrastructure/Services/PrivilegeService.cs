@@ -694,12 +694,7 @@ public class PrivilegeService(
                 var subscriber = await usersRepository.GetUserById(userId);
                 if (subscriber != null)
                 {
-                    await notificationService.SendPrivilegeSubscribedNotification(
-                        novel.AuthorId,
-                        subscriber,
-                        novel,
-                        cost
-                    );
+                    await notificationService.SendPrivilegeSubscribedNotification(novel.AuthorId, subscriber, novel);
                 }
             }
             catch (Exception ex)

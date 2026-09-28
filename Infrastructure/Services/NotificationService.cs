@@ -1,5 +1,4 @@
 ﻿using Application.Services;
-using Application.Common;
 using Domain.Constants;
 using Domain.Entities;
 using Domain.Repositories;
@@ -408,8 +407,11 @@ public class NotificationService(
         }
     }
 
-    // ✅ NEW: Privilege subscription notification
-    public async Task SendPrivilegeSubscribedNotification(string novelAuthorId, User subscriber, Novel novel, decimal cost)
+    /// <summary>
+    /// A reader subscribed to the author's early access. The message names no price: the push body repeats it word for
+    /// word, and a phone shows a background push itself (the app can't take a price out of it).
+    /// </summary>
+    public async Task SendPrivilegeSubscribedNotification(string novelAuthorId, User subscriber, Novel novel)
     {
         try
         {
@@ -421,7 +423,7 @@ public class NotificationService(
                 ActorId = subscriber.Id,
                 ActorDisplayName = subscriber.DisplayName,
                 ActorProfilePhoto = subscriber.ProfilePhoto,
-                Message = $"{subscriber.DisplayName} اشترك في الوصول المبكر لروايتك «{novel.Title}» ({Points.Format(cost)} نقطة)",
+                Message = $"{subscriber.DisplayName} اشترك في الوصول المبكر لروايتك «{novel.Title}»",
                 ActionUrl = $"/novel/{novel.Slug}",
                 IsRead = false,
                 RelatedEntityId = novel.Id,
