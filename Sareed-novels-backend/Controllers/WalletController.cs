@@ -1,4 +1,5 @@
-﻿using Application.Wallet.Commands.RequestRecharge;
+﻿using Application.Wallet.Commands.CancelWithdrawal;
+using Application.Wallet.Commands.RequestRecharge;
 using Application.Wallet.Commands.RequestWithdrawal;
 using Application.Wallet.Queries.GetMyRechargeHistory;
 using Application.Wallet.Queries.GetMyTransactionHistory;
@@ -82,6 +83,17 @@ public class WalletController(IMediator mediator) : ControllerBase
             return BadRequest(result);
         }
         return Ok(result);
+    }
+
+    /// <summary>
+    /// The member cancels their own pending withdrawal request (#27): 204. 404 RequestNotFound for an unknown id or another
+    /// member's request; 409 AlreadyProcessed once it was approved, rejected or cancelled (the Arabic message says which).
+    /// </summary>
+    [HttpDelete("withdraw/{id:guid}")]
+    public async Task<IActionResult> CancelWithdrawal([FromRoute] Guid id)
+    {
+        await mediator.Send(new CancelWithdrawalCommand(id));
+        return NoContent();
     }
 
     [HttpGet("withdraw")]

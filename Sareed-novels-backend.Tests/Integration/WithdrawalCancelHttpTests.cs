@@ -109,6 +109,21 @@ public class WithdrawalCancelHttpTests(SardApiFactory api)
     }
 
     [Fact]
+    public async Task The_admin_is_told_a_request_was_cancelled_by_its_owner_and_it_leaves_the_pending_list()
+    {
+        var (admin, owner) = (await api.SignUpAdmin(), await api.SignUp());
+        var request = await SeedRequest(owner, 1000);
+        Assert.Equal(HttpStatusCode.NoContent, (await Cancel(owner, request.Id)).StatusCode);
+
+        var approve = await api.Send(HttpMethod.Patch, $"/api/admin/withdraw/{request.Id}/approve", admin);
+
+        var body = await approve.Error(HttpStatusCode.BadRequest);
+        Assert.Equal(("AlreadyProcessed", "ألغى صاحبه هذا الطلب من قبل"), (body.GetProperty("code").GetString(), body.GetProperty("message").GetString()));
+        var pending = await (await api.Get("/api/admin/withdraw/pending?pageSize=100", admin)).OkJson();
+        Assert.DoesNotContain(pending.GetProperty("requests").EnumerateArray(), r => r.GetProperty("id").GetGuid() == request.Id);
+    }
+
+    [Fact]
     public async Task Another_members_request_or_an_unknown_id_is_not_found()
     {
         var (owner, other) = (await api.SignUp(), await api.SignUp());

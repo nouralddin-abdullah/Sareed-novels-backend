@@ -71,6 +71,15 @@ public class WithdrawalRequestRepository(ApplicationDbContext dbContext) : IWith
             .Where(r => r.UserId == userId && r.Status == Domain.Constants.RequestStatus.Pending)
             .SumAsync(r => (decimal)r.PointsRequested);
 
+    public async Task<(string UserId, string Status, string? RejectionReason)?> GetStateAsync(Guid id)
+    {
+        var row = await dbContext.WithdrawalRequests.AsNoTracking()
+            .Where(r => r.Id == id)
+            .Select(r => new { r.UserId, r.Status, r.RejectionReason })
+            .SingleOrDefaultAsync();
+        return row is null ? null : (row.UserId, row.Status, row.RejectionReason);
+    }
+
     public async Task<bool> TryMarkProcessedAsync(Guid id, string newStatus, string processedBy, string? rejectionReason = null)
     {
         var updated = await dbContext.WithdrawalRequests

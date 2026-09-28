@@ -8,10 +8,14 @@ internal static class RequestMessages
 {
     public const string AlreadyProcessed = "عولج هذا الطلب من قبل";
 
-    /// <summary>A request an admin already decided: accepted or refused (the status used to be glued into English).</summary>
-    public static string AlreadyDecided(string status) => status switch
+    /// <summary>
+    /// A request already decided: accepted, refused, or (a withdrawal) cancelled by its owner (the status used to be glued
+    /// into English).
+    /// </summary>
+    public static string AlreadyDecided(string status, string? rejectionReason = null) => status switch
     {
         RequestStatus.Approved => "قُبل هذا الطلب من قبل",
+        RequestStatus.Rejected when rejectionReason == WithdrawalMessages.CancelledByOwnerReason => "ألغى صاحبه هذا الطلب من قبل",
         RequestStatus.Rejected => "رُفض هذا الطلب من قبل",
         _ => AlreadyProcessed
     };

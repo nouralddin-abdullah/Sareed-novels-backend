@@ -1,5 +1,6 @@
 using Application.Common;
 using Application.Services;
+using Domain.Constants;
 
 namespace Application.Wallet;
 
@@ -25,6 +26,21 @@ public static class WithdrawalMessages
     public static string Rule(int holdDays) => holdDays > 0
         ? $"تُسحب أرباح الهدايا واشتراكات الوصول المبكر وحدها، بعد {Days(holdDays)} من استلامها، أما النقاط المشحونة أو المشتراة فلا تُسحب."
         : "تُسحب أرباح الهدايا واشتراكات الوصول المبكر وحدها، أما النقاط المشحونة أو المشتراة فلا تُسحب.";
+
+    /// <summary>
+    /// The reason a request its owner cancelled carries (#27). Its status is Rejected, as for the requests an account
+    /// deletion cancels, which every app already shows with its reason.
+    /// </summary>
+    public const string CancelledByOwnerReason = "ألغاه صاحب الطلب";
+
+    /// <summary>Why a request can't be cancelled: it isn't pending any more.</summary>
+    public static string NotCancellable(string status, string? rejectionReason) => status switch
+    {
+        RequestStatus.Approved => "قُبل طلب السحب هذا من قبل، فلا يمكن إلغاؤه.",
+        RequestStatus.Rejected when rejectionReason == CancelledByOwnerReason => "ألغيت طلب السحب هذا من قبل.",
+        RequestStatus.Rejected => "رُفض طلب السحب هذا من قبل، فلا يمكن إلغاؤه.",
+        _ => "عولج طلب السحب هذا من قبل، فلا يمكن إلغاؤه."
+    };
 
     /// <summary>To the admin approving a request the member can't be paid in full any more.</summary>
     public static string NotPayable(WithdrawableBalance balance) =>

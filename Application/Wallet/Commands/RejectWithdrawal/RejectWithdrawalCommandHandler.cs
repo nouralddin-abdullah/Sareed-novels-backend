@@ -34,7 +34,7 @@ public class RejectWithdrawalCommandHandler(
             {
                 Success = false,
                 Code = "AlreadyProcessed",
-                Message = RequestMessages.AlreadyDecided(withdrawalRequest.Status)
+                Message = RequestMessages.AlreadyDecided(withdrawalRequest.Status, withdrawalRequest.RejectionReason)
             };
         }
 
