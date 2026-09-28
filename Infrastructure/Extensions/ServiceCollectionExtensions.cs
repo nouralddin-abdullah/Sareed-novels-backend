@@ -59,6 +59,7 @@ public static class ServiceCollectionExtensions
         })
         .AddEntityFrameworkStores<ApplicationDbContext>()
         .AddClaimsPrincipalFactory<SardUserClaimsPrincipalFactory>()
+        .AddErrorDescriber<ArabicIdentityErrorDescriber>()
         .AddDefaultTokenProviders();
 
         services.AddScoped<IUsersRepository, UsersRepositories>();
