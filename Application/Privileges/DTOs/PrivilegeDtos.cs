@@ -45,7 +45,7 @@ public class PrivilegeSubscriptionDto
 {
     public Guid Id { get; set; }
     public Guid NovelId { get; set; }
-    /// <summary>The novel's current slug; null if the novel was deleted.</summary>
+    /// <summary>The novel's current slug (subscriptions to deleted novels aren't listed).</summary>
     public string? NovelSlug { get; set; }
     public string NovelTitle { get; set; } = default!;
     public string? NovelCoverImageUrl { get; set; }

@@ -11,9 +11,9 @@ namespace Application.Gifts.Queries.GetMyGiftHistory;
 public class GetMyGiftHistoryQueryHandler(
     IGiftTransactionRepository giftTransactionRepository,
     IUserContext userContext,
-    IMapper mapper) : IRequestHandler<GetMyGiftHistoryQuery, PagedResult<GiftTransactionDto>>
+    IMapper mapper) : IRequestHandler<GetMyGiftHistoryQuery, PagedResult<GiftHistoryItemDto>>
 {
-    public async Task<PagedResult<GiftTransactionDto>> Handle(GetMyGiftHistoryQuery request, CancellationToken cancellationToken)
+    public async Task<PagedResult<GiftHistoryItemDto>> Handle(GetMyGiftHistoryQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser()
             ?? throw new ForbidException("User not authenticated");
@@ -27,9 +27,9 @@ public class GetMyGiftHistoryQueryHandler(
             pageSize
         );
 
-        var transactionDtos = mapper.Map<List<GiftTransactionDto>>(transactions);
+        var transactionDtos = mapper.Map<List<GiftHistoryItemDto>>(transactions);
 
-        return new PagedResult<GiftTransactionDto>(
+        return new PagedResult<GiftHistoryItemDto>(
             transactionDtos,
             totalCount,
             pageSize: pageSize,

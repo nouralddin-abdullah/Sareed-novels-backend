@@ -30,9 +30,11 @@ public class PrivilegeSubscriptionRepository(ApplicationDbContext dbContext) : I
         int pageSize,
         bool includeExpired = false)
     {
+        // Subscriptions to a deleted novel are left out of the count as well as the page (the Include's join already
+        // dropped them from the page, since Novel has a query filter).
         var query = dbContext.NovelPrivilegeSubscriptions
             .Include(s => s.Novel)
-            .Where(s => s.UserId == userId);
+            .Where(s => s.UserId == userId && !s.Novel.IsDeleted);
 
         if (!includeExpired)
         {

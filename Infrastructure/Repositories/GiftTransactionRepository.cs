@@ -35,8 +35,10 @@ public class GiftTransactionRepository(ApplicationDbContext dbContext) : IGiftTr
 
     public async Task<(IEnumerable<GiftTransaction> transactions, int totalCount)> GetTransactionsBySender(string senderId, int pageNumber, int pageSize)
     {
+        // Gifts to a deleted novel are left out of the count as well as the page: the Include's join (Novel has a
+        // query filter) dropped them from the page, but the count still counted them.
         var query = dbContext.GiftTransactions
-            .Where(t => t.SenderId == senderId)
+            .Where(t => t.SenderId == senderId && !t.Novel.IsDeleted)
             .Include(t => t.Gift)
             .Include(t => t.Novel)
             .OrderByDescending(t => t.CreatedAt);

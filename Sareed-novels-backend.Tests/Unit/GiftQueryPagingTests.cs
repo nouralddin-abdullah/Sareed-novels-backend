@@ -25,6 +25,7 @@ public class GiftQueryPagingTests
     {
         mapper.Map<List<GiftDto>>(Arg.Any<object>()).Returns([]);
         mapper.Map<List<GiftTransactionDto>>(Arg.Any<object>()).Returns([]);
+        mapper.Map<List<GiftHistoryItemDto>>(Arg.Any<object>()).Returns([]);
         userContext.GetCurrentUser().Returns(new CurrentUser("reader-1", "e", "u", "d"));
     }
 

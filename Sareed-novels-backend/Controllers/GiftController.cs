@@ -81,9 +81,13 @@ public class GiftController(IMediator mediator) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// The gifts the signed-in user sent, newest first, each with its novel's id, slug, title and cover (gifts to novels
+    /// deleted since are left out).
+    /// </summary>
     [HttpGet("my-history")]
     [Authorize]
-    public async Task<ActionResult<PagedResult<GiftTransactionDto>>> GetMyGiftHistory(
+    public async Task<ActionResult<PagedResult<GiftHistoryItemDto>>> GetMyGiftHistory(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {

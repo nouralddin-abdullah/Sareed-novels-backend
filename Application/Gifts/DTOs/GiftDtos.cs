@@ -28,6 +28,24 @@ public class GiftTransactionDto
     public DateTime CreatedAt { get; set; }
 }
 
+/// <summary>
+/// A gift the signed-in user sent (GET /api/gift/my-history): what, how many, and the novel it went to. The sender is
+/// the user, so there are no sender fields (they were always null here).
+/// </summary>
+public class GiftHistoryItemDto
+{
+    public Guid Id { get; set; }
+    public GiftDto Gift { get; set; } = default!;
+    public Guid NovelId { get; set; }
+    /// <summary>The novel's current slug, title and cover.</summary>
+    public string NovelSlug { get; set; } = default!;
+    public string NovelTitle { get; set; } = default!;
+    public string? NovelCoverImageUrl { get; set; }
+    public int Count { get; set; }
+    public decimal TotalCost { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
 public class NovelGiftsSummaryDto
 {
     public List<GiftTransactionDto> RecentGifts { get; set; } = new();

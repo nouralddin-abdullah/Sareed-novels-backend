@@ -8,8 +8,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Sareed_novels_backend.Tests.Integration;
 
 /// <summary>
-/// Gifts in Arabic (the catalog's nameAr, the author's notification), and wallet entries that say what they were
-/// about (type, novel, gift, count) in Arabic.
+/// Gifts in Arabic (the catalog's nameAr, the author's notification), wallet entries that say what they were about
+/// (type, novel, gift, count) in Arabic, and the gift history with its novel.
 /// </summary>
 [Collection(ReaderApiCollection.Name)]
 public class GiftWalletHttpTests(SardApiFactory api)
@@ -168,5 +168,46 @@ public class GiftWalletHttpTests(SardApiFactory api)
         var withdrawal = Assert.Single(await Transactions(author));
         Assert.Equal(TransactionType.WithdrawalApproved, withdrawal.GetProperty("type").GetString());
         Assert.Equal("سحب رصيد: 1000 نقطة (90.00 جنيه عبر إنستاباي)", withdrawal.GetProperty("description").GetString());
+    }
+
+    [Fact]
+    public async Task Gift_history_carries_the_novel_and_counts_only_what_it_lists()
+    {
+        var reader = await api.SignUp();
+        var author = await api.SignUp();
+        var kept = await api.AddNovel(author, title: "رواية باقية " + Seed.Marker());
+        var deleted = await api.AddNovel(author);
+        await Fund(reader, 2000);
+        (await SendGift(reader, kept.Id, 1)).EnsureSuccessStatusCode();
+        (await SendGift(reader, deleted.Id, 2)).EnsureSuccessStatusCode();
+        await using (var db = api.Db())
+        {
+            db.NovelPrivilegeSubscriptions.AddRange(
+                new NovelPrivilegeSubscription { Id = Guid.NewGuid(), NovelId = kept.Id, UserId = reader.Id, AmountPaid = 100, IsActive = true },
+                new NovelPrivilegeSubscription { Id = Guid.NewGuid(), NovelId = deleted.Id, UserId = reader.Id, AmountPaid = 100, IsActive = true });
+            await db.SaveChangesAsync();
+            await db.Novels.Where(n => n.Id == deleted.Id).ExecuteUpdateAsync(s => s.SetProperty(n => n.IsDeleted, true));
+        }
+
+        var history = await (await api.Get("/api/gift/my-history", reader)).OkJson();
+
+        // The gift to the deleted novel isn't listed, and isn't counted either (it used to be: totalItemsCount 2).
+        Assert.Equal(1, history.GetProperty("totalItemsCount").GetInt32());
+        var item = Assert.Single(history.GetProperty("items").EnumerateArray());
+        Assert.Equal(kept.Id, item.GetProperty("novelId").GetGuid());
+        Assert.Equal(kept.Slug, item.GetProperty("novelSlug").GetString());
+        Assert.Equal(kept.Title, item.GetProperty("novelTitle").GetString());
+        Assert.Equal(kept.CoverImageUrl, item.GetProperty("novelCoverImageUrl").GetString());
+        Assert.Equal("وردة", item.GetProperty("gift").GetProperty("nameAr").GetString());
+        Assert.Equal(1, item.GetProperty("count").GetInt32());
+        // The sender is the user: the always-null sender fields are gone.
+        Assert.False(item.TryGetProperty("senderUserName", out _));
+        Assert.False(item.TryGetProperty("senderDisplayName", out _));
+        Assert.False(item.TryGetProperty("senderProfilePhoto", out _));
+
+        var subscriptions = await (await api.Get("/api/privilege/my-subscriptions", reader)).OkJson();
+        Assert.Equal(1, subscriptions.GetProperty("totalCount").GetInt32());
+        Assert.Equal(1, subscriptions.GetProperty("totalPages").GetInt32());
+        Assert.Equal(kept.Id, Assert.Single(subscriptions.GetProperty("subscriptions").EnumerateArray()).GetProperty("novelId").GetGuid());
     }
 }

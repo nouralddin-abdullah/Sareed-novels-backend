@@ -4,7 +4,7 @@ using MediatR;
 
 namespace Application.Gifts.Queries.GetMyGiftHistory;
 
-public class GetMyGiftHistoryQuery(int pageNumber, int pageSize) : IRequest<PagedResult<GiftTransactionDto>>
+public class GetMyGiftHistoryQuery(int pageNumber, int pageSize) : IRequest<PagedResult<GiftHistoryItemDto>>
 {
     public int PageNumber { get; set; } = pageNumber;
     public int PageSize { get; set; } = pageSize;
