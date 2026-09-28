@@ -15,7 +15,8 @@ public class RequestWithdrawalCommandHandler(
     IUserContext userContext,
     IWithdrawalRequestRepository withdrawalRepository,
     IPointCalculationService calculationService,
-    IWalletService walletService) : IRequestHandler<RequestWithdrawalCommand, OperationResult>
+    IWalletService walletService,
+    ITransactionManager transactionManager) : IRequestHandler<RequestWithdrawalCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(RequestWithdrawalCommand request, CancellationToken cancellationToken)
     {
@@ -56,17 +57,6 @@ public class RequestWithdrawalCommandHandler(
             };
         }
 
-        // Check sufficient balance
-        if (!await walletService.HasSufficientBalanceAsync(currentUser.Id, request.PointsRequested))
-        {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "InsufficientBalance",
-                Message = $"رصيدك من النقاط غير كافٍ. يلزم {request.PointsRequested} نقطة على الأقل."
-            };
-        }
-
         // Calculate amounts
         var (baseAmount, tax, netAmount) = calculationService.CalculateWithdrawalNet(request.PointsRequested);
 
@@ -85,7 +75,32 @@ public class RequestWithdrawalCommandHandler(
             RequestedAt = DateTime.UtcNow
         };
 
-        await withdrawalRepository.CreateAsync(withdrawalRequest);
+        // Only withdrawable points (released earnings, #22), not the balance. Checked and saved while the wallet is
+        // locked, so two requests at once can't both count the same points: the second one sees the first as pending.
+        var refusal = await transactionManager.InTransactionAsync<WithdrawableBalance?>(async () =>
+        {
+            var withdrawable = await walletService.GetWithdrawableForUpdateAsync(currentUser.Id);
+            if (withdrawable.Withdrawable < request.PointsRequested)
+            {
+                return withdrawable;
+            }
+
+            await withdrawalRepository.CreateAsync(withdrawalRequest);
+            return null;
+        }, cancellationToken);
+
+        if (refusal is not null)
+        {
+            logger.LogInformation(
+                "User {UserId} asked to withdraw {Points} points but can withdraw {Withdrawable} (balance {Balance}, {PendingEarnings} on hold)",
+                currentUser.Id, request.PointsRequested, refusal.Withdrawable, refusal.Balance, refusal.PendingEarnings);
+            return new OperationResult
+            {
+                Success = false,
+                Code = WithdrawalMessages.NotWithdrawableCode,
+                Message = WithdrawalMessages.NotWithdrawable(refusal)
+            };
+        }
 
         logger.LogInformation(
             "User {UserId} requested withdrawal: {Points} points, {NetAmount} EGP via {Method}",

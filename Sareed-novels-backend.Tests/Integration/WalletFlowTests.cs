@@ -371,6 +371,11 @@ public class WalletFlowTests(SqlServerDatabase database) : IClassFixture<SqlServ
     {
         var users = await SeedUsers(1000m, null);
         var (user, admin) = (users[0], users[1]);
+        await using (var db = database.CreateContext())
+        {
+            db.PointTransactions.Add(WalletTesting.ReleasedEarning(user.Id, 1000)); // only earnings are paid out (#22)
+            await db.SaveChangesAsync();
+        }
         var first = await SeedWithdrawal(user, 1000);
         var second = await SeedWithdrawal(user, 1000);
 
@@ -384,10 +389,10 @@ public class WalletFlowTests(SqlServerDatabase database) : IClassFixture<SqlServ
 
         Assert.Single(results, r => r.Success);
         Assert.Equal(0m, await Balance(user.Id));
-        Assert.Single(await Ledger(user.Id));
+        Assert.Single(await Ledger(user.Id), t => t.Type == TransactionType.WithdrawalApproved);
 
-        await using var db = database.CreateContext();
-        var statuses = await db.WithdrawalRequests.Where(w => w.UserId == user.Id).Select(w => w.Status).ToListAsync();
+        await using var check = database.CreateContext();
+        var statuses = await check.WithdrawalRequests.Where(w => w.UserId == user.Id).Select(w => w.Status).ToListAsync();
         Assert.Equal([RequestStatus.Approved, RequestStatus.Pending], statuses.Order());
     }
 

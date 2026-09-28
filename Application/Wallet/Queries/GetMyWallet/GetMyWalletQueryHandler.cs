@@ -15,9 +15,14 @@ public class GetMyWalletQueryHandler(
     public async Task<WalletDto> Handle(GetMyWalletQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
-        
+
         var wallet = await walletService.GetOrCreateWalletAsync(currentUser.Id);
-        
-        return mapper.Map<WalletDto>(wallet);
+        var withdrawable = await walletService.GetWithdrawableAsync(currentUser.Id);
+
+        var dto = mapper.Map<WalletDto>(wallet);
+        dto.Withdrawable = withdrawable.Withdrawable;
+        dto.PendingEarnings = withdrawable.PendingEarnings;
+        dto.NextReleaseAt = withdrawable.NextReleaseAt;
+        return dto;
     }
 }

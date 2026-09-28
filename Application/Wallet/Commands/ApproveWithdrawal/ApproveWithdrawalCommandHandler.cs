@@ -41,27 +41,25 @@ public class ApproveWithdrawalCommandHandler(
             };
         }
 
-        // Check if user still has sufficient balance
-        if (!await walletService.HasSufficientBalanceAsync(withdrawalRequest.UserId, withdrawalRequest.PointsRequested))
-        {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "InsufficientBalance",
-                Message = "لم يعد رصيد المستخدم يكفي لهذا السحب"
-            };
-        }
-
         // The status change and the debit commit together: if the debit fails the request stays Pending (it used to
-        // be left Approved with nothing deducted), and a second approval can't deduct twice.
+        // be left Approved with nothing deducted), and a second approval can't deduct twice. What is withdrawable is
+        // checked again here, not the balance (#22): a refund since the request may have taken it. The wallet stays
+        // locked from that check to the debit, so nothing can change it in between.
         bool approved;
         try
         {
             approved = await transactionManager.InTransactionAsync(async () =>
             {
+                var withdrawable = await walletService.GetWithdrawableForUpdateAsync(withdrawalRequest.UserId);
+
                 if (!await withdrawalRepository.TryMarkProcessedAsync(withdrawalRequest.Id, RequestStatus.Approved, currentUser.Id))
                 {
                     return false;
+                }
+
+                if (withdrawable.Payable < withdrawalRequest.PointsRequested)
+                {
+                    throw new NotWithdrawableException(withdrawable); // rolls the status change back
                 }
 
                 await walletService.DeductPointsAsync(
@@ -74,13 +72,27 @@ public class ApproveWithdrawalCommandHandler(
                 return true;
             }, cancellationToken);
         }
-        catch (InsufficientBalanceException ex)
+        catch (NotWithdrawableException ex)
         {
-            logger.LogWarning(ex, "Withdrawal {RequestId} not approved: balance too low", request.RequestId);
+            logger.LogWarning(
+                "Withdrawal {RequestId} of {Points} points not approved: user {UserId} can be paid {Payable} (balance {Balance}, released earnings {Released}, withdrawn {Withdrawn}, reversed {Reversed})",
+                request.RequestId, withdrawalRequest.PointsRequested, withdrawalRequest.UserId, ex.Balance.Payable, ex.Balance.Balance,
+                ex.Balance.ReleasedEarnings, ex.Balance.Withdrawn, ex.Balance.ReversedEarnings);
             return new OperationResult
             {
                 Success = false,
-                Code = "InsufficientBalance",
+                Code = WithdrawalMessages.NotWithdrawableCode,
+                Message = WithdrawalMessages.NotPayable(ex.Balance)
+            };
+        }
+        catch (InsufficientBalanceException ex)
+        {
+            // The locked check above makes this unreachable; kept so a change there can't turn into a 500.
+            logger.LogError(ex, "Withdrawal {RequestId} not approved: balance too low after the withdrawable check", request.RequestId);
+            return new OperationResult
+            {
+                Success = false,
+                Code = WithdrawalMessages.NotWithdrawableCode,
                 Message = "لم يعد رصيد المستخدم يكفي لهذا السحب"
             };
         }
@@ -105,5 +117,10 @@ public class ApproveWithdrawalCommandHandler(
             Success = true,
             Message = $"قُبل طلب السحب، وخُصمت {withdrawalRequest.PointsRequested} نقطة. يستلم المستخدم {RequestMessages.Egp(withdrawalRequest.NetAmountEGP)} جنيه."
         };
+    }
+
+    private sealed class NotWithdrawableException(WithdrawableBalance balance) : Exception
+    {
+        public WithdrawableBalance Balance { get; } = balance;
     }
 }

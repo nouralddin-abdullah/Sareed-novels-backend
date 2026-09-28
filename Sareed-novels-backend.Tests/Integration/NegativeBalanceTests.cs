@@ -170,11 +170,12 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
 
         await using var request = new Request(database);
         var result = await new RequestWithdrawalCommandHandler(NullLogger<RequestWithdrawalCommandHandler>.Instance, SignedIn(reader),
-                new WithdrawalRequestRepository(request.Db), new PointCalculationService(), request.Wallet)
+                new WithdrawalRequestRepository(request.Db), new PointCalculationService(), request.Wallet, request.Transactions)
             .Handle(new RequestWithdrawalCommand { PointsRequested = 1000, WithdrawalMethod = PaymentMethod.InstaPay, PaymentDetails = "01000000000" },
                 CancellationToken.None);
 
         Assert.False(result.Success);
+        Assert.Equal("InsufficientWithdrawableBalance", result.Code);
         await using var check = database.CreateContext();
         Assert.False(await check.WithdrawalRequests.AnyAsync(w => w.UserId == reader.Id));
     }
@@ -194,6 +195,7 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
         };
         await using (var db = database.CreateContext())
         {
+            db.PointTransactions.Add(WalletTesting.ReleasedEarning(author.Id, 1500));
             db.WithdrawalRequests.Add(withdrawal);
             await db.SaveChangesAsync();
         }

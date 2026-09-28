@@ -13,12 +13,13 @@ namespace Infrastructure.Services;
 /// <summary>
 /// Every balance change is a single conditional SQL UPDATE (never read-modify-write) and is committed together with its
 /// PointTransaction row: each method joins the caller's transaction or opens its own. Earnings are held for
-/// Wallet:EarningsHoldDays (their AvailableAt) before they can be withdrawn (#22).
+/// Wallet:EarningsHoldDays before they can be withdrawn, and only earnings can be (#22).
 /// </summary>
 public class WalletService(
     ILogger<WalletService> logger,
     IUserWalletRepository walletRepository,
     IPointTransactionRepository transactionRepository,
+    IWithdrawalRequestRepository withdrawalRepository,
     UserManager<User> userManager,
     ITransactionManager transactionManager,
     TimeProvider clock,
@@ -154,6 +155,21 @@ public class WalletService(
         logger.LogInformation(
             "Transferred {Amount} points from user {FromUserId} to {ToUserId}",
             amount, fromUserId, toUserId);
+    }
+
+    public async Task<WithdrawableBalance> GetWithdrawableAsync(string userId) =>
+        await WithdrawableAsync(userId, await walletRepository.GetBalanceAsync(userId));
+
+    public async Task<WithdrawableBalance> GetWithdrawableForUpdateAsync(string userId) =>
+        await WithdrawableAsync(userId, await walletRepository.LockBalanceAsync(userId));
+
+    private async Task<WithdrawableBalance> WithdrawableAsync(string userId, decimal balance)
+    {
+        var now = Now();
+        var earnings = await transactionRepository.GetEarningsTotalsAsync(userId, now);
+        var (withdrawn, pendingWithdrawals) = await withdrawalRepository.GetPointTotalsAsync(userId);
+        return new WithdrawableBalance(balance, earnings.Released, earnings.ReversedReleased, withdrawn, pendingWithdrawals,
+            earnings.Held, earnings.NextReleaseAt, HoldDays, now);
     }
 
     private async Task<decimal> DebitOrThrowAsync(string userId, decimal amount) =>
