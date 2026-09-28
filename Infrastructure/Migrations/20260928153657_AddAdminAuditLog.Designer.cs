@@ -4,6 +4,7 @@ using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260928153657_AddAdminAuditLog")]
+    partial class AddAdminAuditLog
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1449,9 +1452,6 @@ namespace Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<DateTime?>("AvailableAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<decimal>("BalanceAfter")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -1480,9 +1480,6 @@ namespace Infrastructure.Migrations
                     b.Property<Guid?>("RelatedRequestId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("ReversedTransactionId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -1494,29 +1491,13 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RelatedRequestId")
-                        .HasDatabaseName("IX_PointTransactions_RelatedRequest")
-                        .HasFilter("[RelatedRequestId] IS NOT NULL");
-
-                    b.HasIndex("ReversedTransactionId")
-                        .HasDatabaseName("IX_PointTransactions_ReversedTransaction")
-                        .HasFilter("[ReversedTransactionId] IS NOT NULL");
-
                     b.HasIndex("Type", "CreatedAt")
                         .HasDatabaseName("IX_PointTransactions_Type_Created");
 
                     b.HasIndex("UserId", "CreatedAt")
                         .HasDatabaseName("IX_PointTransactions_User_Created");
 
-                    b.HasIndex("UserId", "Type", "AvailableAt")
-                        .HasDatabaseName("IX_PointTransactions_User_Type_Available");
-
-                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("UserId", "Type", "AvailableAt"), new[] { "Amount", "ReversedTransactionId" });
-
-                    b.ToTable("PointTransactions", t =>
-                        {
-                            t.HasCheckConstraint("CK_PointTransactions_EarningHasAvailableAt", "[Type] NOT IN (N'GiftReceived', N'PrivilegeRevenue') OR [AvailableAt] IS NOT NULL");
-                        });
+                    b.ToTable("PointTransactions");
                 });
 
             modelBuilder.Entity("Domain.Entities.Post", b =>

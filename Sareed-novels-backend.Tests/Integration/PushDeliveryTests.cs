@@ -524,7 +524,9 @@ public class PushDeliveryTests(SqlServerDatabase database) : IClassFixture<SqlSe
             Microsoft.Extensions.Options.Options.Create(new PushDeliveryOptions()), TimeProvider.System, logger);
 
         await worker.StartAsync(CancellationToken.None);
-        for (var waited = 0; waited < 100 && (await Outbox()).Any(o => o.Status == PushOutboxStatus.Pending); waited++)
+        // Up to 60 s: the loop ends as soon as the row is skipped, so this only matters when the machine is busy
+        // (it failed once at 10 s while a web build ran alongside the full suite).
+        for (var waited = 0; waited < 600 && (await Outbox()).Any(o => o.Status == PushOutboxStatus.Pending); waited++)
         {
             await Task.Delay(100);
         }

@@ -187,8 +187,9 @@ Errors are `{ "code": "...", "message": "<Arabic, for the user>" }`. Act on `cod
 
 When Google voids a purchase (refund, chargeback, revocation), its points are taken back even if that takes the
 balance below zero (ledger type `PlayRefund`). A negative balance blocks all spending (gifts, early-access
-subscriptions, withdrawals) until purchases or recharges bring it back up; points the user already gave away (a
-gift's author) are not clawed back. A purchase Google voids before anyone claims it is recorded so it can never be
+subscriptions, withdrawals) until purchases or recharges bring it back up. What the balance can't cover was given away:
+it is taken back from the authors' earnings those points paid for, while they are still on hold (the clawback in
+"Wallet: what can be withdrawn" below). A purchase Google voids before anyone claims it is recorded so it can never be
 credited.
 
 #### How it works
@@ -203,6 +204,59 @@ credited.
   day of overlap; Google keeps 30 days) and applies each once. Real-time developer notifications (Pub/Sub) aren't
   needed; if they are added later, their voided-purchase notification calls the same `ApplyVoidAsync`.
 - The app pool can idle or recycle on shared hosting: the worker picks up where it left off at the next start.
+
+### Wallet: what can be withdrawn
+
+Bought points have no cash value (the terms: «النقاط لا قيمة نقدية لها»). Only what an author earns from readers can be
+paid out, and only once a refund can no longer take it back (#22):
+
+1. **Bought points are never withdrawable**: website top-ups (`RechargeApproved`), Google Play packs (`PlayPurchase`)
+   and anything else in a balance that didn't come from earnings. They are spent inside Sard only.
+2. **Earnings are held.** Each `GiftReceived` and `PrivilegeRevenue` row gets `AvailableAt` = its `CreatedAt` plus
+   the hold, and is withdrawable from then on. 30 days by default, the window of Google's voided purchases list.
+3. **Withdrawable** = min(balance, released earnings − approved withdrawals − reversed earnings) − pending withdrawal
+   requests, never below 0. The min means points an author spends come out of bought points first. Pending requests
+   aren't deducted from the balance until approval, so they come off both sides: two requests can't use the same
+   points. A request is checked against this when made, and approval checks again (without the pending requests,
+   which include itself); both hold the wallet's row lock from the check to the insert or debit.
+4. **Refund clawback.** When a Play purchase is voided and the refund takes the buyer below zero, the deficit (how far
+   below zero this refund went) is taken back from the buyer's gifts and privilege subscriptions paid since that
+   purchase, newest first: from each, what is left of the author's earning while it is still on hold. Two
+   `EarningReversed` rows per reversal, both with `RelatedRequestId` = the voided purchase and `ReversedTransactionId`
+   = the earning row: negative on the author (the balance may go below zero, which blocks spending) and positive on the
+   buyer, whose refund already took those points. Released earnings are never touched; that risk is left to the
+   manual payout review. Both rows of a gift or subscription share `RelatedRequestId` (the gift or subscription record),
+   which is how a payment finds its earning; payments from before #22 have none, but their earnings are all released.
+5. **Existing data**: the migration `EarningsHoldAndReversal` released every earning row written before it at once
+   (`AvailableAt` = `CreatedAt`); the hold applies to earnings from then on. Balances that came from top-ups stopped
+   being withdrawable. The database refuses an earning row without `AvailableAt` (a check constraint).
+
+| Environment variable | Required | Value |
+|---|---|---|
+| `Wallet__EarningsHoldDays` | no | Days an earning is held before it can be withdrawn, 0 to 365. Default `30`. A change applies to earnings credited from then on. Any other value stops the API at startup. |
+
+API (additive):
+
+- `GET /api/wallet` also returns `withdrawable` (what a request can ask for now), `pendingEarnings` (earnings still on
+  hold, less what refunds took back of them) and `nextReleaseAt` (UTC, when the next of those is released; `null` when
+  none is on hold). `currentBalance` means what it always did.
+- `POST /api/wallet/withdraw` for more than `withdrawable`: 400 `{ "code": "InsufficientWithdrawableBalance",
+  "message": "<Arabic>" }`, where the message says what can be withdrawn now, when more is released and the rule, e.g.
+  «يمكنك سحب 1200 نقطة فقط الآن، وتصبح أرباحك التالية قابلة للسحب خلال 5 أيام. تُسحب أرباح الهدايا واشتراكات الوصول
+  المبكر وحدها، بعد 30 يومًا من استلامها، أما النقاط المشحونة أو المشتراة فلا تُسحب.» `BelowMinimumWithdrawal` is checked
+  first, as before; `InsufficientBalance` is no longer returned by this endpoint.
+- `PATCH /api/admin/withdraw/{id}/approve` refuses a request the member can no longer be paid with the same code (the
+  message tells the admin what can be paid now), and the request stays pending.
+- `GET /api/admin/withdraw/pending`: each request also has `requesterWithdrawable` (what approving can pay the
+  requester now, before their pending requests are taken out) and `recentEarningReversals` (their `EarningReversed`
+  rows of the last 90 days, at most 10: `id`, `amount`, `description`, `createdAt`, `purchaseId`,
+  `reversedTransactionId`, `novelId`). The member's own `GET /api/wallet/withdraw` doesn't have these fields.
+- The wallet history (`GET /api/wallet/transactions`) has the new type `EarningReversed`, with an Arabic
+  `description` («أُلغيت أرباح 500 نقطة لأن عملية الشراء التي جاءت منها استُرد مبلغها» on the author,
+  «استُرجعت 500 نقطة من أرباح الكاتب وأُعيدت إلى رصيدك، ...» on the buyer); apps need a label for it.
+
+Account deletion is unchanged: the whole balance, held earnings included, is forfeited, and pending withdrawals are
+cancelled.
 
 ### Account deletion: `DELETE /api/User/me`
 
@@ -229,7 +283,7 @@ Errors are `{ "code": "...", "message": "<Arabic, for the user>" }`:
 After 204 every token of the account is refused: delete the stored token, clear what the app cached about the user and
 show the signed-out app (the server already removed the account's push devices, so there's nothing to unregister). If
 the response was lost and the retry gets 401, the deletion went through. Suspended members can't sign in, so they
-email `support@sardnovels.com` instead.
+email `support@sardnovels.com` instead, and an admin deletes the account for them (`OwnerRequest`, below).
 
 What deletion does (`IAccountDeletionService`, one transaction): the user row stays, anonymized, so comments, reviews
 and posts keep an author shown as «مستخدم محذوف» (user name `deleted-<id>`); email, phone, bio, links, photo and banner
@@ -243,3 +297,47 @@ have no profile (404) and are left out of search, supporters and follower lists.
 The `deleted-` user name prefix is reserved for them (`UserNameRules.LooksDeleted`, ignoring case), so a client can tell
 a deleted author by `userName` alone and hide the profile link, report and block: sign-up, Google sign-up and renames
 to such a name are refused with code `ReservedUserName` (register: 400 `result.code`; update-me: 400 `code`).
+
+### Admin: deleting a member's account: `DELETE /api/admin/users/{userId}`
+
+For when Sard must delete an account the member doesn't delete themselves: the terms say Sard is for 13 and older and
+that an account is deleted once we learn it belongs to someone under 13 (`Underage`); enforcing the rules when
+suspending isn't enough (`PolicyViolation`); or a member who asks by email and can't do it in the app, a suspended one
+for instance (`OwnerRequest`, once you have checked the email comes from the account's own address). The other admin
+endpoints (reports, suspensions, wallet requests) are under `/api/admin` too; all need an admin's token.
+
+```bash
+curl -X DELETE https://api-sareed.runasp.net/api/admin/users/<userId> \
+  -H "Authorization: Bearer <admin token>" -H "Content-Type: application/json" \
+  -d '{ "reason": "Underage", "note": "optional, at most 500 characters" }'
+```
+
+- `reason`: `Underage`, `PolicyViolation` or `OwnerRequest` (by name, any case; numbers are refused). `note` is optional:
+  the admin's own words for the record, such as where the request came from (a support email's date, a report id).
+  Never put the member's personal data in it (name, email, age, documents): it is kept after everything else about
+  them is gone.
+- There is no re-authentication and no undo. The result is exactly the member's own deletion (above): anonymized as
+  «مستخدم محذوف», novels hidden, private data deleted, balance forfeited, pending withdrawals cancelled, open reports
+  about them closed as `AccountDeleted`, every session ended, push devices and images removed.
+- 200 answers what it did. `filesNotDeleted` above 0 means an image stayed in storage (the error log names its key):
+
+```json
+{ "userId": "5f1c...", "reason": "Underage", "deletedAt": "2026-09-28T12:00:00.1234567Z", "novelsHidden": 2,
+  "forfeitedBalance": 500, "withdrawalsCancelled": 1, "reportsClosed": 2, "filesDeleted": 2, "filesNotDeleted": 0 }
+```
+
+| HTTP | `code` | Meaning |
+|---|---|---|
+| 400 | `ValidationFailed` | no body, a missing or unknown `reason`, or a `note` over 500 characters (`message` says which) |
+| 401 | | not signed in |
+| 403 | | not an admin (the role check, before the endpoint runs) |
+| 403 | `CannotDeleteAdmin` | an admin's account, yours included: its admin role has to be removed first |
+| 404 | `UserNotFound` | no user with that id |
+| 409 | `AlreadyDeleted` | deleted already, by the member or by an earlier request whose response was lost |
+
+The record: each deletion writes a row to the `AdminAuditLogs` table in the deletion's own transaction, so there is a
+row exactly when an account was deleted: the admin's id, the action (`DeleteAccount`), the member's user id, the reason,
+the note and the time (the member's `DeletedAt`). It holds ids and the admin's note only, nothing copied from the
+account. The API also logs `Admin {AdminId} deleted the account of user {UserId} ({Reason})` at Information level.
+There is no endpoint to read the table yet (query it in the database); it is meant for later admin actions too. The
+reports the deletion closes show no admin in `resolvedById`, as after a member's own deletion; the audit row says who.

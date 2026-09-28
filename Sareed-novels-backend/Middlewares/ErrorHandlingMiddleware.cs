@@ -74,6 +74,7 @@ public class ErrorHandlingMiddleware(ILogger<ErrorHandlingMiddleware> logger) : 
         ForbidException forbid => new(StatusCodes.Status403Forbidden, forbid.Code ?? Forbidden, forbid.Message),
         TooManyRequestsException tooMany => new(StatusCodes.Status429TooManyRequests, tooMany.Code ?? TooManyRequests, tooMany.Message),
         BadRequestException badRequest => new(StatusCodes.Status400BadRequest, badRequest.Code, badRequest.Message),
+        ConflictException conflict => new(StatusCodes.Status409Conflict, conflict.Code, conflict.Message),
         // A spend that lost a race for the balance, where the handler didn't answer it itself.
         InsufficientBalanceException => new(StatusCodes.Status400BadRequest, "InsufficientBalance", InsufficientBalanceMessage),
         // A value the API can't work with (EF refusing a negative Skip used to end here as a 403): the client's fault,

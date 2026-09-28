@@ -154,6 +154,11 @@ public class GiftWalletHttpTests(SardApiFactory api)
 
         var author = await api.SignUp();
         await Fund(author, 1000);
+        await using (var db = api.Db())
+        {
+            db.PointTransactions.Add(WalletTesting.ReleasedEarning(author.Id, 1000)); // only earnings are withdrawable (#22)
+            await db.SaveChangesAsync();
+        }
         (await api.Send(HttpMethod.Post, "/api/wallet/withdraw", author, JsonContent.Create(new
         {
             pointsRequested = 1000, withdrawalMethod = PaymentMethod.InstaPay, paymentDetails = "01000000000"
@@ -165,8 +170,8 @@ public class GiftWalletHttpTests(SardApiFactory api)
         }
         (await api.Send(HttpMethod.Patch, $"/api/admin/withdraw/{withdrawalId}/approve", admin)).EnsureSuccessStatusCode();
 
-        var withdrawal = Assert.Single(await Transactions(author));
-        Assert.Equal(TransactionType.WithdrawalApproved, withdrawal.GetProperty("type").GetString());
+        var withdrawal = Assert.Single(await Transactions(author),
+            t => t.GetProperty("type").GetString() == TransactionType.WithdrawalApproved);
         Assert.Equal("سحب رصيد: 1000 نقطة (90.00 جنيه عبر إنستاباي)", withdrawal.GetProperty("description").GetString());
     }
 

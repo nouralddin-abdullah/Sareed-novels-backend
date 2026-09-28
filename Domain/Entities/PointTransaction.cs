@@ -13,7 +13,12 @@ public class PointTransaction
     
     /// <summary>For people, in Arabic; clients can build their own text from <see cref="Type"/> and the ids below.</summary>
     public string Description { get; set; } = default!;
-    public Guid? RelatedRequestId { get; set; } // Links to RechargeRequest/WithdrawalRequest
+    /// <summary>
+    /// The record the row is about: the RechargeRequest or WithdrawalRequest, the PlayPurchase (also on its PlayRefund
+    /// and on the EarningReversed rows it caused), or, on both rows of a gift or privilege subscription, the
+    /// GiftTransaction or NovelPrivilegeSubscription (which pairs a GiftSent with its GiftReceived; rows before #22 have none).
+    /// </summary>
+    public Guid? RelatedRequestId { get; set; }
 
     /// <summary>
     /// The novel a gift or privilege subscription was for (no foreign key: the ledger outlives the novel). Null for
@@ -24,6 +29,19 @@ public class PointTransaction
     /// <summary>The gift sent or received, and how many of it; null for other types and rows before #17.</summary>
     public Guid? GiftId { get; set; }
     public int? GiftCount { get; set; }
-    
+
+    /// <summary>
+    /// Earning rows (<see cref="Constants.TransactionType.Earnings"/>): when the points become withdrawable (UTC),
+    /// CreatedAt plus the hold (Wallet:EarningsHoldDays, #22). Earnings written before #22 were released at once
+    /// (AvailableAt = CreatedAt). Null on every other type; the database refuses an earning row without it.
+    /// </summary>
+    public DateTime? AvailableAt { get; set; }
+
+    /// <summary>
+    /// EarningReversed rows: the earning row (GiftReceived, PrivilegeRevenue) whose points were taken back, on the
+    /// author's row and on the buyer's. No foreign key, like NovelId. Null on every other type.
+    /// </summary>
+    public Guid? ReversedTransactionId { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

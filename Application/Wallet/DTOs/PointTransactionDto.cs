@@ -5,7 +5,9 @@ public class PointTransactionDto
     public Guid Id { get; set; }
     /// <summary>
     /// Machine-readable kind: RechargeApproved, WithdrawalApproved, GiftSent, GiftReceived, PrivilegeSubscription,
-    /// PrivilegeRevenue, PlayPurchase or PlayRefund (entries from the wallet's first week may say Recharge or Withdrawal).
+    /// PrivilegeRevenue, PlayPurchase, PlayRefund, BalanceForfeited or EarningReversed (entries from the wallet's first
+    /// week may say Recharge or Withdrawal). EarningReversed (#22): negative, an author's earning taken back because the
+    /// purchase that paid for it was refunded; positive, those points given back to the buyer whose refund took them.
     /// </summary>
     public string Type { get; set; } = default!;
     public decimal Amount { get; set; }

@@ -3,6 +3,7 @@ using Application.Covers.Queries.GetCoverStatus;
 using Application.Reports.Commands.LiftSuspension;
 using Application.Reports.Commands.ResolveReport;
 using Application.Reports.Queries.GetReports;
+using Application.Users.Commands.AdminDeleteAccount;
 using Application.Wallet.Commands.ApproveRecharge;
 using Application.Wallet.Commands.ApproveWithdrawal;
 using Application.Wallet.Commands.RejectRecharge;
@@ -13,6 +14,7 @@ using Domain.Constants;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Sareed_novels_backend.Controllers;
 
@@ -38,7 +40,7 @@ public class AdminController(IMediator mediator) : ControllerBase
         return result.ProcessorAvailable ? Ok(result) : StatusCode(StatusCodes.Status503ServiceUnavailable, result);
     }
 
-    // Moderation: reports (POST /api/reports) and suspensions
+    // Moderation: reports (POST /api/reports), suspensions and account deletion
 
     /// <summary>
     /// The reports, paged: status Open (the default, oldest first), Resolved, Dismissed or All. Each lists its target
@@ -60,6 +62,18 @@ public class AdminController(IMediator mediator) : ControllerBase
     [HttpDelete("users/{userId}/suspension")]
     public async Task<IActionResult> LiftSuspension([FromRoute] string userId) =>
         Ok(await mediator.Send(new LiftSuspensionCommand(userId)));
+
+    /// <summary>
+    /// Deletes a member's account for good, exactly as their own deletion does (IAccountDeletionService), and records it
+    /// in the admin audit log. Body: reason Underage | PolicyViolation | OwnerRequest, and an optional note (at most 500
+    /// characters). 200 with what it did; 404 UserNotFound; 409 AlreadyDeleted; 403 CannotDeleteAdmin for an admin's
+    /// account (the caller's own included); 400 ValidationFailed for a missing or unknown reason (no body too), or a
+    /// longer note.
+    /// </summary>
+    [HttpDelete("users/{userId}")]
+    public async Task<IActionResult> DeleteAccount([FromRoute] string userId,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] AdminDeleteAccountRequest? request) =>
+        Ok(await mediator.Send(new AdminDeleteAccountCommand(userId, request?.Reason, request?.Note)));
 
     // Wallet Management Endpoints
     [HttpGet("recharge/pending")]

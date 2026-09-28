@@ -25,9 +25,15 @@ internal sealed class AccountDeletionService(
     /// <summary>The ledger row of a forfeited balance, in the wallet history.</summary>
     internal const string ForfeitDescription = "أُلغي الرصيد المتبقي لحذف الحساب";
 
-    public async Task<AccountDeletionResult> DeleteAsync(string userId, CancellationToken cancellationToken = default)
+    public Task<AccountDeletionResult> DeleteAsync(string userId, CancellationToken cancellationToken = default) =>
+        DeleteAsync(userId, byAdmin: null, cancellationToken);
+
+    public Task<AccountDeletionResult> DeleteByAdminAsync(string userId, AdminAccountDeletion byAdmin, CancellationToken cancellationToken = default) =>
+        DeleteAsync(userId, byAdmin, cancellationToken);
+
+    private async Task<AccountDeletionResult> DeleteAsync(string userId, AdminAccountDeletion? byAdmin, CancellationToken cancellationToken)
     {
-        var deletion = await DeleteDataAsync(userId, cancellationToken);
+        var deletion = await DeleteDataAsync(userId, byAdmin, cancellationToken);
         if (deletion is null)
         {
             return AccountDeletionResult.NothingToDelete;
@@ -42,7 +48,7 @@ internal sealed class AccountDeletionService(
 
     private sealed record Deletion(AccountDeletionResult Result, IReadOnlyList<string> Files);
 
-    private async Task<Deletion?> DeleteDataAsync(string userId, CancellationToken cancellationToken)
+    private async Task<Deletion?> DeleteDataAsync(string userId, AdminAccountDeletion? byAdmin, CancellationToken cancellationToken)
     {
         // The request's context may already track the user as it was read before this transaction (the handler reads
         // it with UserManager): start from what the database holds now.
@@ -97,10 +103,26 @@ internal sealed class AccountDeletionService(
                 .SetProperty(r => r.ProcessedBy, (string?)null)
                 .SetProperty(r => r.RejectionReason, DeletedAccounts.WithdrawalCancelledReason), cancellationToken);
 
+        if (byAdmin is not null)
+        {
+            // The admin's action on record: committed with the deletion, or not at all.
+            db.AdminAuditLogs.Add(new AdminAuditLog
+            {
+                Id = Guid.NewGuid(),
+                AdminId = byAdmin.AdminId,
+                Action = AdminAuditAction.DeleteAccount,
+                TargetUserId = user.Id,
+                Reason = byAdmin.Reason.ToString(),
+                Note = byAdmin.Note,
+                CreatedAt = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         await transaction.CommitAsync(cancellationToken);
 
         return new Deletion(
-            new AccountDeletionResult(true, novelsHidden, forfeited, withdrawalsCancelled, reportsClosed),
+            new AccountDeletionResult(true, novelsHidden, forfeited, withdrawalsCancelled, reportsClosed) { DeletedAt = now },
             files.Distinct(StringComparer.Ordinal).ToList());
     }
 

@@ -1,7 +1,10 @@
+using Domain.Moderation;
+
 namespace Application.Services;
 
 /// <summary>
-/// Deletes a member's account for good (DELETE /api/User/me). The user row stays, anonymized, so the comments, reviews
+/// Deletes a member's account for good: the member's own deletion (DELETE /api/User/me) or an admin's
+/// (DELETE /api/admin/users/{userId}), with the same result. The user row stays, anonymized, so the comments, reviews
 /// and posts they wrote keep an author («مستخدم محذوف»); everything else about them goes:
 /// <list type="bullet">
 /// <item>Personal data: email, phone, bio, social links, photo and banner (also from storage), password, external
@@ -22,7 +25,19 @@ public interface IAccountDeletionService
 {
     /// <summary>Deletes the account. An account that is already deleted (or doesn't exist) is left as it is.</summary>
     Task<AccountDeletionResult> DeleteAsync(string userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// An admin deletes the account: the same deletion as <see cref="DeleteAsync(string, CancellationToken)"/>, with a
+    /// row in the admin audit log written in its transaction, so the record exists exactly when the account was
+    /// deleted (not when there was nothing to delete). Whether this account may be deleted (not an admin's) is the
+    /// caller's to check.
+    /// </summary>
+    Task<AccountDeletionResult> DeleteByAdminAsync(string userId, AdminAccountDeletion byAdmin, CancellationToken cancellationToken = default);
 }
+
+/// <summary>The admin deleting an account, and why: what the admin audit log records (ids and the admin's words only).</summary>
+/// <param name="Note">The admin's note, at most Domain.Entities.AdminAuditLog.NoteMaxLength characters.</param>
+public sealed record AdminAccountDeletion(string AdminId, AccountDeletionReason Reason, string? Note);
 
 /// <summary>What a deletion did, for the logs.</summary>
 /// <param name="Deleted">False when there was nothing to delete (no such user, or deleted already).</param>
@@ -37,4 +52,7 @@ public sealed record AccountDeletionResult(
     int FilesNotDeleted = 0)
 {
     public static readonly AccountDeletionResult NothingToDelete = new(false);
+
+    /// <summary>When the account was deleted (UTC, the user's DeletedAt); null when there was nothing to delete.</summary>
+    public DateTime? DeletedAt { get; init; }
 }

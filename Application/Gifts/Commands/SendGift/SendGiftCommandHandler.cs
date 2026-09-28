@@ -86,6 +86,9 @@ public class SendGiftCommandHandler(
         {
             // Payment and gift record commit together on this request's DbContext. (The transaction used to be opened
             // on a DbContext from a new scope, so it covered none of these writes.)
+            // Both ledger rows point at the gift record: that pairs the reader's payment with the author's earning, which
+            // a refund of the points behind it takes back while it is still on hold (#22).
+            var giftTransactionId = Guid.NewGuid();
             giftTransaction = await transactionManager.InTransactionAsync(async () =>
             {
                 await walletService.TransferPointsAsync(
@@ -97,12 +100,13 @@ public class SendGiftCommandHandler(
                     fromDescription: TransactionDescriptions.GiftSent(gift.NameAr, request.Count, novel.Title),
                     // The author's wallet names the sender by display name: user names used to be email addresses.
                     toDescription: TransactionDescriptions.GiftReceived(gift.NameAr, request.Count, currentUser.DisplayName, novel.Title),
+                    relatedRequestId: giftTransactionId,
                     details: new TransactionDetails(NovelId: novel.Id, GiftId: gift.Id, GiftCount: request.Count)
                 );
 
                 var record = new GiftTransaction
                 {
-                    Id = Guid.NewGuid(),
+                    Id = giftTransactionId,
                     GiftId = request.GiftId,
                     NovelId = request.NovelId,
                     SenderId = currentUser.Id,

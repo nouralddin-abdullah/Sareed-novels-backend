@@ -5,6 +5,16 @@ namespace Domain.Repositories;
 public interface IUserWalletRepository
 {
     Task<UserWallet?> GetByUserIdAsync(string userId);
+
+    /// <summary>The balance as the database holds it now (0 without a wallet), never a tracked copy.</summary>
+    Task<decimal> GetBalanceAsync(string userId);
+
+    /// <summary>
+    /// <see cref="GetBalanceAsync"/> with an update lock on the wallet row, held until the caller's transaction ends (call
+    /// inside one): every other lock, credit or debit of this wallet waits until then. Locks nothing without a wallet.
+    /// </summary>
+    Task<decimal> LockBalanceAsync(string userId);
+
     Task<UserWallet> CreateAsync(UserWallet wallet);
     Task<bool> UpdateAsync(UserWallet wallet);
 
