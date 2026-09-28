@@ -24,13 +24,14 @@ public class GetGenreRankingQueryHandler(IRankingRepository rankingRepository, I
         if (rankingType == null || !GenreRankingTypes.Contains(rankingType))
         {
             throw new NotFoundException(
-                $"Invalid ranking type '{request.RankingType}'. Valid types: {string.Join(", ", GenreRankingTypes)}");
+                $"Invalid ranking type '{request.RankingType}'. Valid types: {string.Join(", ", GenreRankingTypes)}",
+                "InvalidRankingType");
         }
 
         logger.LogInformation("Getting {RankingType} ranking for genre {GenreSlug}", rankingType, request.GenreSlug);
 
         var genre = await genresRepository.GetBySlug(request.GenreSlug)
-            ?? throw new NotFoundException($"Genre '{request.GenreSlug}' not found");
+            ?? throw new NotFoundException($"Genre '{request.GenreSlug}' not found", "GenreNotFound");
 
         // A genre with no qualifying novels simply has an empty list.
         var rankingList = await rankingRepository.GetRankingListByGenreAndType(genre.Id, rankingType);

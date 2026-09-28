@@ -19,7 +19,7 @@ public class GetMyLibraryQueryHandler(
 
     public async Task<PagedResult<ReadingProgressDTO>> Handle(GetMyLibraryQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, MaxPageSize);
         logger.LogInformation("Getting library for user {UserId}, page {Page}", currentUser.Id, pageNumber);
 

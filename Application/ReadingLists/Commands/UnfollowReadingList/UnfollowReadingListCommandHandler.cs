@@ -15,17 +15,18 @@ public class UnfollowReadingListCommandHandler(
 {
     public async Task<OperationResult> Handle(UnfollowReadingListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         logger.LogInformation("User {UserId} trying to unfollow reading list {ListId}", currentUser.Id, request.ReadingListId);
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found");
+            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
 
         if (readingList.UserId == currentUser.Id)
         {
             return new OperationResult
             {
                 Success = false,
+                Code = "CannotUnfollowOwnList",
                 Message = "You cannot unfollow your own reading list"
             };
         }
@@ -37,6 +38,7 @@ public class UnfollowReadingListCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "NotFollowing",
                 Message = "You are not following this reading list"
             };
         }
@@ -59,6 +61,7 @@ public class UnfollowReadingListCommandHandler(
         return new OperationResult
         {
             Success = false,
+            Code = "OperationFailed",
             Message = "Failed to unfollow reading list"
         };
     }

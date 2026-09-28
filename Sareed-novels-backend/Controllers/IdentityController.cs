@@ -39,7 +39,7 @@ namespace Sareed_novels_backend.Controllers
             var result = await mediator.Send(command);
             if (result.Succeeded == false)
             {
-                return BadRequest(result);
+                return BadRequest(IdentityErrors.Body(result));
             }
             return Ok(result);
         }
@@ -133,7 +133,7 @@ namespace Sareed_novels_backend.Controllers
             var result = await mediator.Send(command);
             if (!result.Succeeded)
             {
-                return BadRequest(result);
+                return BadRequest(IdentityErrors.Body(result));
             }
             return Ok(result);
         }

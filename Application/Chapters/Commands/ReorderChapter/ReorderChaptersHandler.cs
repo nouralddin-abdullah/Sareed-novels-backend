@@ -20,9 +20,9 @@ internal class ReorderChaptersHandler(
     public async Task<bool> Handle(ReorderChaptersCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Reordering chapters {@chapter}", request);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found");
-        if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
+        if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel", "NotOwner");
 
         var result = await chaptersRepository.ReorderChapters(request.NovelId, request.OrderedChapterIds);
 

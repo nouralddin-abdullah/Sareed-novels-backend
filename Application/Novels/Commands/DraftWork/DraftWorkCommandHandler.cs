@@ -10,11 +10,11 @@ public class DraftWorkCommandHandler(INovelsRepository novelsRepository, IUserCo
 {
     public async Task<OperationResult> Handle(DraftWorkCommand request, CancellationToken cancellationToken)
     {
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel was not found");
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("This user not signed in");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel was not found", "NovelNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("This user not signed in", "NotSignedIn");
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("Forbidden");
+            throw new ForbidException("Forbidden", "NotOwner");
         }
         novel.IsDraft = true;
         novel.IsEligibleForRanking = false;
@@ -31,6 +31,7 @@ public class DraftWorkCommandHandler(INovelsRepository novelsRepository, IUserCo
         return new OperationResult
         {
             Success = false,
+            Code = "OperationFailed",
             Message = "Novel has not been drafted"
         };
     }

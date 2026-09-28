@@ -16,7 +16,7 @@ public class GetCompetitionLeaderboardQueryHandler(
     {
         if (!await competitionRepository.ExistsAsync(request.CompetitionId))
         {
-            throw new NotFoundException("Competition not found");
+            throw new NotFoundException("Competition not found", "CompetitionNotFound");
         }
 
         // top is a page size: 1..50, whatever the query string says.

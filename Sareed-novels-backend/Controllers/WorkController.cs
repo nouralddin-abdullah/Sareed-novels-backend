@@ -13,6 +13,7 @@ using Application.Novels.Queries.GetWork;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Application.Common;
 
 namespace Sareed_novels_backend.Controllers
 {
@@ -121,7 +122,8 @@ namespace Sareed_novels_backend.Controllers
             {
                 return Ok();
             }
-            return BadRequest();
+            // The ids sent aren't exactly the novel's chapters.
+            return BadRequest(new ApiError("InvalidChapterOrder", "The chapter order must list each of the novel's chapters once"));
         }
         [HttpGet("{workId}/chapters/{chapterId}")]
         public async Task<IActionResult> ReorderWorkChapters([FromRoute] Guid workId, [FromRoute] Guid chapterId)

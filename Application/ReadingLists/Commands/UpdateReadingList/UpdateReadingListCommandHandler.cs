@@ -16,15 +16,15 @@ public class UpdateReadingListCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateReadingListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         logger.LogInformation("Updating reading list {ListId} for user {UserId}", request.ReadingListId, currentUser.Id);
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found");
+            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
 
         if (readingList.UserId != currentUser.Id)
         {
-            throw new ForbidException("You don't own this reading list");
+            throw new ForbidException("You don't own this reading list", "NotOwner");
         }
 
         // Check name uniqueness if name is being changed
@@ -35,6 +35,7 @@ public class UpdateReadingListCommandHandler(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "DuplicateListName",
                     Message = $"You already have a reading list named '{request.Name}'"
                 };
             }
@@ -72,6 +73,7 @@ public class UpdateReadingListCommandHandler(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "UploadFailed",
                     Message = "Failed to upload cover image"
                 };
             }
@@ -92,6 +94,7 @@ public class UpdateReadingListCommandHandler(
         return new OperationResult
         {
             Success = false,
+            Code = "OperationFailed",
             Message = "Failed to update reading list"
         };
     }

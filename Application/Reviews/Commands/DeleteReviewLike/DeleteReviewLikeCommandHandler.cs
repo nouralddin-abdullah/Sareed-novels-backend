@@ -12,13 +12,14 @@ public class DeleteReviewLikeCommandHandler(ILogger<DeleteReviewLikeCommandHandl
     public async Task<OperationResult> Handle(DeleteReviewLikeCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Unliking a review {@review}", request);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-        var review = await reviewsRepository.GetReviewById(request.ReviewId) ?? throw new NotFoundException("Review not found");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var review = await reviewsRepository.GetReviewById(request.ReviewId) ?? throw new NotFoundException("Review not found", "ReviewNotFound");
         if (!await reviewLikesRepository.UnLikeReview(currentUser.Id, request.ReviewId))
         {
             return new OperationResult
             {
                 Success = false,
+                Code = "NotLiked",
                 Message = "You haven't liked this review"
             };
         }

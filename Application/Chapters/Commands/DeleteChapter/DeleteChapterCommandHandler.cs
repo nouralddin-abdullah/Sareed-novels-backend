@@ -22,14 +22,14 @@ public class DeleteChapterCommandHandler(
     public async Task<bool> Handle(DeleteChapterCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Deleting chapter {@chapter}", request);
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
         var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new  NotFoundException("Chapter wasn't found");
         
-        if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel");
+        if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel", "NotOwner");
 
         // The chapter must belong to the novel the caller owns; otherwise any author could delete any chapter.
-        if (chapter.NovelId != novel.Id) throw new NotFoundException("Chapter wasn't found");
+        if (chapter.NovelId != novel.Id) throw new NotFoundException("Chapter wasn't found", "ChapterNotFound");
         
         var wasPublished = chapter.Status == "Published";
         var publishedSequence = chapter.PublishedChapterSequence;

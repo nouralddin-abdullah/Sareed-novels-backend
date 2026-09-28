@@ -15,24 +15,24 @@ public class UpdateArticleCommandHandler(
 {
     public async Task<OperationResult> Handle(UpdateArticleCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not authenticated", "NotSignedIn");
 
         var article = await entityRepository.GetArticleByIdAsync(request.ArticleId);
         if (article == null)
         {
-            return new OperationResult { Success = false, Message = "Article not found" };
+            return new OperationResult { Success = false, Code = "ArticleNotFound", Message = "Article not found" };
         }
 
         var entity = await entityRepository.GetEntityByIdAsync(article.EntityId);
         if (entity == null)
         {
-            return new OperationResult { Success = false, Message = "Entity not found" };
+            return new OperationResult { Success = false, Code = "EntityNotFound", Message = "Entity not found" };
         }
 
         // Verify user owns the novel (using included Novel)
         if (entity.Novel == null || entity.Novel.AuthorId != currentUser.Id)
         {
-            return new OperationResult { Success = false, Message = "Permission denied" };
+            return new OperationResult { Success = false, Code = "NotOwner", Message = "Permission denied" };
         }
 
         // Update only provided fields

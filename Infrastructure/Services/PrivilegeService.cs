@@ -153,6 +153,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "NovelNotFound",
                 Message = "Novel not found"
             };
         }
@@ -162,6 +163,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "NotOwner",
                 Message = "You don't own this novel"
             };
         }
@@ -173,6 +175,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "PrivilegeAlreadyEnabled",
                 Message = "Privilege system already configured for this novel"
             };
         }
@@ -183,6 +186,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "InvalidSubscriptionCost",
                 Message = "Subscription cost must be between 100 and 2000 points"
             };
         }
@@ -194,6 +198,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "NotEnoughPublishedChapters",
                 Message = $"You need at least 11 published chapters to enable privilege (current: {publishedCount}). The first 10 chapters must remain free for readers."
             };
         }
@@ -206,6 +211,7 @@ public class PrivilegeService(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "InvalidPrivilegeStart",
                     Message = $"Invalid privilege start sequence. Must be between 1 and {publishedCount}"
                 };
             }
@@ -216,6 +222,7 @@ public class PrivilegeService(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "FirstChaptersMustStayFree",
                     Message = "The first 10 chapters must remain free for readers. Privilege can only start from chapter 11 onwards."
                 };
             }
@@ -229,6 +236,7 @@ public class PrivilegeService(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "TooManyLockedChapters",
                     Message = $"Starting from sequence {privilegeStartSequence.Value} would lock {lockedCount} chapters. Maximum is 20. Please start from sequence {publishedCount - 19} or later."
                 };
             }
@@ -270,6 +278,7 @@ public class PrivilegeService(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "NotEnoughPublishedChapters",
                     Message = $"Cannot enable privilege with only {publishedCount} chapters. The first 10 chapters must remain free. You need at least 11 published chapters."
                 };
             }
@@ -323,6 +332,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "NotOwner",
                 Message = "Novel not found or you don't own it"
             };
         }
@@ -333,6 +343,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "PrivilegeNotEnabled",
                 Message = "Privilege system not enabled for this novel"
             };
         }
@@ -347,6 +358,7 @@ public class PrivilegeService(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "InvalidSubscriptionCost",
                     Message = "Subscription cost must be between 100 and 2000 points"
                 };
             }
@@ -366,6 +378,7 @@ public class PrivilegeService(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "InvalidPrivilegeStart",
                     Message = $"Invalid privilege start sequence. Must be between 1 and {totalPublished}"
                 };
             }
@@ -376,6 +389,7 @@ public class PrivilegeService(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "FirstChaptersMustStayFree",
                     Message = "The first 10 chapters must remain free for readers. Privilege can only start from chapter 11 onwards."
                 };
             }
@@ -386,6 +400,7 @@ public class PrivilegeService(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "NoPrivilegeStart",
                     Message = "Cannot update privilege start sequence - current configuration doesn't have a start sequence set"
                 };
             }
@@ -396,6 +411,7 @@ public class PrivilegeService(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "PrivilegeStartCannotMoveBack",
                     Message = $"Cannot move privilege start backward (from {privilege.PrivilegeStartSequence.Value} to {newPrivilegeStartSequence.Value}). This would re-lock previously unlocked chapters. You can only move it forward."
                 };
             }
@@ -406,6 +422,7 @@ public class PrivilegeService(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "NoChanges",
                     Message = $"Privilege start is already at sequence {privilege.PrivilegeStartSequence.Value}"
                 };
             }
@@ -420,6 +437,7 @@ public class PrivilegeService(
                 return new OperationResult
                 {
                     Success = false,
+                    Code = "TooManyLockedChapters",
                     Message = $"Moving to sequence {newPrivilegeStartSequence.Value} would lock {newLockedCount} chapters. Maximum is {privilege.MaxLockedChapters}."
                 };
             }
@@ -455,6 +473,7 @@ public class PrivilegeService(
         return new OperationResult
         {
             Success = false,
+            Code = "NoChanges",
             Message = "No changes were made"
         };
     }
@@ -467,6 +486,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "ChapterNotFound",
                 Message = "Chapter not found"
             };
         }
@@ -477,6 +497,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "NotOwner",
                 Message = "You don't own this novel"
             };
         }
@@ -487,6 +508,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "PrivilegeNotEnabled",
                 Message = "Privilege system not enabled for this novel"
             };
         }
@@ -502,6 +524,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "ChapterNotLocked",
                 Message = "This chapter is not locked"
             };
         }
@@ -537,6 +560,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "PrivilegeNotEnabled",
                 Message = "Privilege system not enabled for this novel"
             };
         }
@@ -547,6 +571,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "NovelNotFound",
                 Message = "Novel not found"
             };
         }
@@ -557,6 +582,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "CannotSubscribeToOwnNovel",
                 Message = "You cannot subscribe to your own novel's privilege system. You already have full access to all chapters."
             };
         }
@@ -568,6 +594,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadySubscribed",
                 Message = "You are already subscribed to this novel's privilege"
             };
         }
@@ -580,6 +607,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "InsufficientBalance",
                 Message = $"Insufficient balance. Required: {cost} points"
             };
         }
@@ -625,6 +653,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadySubscribed",
                 Message = "You are already subscribed to this novel's privilege"
             };
         }
@@ -633,6 +662,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "InsufficientBalance",
                 Message = $"Insufficient balance. Required: {cost} points"
             };
         }
@@ -643,6 +673,7 @@ public class PrivilegeService(
             return new OperationResult
             {
                 Success = false,
+                Code = "OperationFailed",
                 Message = "Subscription failed. No points were deducted. Please try again."
             };
         }

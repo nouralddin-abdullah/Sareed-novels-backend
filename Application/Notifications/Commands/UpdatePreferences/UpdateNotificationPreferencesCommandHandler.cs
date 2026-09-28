@@ -14,7 +14,7 @@ public class UpdateNotificationPreferencesCommandHandler(
 {
     public async Task<NotificationPreferencesDto> Handle(UpdateNotificationPreferencesCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("يجب تسجيل الدخول أولًا");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("يجب تسجيل الدخول أولًا", "NotSignedIn");
 
         var preferences = await preferencesRepository.Update(currentUser.Id, request.Social, request.Chapters, request.Support);
         logger.LogInformation("User {UserId} set push notifications: social {Social}, chapters {Chapters}, support {Support}",

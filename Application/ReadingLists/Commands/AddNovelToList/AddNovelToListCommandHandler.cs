@@ -17,14 +17,14 @@ public class AddNovelToListCommandHandler(
 {
     public async Task<OperationResult> Handle(AddNovelToListCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
-            ?? throw new NotFoundException("Reading list not found");
+            ?? throw new NotFoundException("Reading list not found", "ReadingListNotFound");
 
         if (readingList.UserId != currentUser.Id)
         {
-            throw new ForbidException("You don't own this reading list");
+            throw new ForbidException("You don't own this reading list", "NotOwner");
         }
 
         var refusal = await NovelForReadingList.WhyNotAddable(novelsRepository, request.NovelId);
@@ -33,6 +33,7 @@ public class AddNovelToListCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = NovelForReadingList.NotAddableCode,
                 Message = refusal
             };
         }
@@ -43,6 +44,7 @@ public class AddNovelToListCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyInList",
                 Message = "Novel is already in this reading list"
             };
         }
@@ -73,6 +75,7 @@ public class AddNovelToListCommandHandler(
         return new OperationResult
         {
             Success = false,
+            Code = "OperationFailed",
             Message = "Failed to add novel to reading list"
         };
     }

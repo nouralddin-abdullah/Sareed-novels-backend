@@ -18,7 +18,7 @@ public class LikePostCommandHandler(
 {
     public async Task<OperationResult> Handle(LikePostCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         
         var post = await postsRepository.GetPostById(request.PostId);
         if (post == null || post.IsDeleted)
@@ -26,6 +26,7 @@ public class LikePostCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "PostNotFound",
                 Message = "Post not found"
             };
         }
@@ -36,6 +37,7 @@ public class LikePostCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyLiked",
                 Message = "Already liked this post"
             };
         }

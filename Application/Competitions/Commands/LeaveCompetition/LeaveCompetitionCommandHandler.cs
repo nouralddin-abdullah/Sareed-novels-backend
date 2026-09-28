@@ -15,28 +15,28 @@ public class LeaveCompetitionCommandHandler(
     public async Task<bool> Handle(LeaveCompetitionCommand request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser()
-            ?? throw new ForbidException("You must be logged in");
+            ?? throw new ForbidException("You must be logged in", "NotSignedIn");
 
         var competition = await competitionRepository.GetByIdAsync(request.CompetitionId)
-            ?? throw new NotFoundException("Competition not found");
+            ?? throw new NotFoundException("Competition not found", "CompetitionNotFound");
 
         // Can only leave during participation phase
         if (competition.Status != CompetitionStatus.Participation && competition.Status != CompetitionStatus.Upcoming)
         {
-            throw new ForbidException("Cannot leave competition after participation phase has ended");
+            throw new ForbidException("Cannot leave competition after participation phase has ended", "ParticipationEnded");
         }
 
         var novel = await novelsRepository.GetOne(request.NovelId)
-            ?? throw new NotFoundException("Novel not found");
+            ?? throw new NotFoundException("Novel not found", "NovelNotFound");
 
         // Verify ownership
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("You can only remove your own novels from a competition");
+            throw new ForbidException("You can only remove your own novels from a competition", "NotOwner");
         }
 
         var participant = await participantRepository.GetByCompetitionAndNovelAsync(request.CompetitionId, request.NovelId)
-            ?? throw new NotFoundException("Novel is not participating in this competition");
+            ?? throw new NotFoundException("Novel is not participating in this competition", "NotParticipating");
 
         await participantRepository.DeleteAsync(participant);
 

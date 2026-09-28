@@ -19,31 +19,31 @@ public class JoinCompetitionCommandHandler(
     public async Task<CompetitionParticipantDto> Handle(JoinCompetitionCommand request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser()
-            ?? throw new ForbidException("You must be logged in to join a competition");
+            ?? throw new ForbidException("You must be logged in to join a competition", "NotSignedIn");
 
         var competition = await competitionRepository.GetByIdAsync(request.CompetitionId)
-            ?? throw new NotFoundException("Competition not found");
+            ?? throw new NotFoundException("Competition not found", "CompetitionNotFound");
 
         // Check if competition is open for participation
         if (!competition.CanJoin())
         {
-            throw new ForbidException("This competition is not currently accepting participants");
+            throw new ForbidException("This competition is not currently accepting participants", "CompetitionClosed");
         }
 
         // Get the novel
         var novel = await novelsRepository.GetOne(request.NovelId)
-            ?? throw new NotFoundException("Novel not found");
+            ?? throw new NotFoundException("Novel not found", "NovelNotFound");
 
         // Verify ownership
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("You can only enter your own novels into a competition");
+            throw new ForbidException("You can only enter your own novels into a competition", "NotOwner");
         }
 
         // Check if novel is already in this competition
         if (await participantRepository.IsNovelParticipatingAsync(request.CompetitionId, request.NovelId))
         {
-            throw new ForbidException("This novel is already participating in this competition");
+            throw new ForbidException("This novel is already participating in this competition", "AlreadyParticipating");
         }
 
         // Validate novel eligibility - Age check
@@ -53,7 +53,7 @@ public class JoinCompetitionCommandHandler(
             var novelAge = DateTime.UtcNow - novel.CreatedAt;
             if (novelAge > maxAge)
             {
-                throw new ForbidException($"Novel must be created within the last {competition.MaxNovelAgeDays} days to participate");
+                throw new ForbidException($"Novel must be created within the last {competition.MaxNovelAgeDays} days to participate", "NovelTooOld");
             }
         }
 
@@ -62,13 +62,13 @@ public class JoinCompetitionCommandHandler(
         var publishedChapterCount = chapters.Count();
         if (publishedChapterCount < competition.MinChapters)
         {
-            throw new ForbidException($"Novel must have at least {competition.MinChapters} published chapters to participate. Current: {publishedChapterCount}");
+            throw new ForbidException($"Novel must have at least {competition.MinChapters} published chapters to participate. Current: {publishedChapterCount}", "NotEnoughPublishedChapters");
         }
 
         // Validate novel is published
         if (novel.IsDraft || novel.IsDeleted)
         {
-            throw new ForbidException("Only published novels can participate in competitions");
+            throw new ForbidException("Only published novels can participate in competitions", "NovelNotPublished");
         }
 
         // Create participant entry

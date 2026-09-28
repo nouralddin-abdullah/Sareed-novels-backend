@@ -16,7 +16,7 @@ public class GetCompetitionNovelsQueryHandler(
     {
         if (!await competitionRepository.ExistsAsync(request.CompetitionId))
         {
-            throw new NotFoundException("Competition not found");
+            throw new NotFoundException("Competition not found", "CompetitionNotFound");
         }
 
         var totalCount = await participantRepository.GetParticipantCountAsync(request.CompetitionId);

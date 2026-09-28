@@ -30,7 +30,7 @@ public class GetNovelsInGenreQueryHandler(
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, MaxPageSize);
 
         var genre = await genresRepository.GetBySlug(request.Slug)
-            ?? throw new NotFoundException($"Genre '{request.Slug}' not found");
+            ?? throw new NotFoundException($"Genre '{request.Slug}' not found", "GenreNotFound");
 
         var rankingType = ToRankingType(request.Sorting);
         if (rankingType != null)

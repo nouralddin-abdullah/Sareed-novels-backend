@@ -73,7 +73,7 @@ public class GiftController(IMediator mediator) : ControllerBase
     {
         if (period != "Weekly" && period != "AllTime")
         {
-            return BadRequest(new { message = "Period must be 'Weekly' or 'AllTime'" });
+            return BadRequest(new ApiError("InvalidPeriod", "Period must be 'Weekly' or 'AllTime'"));
         }
 
         var query = new GetGlobalLeaderboardQuery(period, pageNumber, pageSize);
@@ -115,7 +115,7 @@ public class GiftController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command);
         if (!result)
         {
-            return NotFound(new { message = "Gift not found" });
+            return NotFound(new ApiError("GiftNotFound", "Gift not found"));
         }
         return Ok(new { success = true, message = "Gift updated successfully" });
     }
@@ -128,7 +128,7 @@ public class GiftController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command);
         if (!result)
         {
-            return NotFound(new { message = "Gift not found" });
+            return NotFound(new ApiError("GiftNotFound", "Gift not found"));
         }
         return Ok(new { success = true, message = "Gift deleted successfully" });
     }

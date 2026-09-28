@@ -19,7 +19,7 @@ public class RequestWithdrawalCommandHandler(
 {
     public async Task<OperationResult> Handle(RequestWithdrawalCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         // Validate minimum points
         if (request.PointsRequested < PointsConstants.MinimumWithdrawal)
@@ -27,6 +27,7 @@ public class RequestWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "BelowMinimumWithdrawal",
                 Message = $"Minimum withdrawal is {PointsConstants.MinimumWithdrawal} points"
             };
         }
@@ -39,6 +40,7 @@ public class RequestWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "InvalidPaymentMethod",
                 Message = "Invalid withdrawal method. Use VodafoneCash, InstaPay, or PayPal"
             };
         }
@@ -49,6 +51,7 @@ public class RequestWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "PaymentDetailsRequired",
                 Message = "Payment details are required (phone number or email)"
             };
         }
@@ -59,6 +62,7 @@ public class RequestWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "InsufficientBalance",
                 Message = $"Insufficient balance. You need at least {request.PointsRequested} points."
             };
         }

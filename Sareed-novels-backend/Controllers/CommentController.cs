@@ -6,6 +6,7 @@ using Application.Comments.Queries.GetChapterComments;
 using Application.Comments.Queries.GetCommentReplies;
 using Application.Comments.Queries.GetParagraphComments;
 using Application.Comments.Queries.GetPostComments;
+using Application.Common;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -25,7 +26,7 @@ namespace Sareed_novels_backend.Controllers
             var result = await mediator.Send(command);
             if (!result.Success)
             {
-                return BadRequest(result.Message);
+                return BadRequest(result);
             }
             return Ok(result);
         }
@@ -38,7 +39,7 @@ namespace Sareed_novels_backend.Controllers
             var result = await mediator.Send(command);
             if (!result.Success)
             {
-                return BadRequest(result.Message);
+                return BadRequest(result);
             }
             return Ok(result);
         }
@@ -51,7 +52,7 @@ namespace Sareed_novels_backend.Controllers
             var result = await mediator.Send(command);
             if (!result.Success)
             {
-                return BadRequest(result.Message);
+                return BadRequest(result);
             }
             return Ok(result);
         }
@@ -64,7 +65,8 @@ namespace Sareed_novels_backend.Controllers
             var result = await mediator.Send(command);
             if (!result)
             {
-                return BadRequest();
+                // Deleted by another request in the meantime.
+                return NotFound(new ApiError("CommentNotFound", "This comment wasn't found!"));
             }
             return NoContent();
         }
@@ -117,7 +119,7 @@ namespace Sareed_novels_backend.Controllers
             var result = await mediator.Send(command);
             if (!result.Success)
             {
-                return BadRequest(result.Message);
+                return BadRequest(result);
             }
             return Ok(result);
         }
@@ -130,7 +132,7 @@ namespace Sareed_novels_backend.Controllers
             var result = await mediator.Send(command);
             if (!result.Success)
             {
-                return BadRequest(result.Message);
+                return BadRequest(result);
             }
             return Ok(result);
         }

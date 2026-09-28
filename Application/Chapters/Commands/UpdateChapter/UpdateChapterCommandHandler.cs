@@ -28,14 +28,14 @@ public class UpdateChapterCommandHandler(
     {
         logger.LogInformation("Updating chapter {ChapterId} of novel {NovelId}", request.ChapterId, request.NovelId);
         
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found");
-        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("Chapter wasn't found");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel wasn't found", "NovelNotFound");
+        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("Chapter wasn't found", "ChapterNotFound");
         
-        if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel");
+        if (novel.AuthorId != currentUser.Id) throw new ForbidException("User doesn't own this novel", "NotOwner");
 
         // The chapter must belong to the novel the caller owns; otherwise any author could edit any chapter.
-        if (chapter.NovelId != novel.Id) throw new NotFoundException("Chapter wasn't found");
+        if (chapter.NovelId != novel.Id) throw new NotFoundException("Chapter wasn't found", "ChapterNotFound");
         
         // Track if status is changing to/from Published
         var oldStatus = chapter.Status;
@@ -98,6 +98,7 @@ public class UpdateChapterCommandHandler(
         return new OperationResult
         {
             Success = false,
+            Code = "OperationFailed",
             Message = "Update chapter is not successful"
         };
     }

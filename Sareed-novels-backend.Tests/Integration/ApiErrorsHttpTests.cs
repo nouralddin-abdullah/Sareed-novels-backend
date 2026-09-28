@@ -61,7 +61,7 @@ public class ApiErrorsHttpTests(SardApiFactory api)
         var response = await api.Send(HttpMethod.Patch, $"/api/notifications/{Guid.NewGuid()}/read", user);
 
         var body = await response.Error(HttpStatusCode.NotFound);
-        Assert.Equal(ErrorHandlingMiddleware.NotFound, body.GetProperty("code").GetString());
+        Assert.Equal("NotificationNotFound", body.GetProperty("code").GetString());
         Assert.False(string.IsNullOrEmpty(body.GetProperty("message").GetString()));
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
     }

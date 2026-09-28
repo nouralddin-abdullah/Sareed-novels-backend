@@ -37,6 +37,7 @@ public class GetRankingStatusQueryHandler(IRankingRepository rankingRepository, 
             return new GetRankingStatusResult
             {
                 Success = false,
+                Code = "OperationFailed",
                 Message = "Failed to get ranking status",
                 Timestamp = DateTime.UtcNow,
                 TotalRankingLists = 0,

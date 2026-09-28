@@ -27,7 +27,7 @@ public class GetBlockedUsersQueryHandler(
 {
     public async Task<PagedResult<BlockedUserDto>> Handle(GetBlockedUsersQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
 
         var (users, totalCount) = await blocksRepository.GetBlockedUsersAsync(currentUser.Id, pageNumber, pageSize, cancellationToken);

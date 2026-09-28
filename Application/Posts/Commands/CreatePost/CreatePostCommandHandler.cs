@@ -19,7 +19,7 @@ public class CreatePostCommandHandler(
 {
     public async Task<CreatePostResult> Handle(CreatePostCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         
         if (request.NovelId.HasValue)
         {
@@ -29,6 +29,7 @@ public class CreatePostCommandHandler(
                 return new CreatePostResult
                 {
                     Success = false,
+                    Code = "NovelNotFound",
                     Message = "Novel not found"
                 };
             }

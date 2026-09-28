@@ -124,8 +124,9 @@ public class CreateResponsesHttpTests(SardApiFactory api)
         var nested = await api.Send(HttpMethod.Post, url, author,
             ReaderApi.Form(("Content", "رد على رد"), ("ParentCommentId", reply.GetProperty("id").GetString()!)));
 
-        Assert.Equal(HttpStatusCode.BadRequest, nested.StatusCode);
-        Assert.Equal("Replies can only be added to top-level comments", await nested.Content.ReadAsStringAsync());
+        var refused = await nested.Error(HttpStatusCode.BadRequest);
+        Assert.Equal("NestedReplyNotAllowed", refused.GetProperty("code").GetString());
+        Assert.False(refused.GetProperty("success").GetBoolean());
     }
 
     [Fact]

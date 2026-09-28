@@ -24,16 +24,16 @@ public class UserLoginCommandHandler(UserManager<User> userManager, ILogger<User
         }
 
         if (user == null)
-            throw new ForbidException("Invalid email or password");
+            throw new ForbidException("Invalid email or password", "InvalidCredentials");
 
         // Identity lockout: after MaxFailedAccessAttempts wrong passwords the account refuses sign-in for a while.
         if (await userManager.IsLockedOutAsync(user))
-            throw new TooManyRequestsException("Too many failed sign-in attempts. Try again in a few minutes.");
+            throw new TooManyRequestsException("Too many failed sign-in attempts. Try again in a few minutes.", "TooManySignInAttempts");
 
         if (!await userManager.CheckPasswordAsync(user, request.Password))
         {
             await userManager.AccessFailedAsync(user);
-            throw new ForbidException("Invalid email or password");
+            throw new ForbidException("Invalid email or password", "InvalidCredentials");
         }
 
         if (await userManager.GetAccessFailedCountAsync(user) > 0)

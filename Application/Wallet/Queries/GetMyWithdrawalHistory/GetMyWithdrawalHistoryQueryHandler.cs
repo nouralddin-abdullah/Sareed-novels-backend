@@ -15,7 +15,7 @@ public class GetMyWithdrawalHistoryQueryHandler(
 {
     public async Task<(IEnumerable<WithdrawalRequestDto>, int)> Handle(GetMyWithdrawalHistoryQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         
         var (requests, totalCount) = await withdrawalRepository.GetUserRequestsAsync(

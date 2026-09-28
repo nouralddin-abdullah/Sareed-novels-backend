@@ -15,7 +15,7 @@ public class GetFollowedReadingListsQueryHandler(
 {
     public async Task<PagedResult<ReadingListPreviewDTO>> Handle(GetFollowedReadingListsQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         var (pageNumber, pageSize) = ReadingListPreviewMapping.ClampPage(request.PageNumber, request.PageSize);
         logger.LogInformation("Getting followed reading lists for user {UserId}, page {Page}", currentUser.Id, pageNumber);
 

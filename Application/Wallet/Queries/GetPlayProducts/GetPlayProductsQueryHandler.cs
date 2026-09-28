@@ -12,7 +12,7 @@ public class GetPlayProductsQueryHandler(
 {
     public Task<PlayProductsDto> Handle(GetPlayProductsQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         return Task.FromResult(playBilling.GetProducts(currentUser.Id));
     }

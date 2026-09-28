@@ -15,7 +15,7 @@ public class UnlikePostCommandHandler(
 {
     public async Task<OperationResult> Handle(UnlikePostCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         
         var post = await postsRepository.GetPostById(request.PostId);
         if (post == null || post.IsDeleted)
@@ -23,6 +23,7 @@ public class UnlikePostCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "PostNotFound",
                 Message = "Post not found"
             };
         }
@@ -32,6 +33,7 @@ public class UnlikePostCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "NotLiked",
                 Message = "Post not liked yet"
             };
         }

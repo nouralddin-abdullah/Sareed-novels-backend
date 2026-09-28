@@ -20,7 +20,7 @@ public class GetFollowingListQueryHandler(
 {
     public async Task<PagedResult<FollowedDto>> Handle(GetFollowingListQuery request, CancellationToken cancellationToken)
     {
-        var user = await userManager.FindByIdAsync(request.UserId) ?? throw new NotFoundException("This user is not found");
+        var user = await userManager.FindByIdAsync(request.UserId) ?? throw new NotFoundException("This user is not found", "UserNotFound");
         logger.LogInformation("Getting following list for user {username}", user.DisplayName);
         
         // A size of 0 or less used to return every row.

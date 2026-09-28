@@ -15,7 +15,7 @@ public class RejectWithdrawalCommandHandler(
 {
     public async Task<OperationResult> Handle(RejectWithdrawalCommand request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
 
         var withdrawalRequest = await withdrawalRepository.GetByIdAsync(request.RequestId);
         if (withdrawalRequest == null)
@@ -23,6 +23,7 @@ public class RejectWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "RequestNotFound",
                 Message = "Withdrawal request not found"
             };
         }
@@ -32,6 +33,7 @@ public class RejectWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyProcessed",
                 Message = $"Request already {withdrawalRequest.Status.ToLower()}"
             };
         }
@@ -41,6 +43,7 @@ public class RejectWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "RejectionReasonRequired",
                 Message = "Rejection reason is required"
             };
         }
@@ -50,6 +53,7 @@ public class RejectWithdrawalCommandHandler(
             return new OperationResult
             {
                 Success = false,
+                Code = "AlreadyProcessed",
                 Message = "Request was already processed"
             };
         }

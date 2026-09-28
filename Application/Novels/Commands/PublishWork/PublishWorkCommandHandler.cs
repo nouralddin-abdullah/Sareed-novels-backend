@@ -10,11 +10,11 @@ public class PublishWorkCommandHandler(INovelsRepository novelsRepository, IUser
 {
     public async Task<OperationResult> Handle(PublishWorkCommand request, CancellationToken cancellationToken)
     {
-        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel was not found");
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("This user not signed in");
+        var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("This novel was not found", "NovelNotFound");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("This user not signed in", "NotSignedIn");
         if (novel.AuthorId != currentUser.Id)
         {
-            throw new ForbidException("Forbidden");
+            throw new ForbidException("Forbidden", "NotOwner");
         }
         novel.IsDraft = false;
         novel.IsEligibleForRanking = true;
@@ -31,6 +31,7 @@ public class PublishWorkCommandHandler(INovelsRepository novelsRepository, IUser
         return new OperationResult
         {
             Success = false,
+            Code = "OperationFailed",
             Message = "Novel has not been published"
         };
     }

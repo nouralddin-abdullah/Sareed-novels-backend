@@ -16,7 +16,7 @@ public class GetMyTransactionHistoryQueryHandler(
 {
     public async Task<(IEnumerable<PointTransactionDto>, int)> Handle(GetMyTransactionHistoryQuery request, CancellationToken cancellationToken)
     {
-        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in", "NotSignedIn");
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         
         var (transactions, totalCount) = await transactionRepository.GetUserTransactionsAsync(
