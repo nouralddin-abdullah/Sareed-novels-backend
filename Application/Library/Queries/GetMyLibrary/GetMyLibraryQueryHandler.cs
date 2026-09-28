@@ -14,13 +14,13 @@ public class GetMyLibraryQueryHandler(
     ILibraryRepository libraryRepository,
     IUserContext userContext) : IRequestHandler<GetMyLibraryQuery, PagedResult<ReadingProgressDTO>>
 {
+    /// <summary>The web's new-post dialog lists up to 100 library novels.</summary>
     public const int MaxPageSize = 100;
 
     public async Task<PagedResult<ReadingProgressDTO>> Handle(GetMyLibraryQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
-        var pageNumber = Math.Max(1, request.PageNumber);
-        var pageSize = Math.Clamp(request.PageSize, 1, MaxPageSize);
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, MaxPageSize);
         logger.LogInformation("Getting library for user {UserId}, page {Page}", currentUser.Id, pageNumber);
 
         var (entries, totalCount) = await libraryRepository.GetUserLibraryAsync(currentUser.Id, pageNumber, pageSize);

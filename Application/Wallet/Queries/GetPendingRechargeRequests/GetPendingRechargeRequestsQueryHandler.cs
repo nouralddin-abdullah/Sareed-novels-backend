@@ -2,6 +2,7 @@
 using AutoMapper;
 using Domain.Repositories;
 using MediatR;
+using Application.Common;
 
 namespace Application.Wallet.Queries.GetPendingRechargeRequests;
 
@@ -11,10 +12,8 @@ public class GetPendingRechargeRequestsQueryHandler(
 {
     public async Task<(IEnumerable<RechargeRequestDto>, int)> Handle(GetPendingRechargeRequestsQuery request, CancellationToken cancellationToken)
     {
-        var (requests, totalCount) = await rechargeRepository.GetPendingRequestsAsync(
-            request.PageNumber,
-            request.PageSize
-        );
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
+        var (requests, totalCount) = await rechargeRepository.GetPendingRequestsAsync(pageNumber, pageSize);
         
         var dtos = mapper.Map<IEnumerable<RechargeRequestDto>>(requests);
         

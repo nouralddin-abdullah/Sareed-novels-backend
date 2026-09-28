@@ -21,12 +21,13 @@ public class GetCompetitionNovelsQueryHandler(
 
         var totalCount = await participantRepository.GetParticipantCountAsync(request.CompetitionId);
 
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         var participants = request.SortBy.ToLower() == "newest"
-            ? await participantRepository.GetByCompetitionIdOrderedByNewestAsync(request.CompetitionId, request.PageNumber, request.PageSize)
-            : await participantRepository.GetByCompetitionIdOrderedByPointsAsync(request.CompetitionId, request.PageNumber, request.PageSize);
+            ? await participantRepository.GetByCompetitionIdOrderedByNewestAsync(request.CompetitionId, pageNumber, pageSize)
+            : await participantRepository.GetByCompetitionIdOrderedByPointsAsync(request.CompetitionId, pageNumber, pageSize);
 
         var dtos = mapper.Map<List<CompetitionParticipantDto>>(participants);
 
-        return new PagedResult<CompetitionParticipantDto>(dtos, totalCount, request.PageSize, request.PageNumber);
+        return new PagedResult<CompetitionParticipantDto>(dtos, totalCount, pageSize, pageNumber);
     }
 }

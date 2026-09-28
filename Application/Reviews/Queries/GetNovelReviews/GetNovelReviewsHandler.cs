@@ -23,12 +23,13 @@ public class GetNovelReviewsHandler(
         var novel = await novelsRepository.GetOne(request.NovelId) 
             ?? throw new NotFoundException("This novel wasn't found");
         
-        // Reviews by users the viewer blocked are left out.
+        // Reviews by users the viewer blocked are left out. A size of 0 or less used to return every review.
         var currentUser = userContext.GetCurrentUser();
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         var (reviewsRaw, totalCount) = await reviewsRepository.GetNovelReviews(
             novel.Id, 
-            request.PageSize, 
-            request.PageNumber, 
+            pageSize, 
+            pageNumber, 
             request.Sorting,
             currentUser?.Id);
         
@@ -50,9 +51,9 @@ public class GetNovelReviewsHandler(
             Reviews = reviewsDto,
             CurrentUserReview = currentUserReview,
             TotalCount = totalCount,
-            PageSize = request.PageSize,
-            CurrentPage = request.PageNumber,
-            TotalPages = (int)Math.Ceiling(totalCount / (double)request.PageSize)
+            PageSize = pageSize,
+            CurrentPage = pageNumber,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
         };
 
         return response;

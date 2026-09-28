@@ -4,6 +4,7 @@ using AutoMapper;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
+using Application.Common;
 
 namespace Application.Wallet.Queries.GetMyTransactionHistory;
 
@@ -15,11 +16,12 @@ public class GetMyTransactionHistoryQueryHandler(
     public async Task<(IEnumerable<PointTransactionDto>, int)> Handle(GetMyTransactionHistoryQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         
         var (transactions, totalCount) = await transactionRepository.GetUserTransactionsAsync(
             currentUser.Id,
-            request.PageNumber,
-            request.PageSize
+            pageNumber,
+            pageSize
         );
         
         var dtos = mapper.Map<IEnumerable<PointTransactionDto>>(transactions);

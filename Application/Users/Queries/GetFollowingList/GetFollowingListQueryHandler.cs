@@ -23,7 +23,9 @@ public class GetFollowingListQueryHandler(
         var user = await userManager.FindByIdAsync(request.UserId) ?? throw new NotFoundException("This user is not found");
         logger.LogInformation("Getting following list for user {username}", user.DisplayName);
         
-        var (following, totalCount) = await usersRepository.GetFollowingList(user.Id, request.PageSize, request.PageNumber);
+        // A size of 0 or less used to return every row.
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
+        var (following, totalCount) = await usersRepository.GetFollowingList(user.Id, pageSize, pageNumber);
         var followingList = following.Select(f => new FollowedDto
         {
             UserId = f.Followed.Id,
@@ -45,7 +47,7 @@ public class GetFollowingListQueryHandler(
             }
         }
         
-        var result = new PagedResult<FollowedDto>(followingList, totalCount, request.PageSize, request.PageNumber);
+        var result = new PagedResult<FollowedDto>(followingList, totalCount, pageSize, pageNumber);
         return result;
     }
 }

@@ -39,7 +39,8 @@ public class GiftQueryPagingTests
         Assert.Equal(8, page.TotalItemsCount);
         Assert.Equal(1, page.TotalPages);
         Assert.Equal(1, page.ItemsFrom);
-        Assert.Equal(20, page.ItemsTo);
+        // The last item, not the end of a full page (#17).
+        Assert.Equal(8, page.ItemsTo);
     }
 
     [Fact]

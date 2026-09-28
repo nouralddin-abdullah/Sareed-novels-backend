@@ -27,8 +27,7 @@ public class GetNovelsInGenreQueryHandler(
     {
         logger.LogInformation("Getting novels by genre {@request}", request);
 
-        var pageSize = Math.Clamp(request.PageSize, 1, MaxPageSize);
-        var pageNumber = Math.Max(1, request.PageNumber);
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, MaxPageSize);
 
         var genre = await genresRepository.GetBySlug(request.Slug)
             ?? throw new NotFoundException($"Genre '{request.Slug}' not found");

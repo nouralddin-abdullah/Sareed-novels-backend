@@ -4,6 +4,7 @@ using AutoMapper;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
+using Application.Common;
 
 namespace Application.Wallet.Queries.GetMyWithdrawalHistory;
 
@@ -15,11 +16,12 @@ public class GetMyWithdrawalHistoryQueryHandler(
     public async Task<(IEnumerable<WithdrawalRequestDto>, int)> Handle(GetMyWithdrawalHistoryQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("User not signed in");
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         
         var (requests, totalCount) = await withdrawalRepository.GetUserRequestsAsync(
             currentUser.Id,
-            request.PageNumber,
-            request.PageSize,
+            pageNumber,
+            pageSize,
             request.Status
         );
         

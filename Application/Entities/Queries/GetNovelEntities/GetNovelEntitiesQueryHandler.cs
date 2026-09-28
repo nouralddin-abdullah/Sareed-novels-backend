@@ -11,15 +11,19 @@ public class GetNovelEntitiesQueryHandler(
     ILogger<GetNovelEntitiesQueryHandler> logger,
     INovelEntityRepository entityRepository) : IRequestHandler<GetNovelEntitiesQuery, PagedResult<EntityListDTO>>
 {
+    /// <summary>The SEO worker lists up to 100 wiki entries of a novel in one request.</summary>
+    public const int MaxPageSize = 100;
+
     public async Task<PagedResult<EntityListDTO>> Handle(GetNovelEntitiesQuery request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Getting entities for novel {NovelId}", request.NovelId);
 
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, MaxPageSize);
         var (entities, totalCount) = await entityRepository.GetNovelEntitiesAsync(
             request.NovelId,
             request.Section,
-            request.PageNumber,
-            request.PageSize);
+            pageNumber,
+            pageSize);
 
         var dtos = entities.Select(e => new EntityListDTO
         {
@@ -35,6 +39,6 @@ public class GetNovelEntitiesQueryHandler(
             IsIndexable = WikiPages.IsIndexable(e)
         }).ToList();
 
-        return new PagedResult<EntityListDTO>(dtos, totalCount, request.PageSize, request.PageNumber);
+        return new PagedResult<EntityListDTO>(dtos, totalCount, pageSize, pageNumber);
     }
 }

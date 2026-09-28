@@ -16,13 +16,14 @@ public class GetUserWorksQueryHandler(
     {
         logger.LogInformation("Getting works for user {UserId}", request.UserId);
         
+        var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
         var (novels, totalCount) = await novelsRepository.GetUserPublishedWorks(
             request.UserId, 
-            request.PageNumber, 
-            request.PageSize);
+            pageNumber, 
+            pageSize);
         
         var novelsDto = mapper.Map<IEnumerable<MyWorksDTO>>(novels);
         
-        return new PagedResult<MyWorksDTO>(novelsDto, totalCount, request.PageSize, request.PageNumber);
+        return new PagedResult<MyWorksDTO>(novelsDto, totalCount, pageSize, pageNumber);
     }
 }
