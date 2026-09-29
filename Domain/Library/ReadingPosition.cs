@@ -7,8 +7,8 @@ public sealed record ChapterOutline(Guid Id, string Title, int ChapterIndex);
 /// <param name="PublishedChapters">The novel's published chapters in reading order.</param>
 /// <param name="NotifyNewChapters">Whether the reader gets the novel's new chapters as notifications (#33).</param>
 /// <param name="LastChapterPublishedAt">
-/// When the newest of the published chapters came out (UTC), read from the chapters, not stored; null when none is
-/// published. Chapters have no publish date, so this is the newest published chapter's <c>CreatedAt</c>.
+/// When the newest of the published chapters came out (UTC): the latest <see cref="Domain.Entities.Chapter.PublishedAt"/>
+/// among them, read from the chapters, not stored; null when none is published.
 /// </param>
 public sealed record LibraryEntry(
     Guid NovelId,

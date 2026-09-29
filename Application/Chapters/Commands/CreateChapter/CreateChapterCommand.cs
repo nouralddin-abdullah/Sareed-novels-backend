@@ -11,5 +11,4 @@ public class CreateChapterCommand(Guid novelId, string status, string title, str
     public string Status { get; set; } = status;
     public string Content { get; set; } = content;
     public string Title { get; set; } = title;
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

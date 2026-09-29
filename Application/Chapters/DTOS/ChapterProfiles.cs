@@ -9,8 +9,11 @@ public class ChapterProfiles : Profile
 {
     public ChapterProfiles()
     {
-        CreateMap<CreateChapterCommand, Chapter>();
+        // The status is set with Chapter.SetStatus, which stamps when the chapter first comes out (#33).
+        CreateMap<CreateChapterCommand, Chapter>()
+            .ForMember(dest => dest.Status, opt => opt.Ignore());
         CreateMap<UpdateChapterCommand, Chapter>()
+            .ForMember(dest => dest.Status, opt => opt.Ignore())
             .ForAllMembers(opt => opt.Condition((src, dest, srcMember) => srcMember != null));
         CreateMap<Chapter, ChaptersDTO>();
         CreateMap<Chapter, ChapterSingleAuthorDTO>();
