@@ -435,6 +435,65 @@ account. The API also logs `Admin {AdminId} deleted the account of user {UserId}
 There is no endpoint to read the table yet (query it in the database); it is meant for later admin actions too. The
 reports the deletion closes show no admin in `resolvedById`, as after a member's own deletion; the audit row says who.
 
+### Reading lists: editing, «أضف إلى قائمة» and order (#35)
+
+For the app's list forms and its «أضف إلى قائمة» sheet. Every call needs the member's token (401 without); errors have
+a `code` and an Arabic `message`.
+
+**Editing: `PATCH /api/readinglist/{id}`** (multipart form-data, the owner only). A field left out stays as it is:
+
+| Field | |
+|---|---|
+| `Name` | 1 to 100 characters; empty is ignored (the name stays) |
+| `Description` | at most 1000 characters; `""` (or blank) clears it, and it comes back `null` |
+| `IsPublic` | `true` or `false` |
+| `CoverImage` | a new picture: JPEG, PNG or WebP, at most 5 MB |
+| `RemoveCover` | `true` removes the picture, and `coverImageUrl` comes back `null` |
+
+200 is `{ "success": true, "message": "حُفظت التغييرات" }` without the list: refetch it. Removing the picture unlinks
+it; the file stays in storage, as the old one does when a picture is replaced. The web sends every text field of its
+form, so emptying the description there now clears it too.
+
+| HTTP | `code` | When |
+|---|---|---|
+| 400 | `CoverConflict` | a `CoverImage` and `RemoveCover=true` together: «لا يمكن رفع صورة جديدة وإزالة الصورة في الطلب نفسه»; nothing changes |
+| 400 | `ValidationFailed` | a name over 100 or a description over 1000 characters, or a picture of another type or over 5 MB (edits weren't checked before: the first two were a 500, and any file was stored) |
+| 400 | `DuplicateListName` | the member has another list with that name |
+| 400 | `UploadFailed` | storing the picture failed; try again |
+| 403 | `NotOwner` | someone else's list |
+| 404 | `ReadingListNotFound` | no such list |
+
+`CoverConflict`, `DuplicateListName` and `UploadFailed` are `{ "success": false, "code", "message" }`;
+`ValidationFailed` is the validation problem (`code`, `message`, `errors` by field).
+
+**Which of my lists have a novel: `GET /api/readinglist/my-lists?containsNovelId={novelId}`.** Each list then also has
+`containsNovel` (bool): whether the novel is on it, whatever the novel's state now (one made a draft since still counts,
+and removing it from there works). Only with the parameter: without it the field is absent, as on the other list
+pages and in the list `POST /api/readinglist` returns. Paging (`pageNumber`, `pageSize` up to 100) is unchanged. The
+sheet shows a check where it is true; tapping a checked list sends `DELETE /api/readinglist/{id}/novels/{novelId}`, an
+unchecked one `POST /api/readinglist/{id}/novels/{novelId}` (adding twice still answers 400 `AlreadyInList`). An
+unknown novel is on no list; a value that isn't an id is 400 `ValidationFailed`.
+
+**Order: `PATCH /api/readinglist/{id}/novels/order`** (the owner only), with a JSON body:
+
+```json
+{ "orderedNovelIds": ["<novelId>", "<novelId>", "..."] }
+```
+
+Send every novel of the list's `novels` (`GET /api/readinglist/{id}`), each once, in the new order. It is saved as
+their `orderIndex` (0, 1, 2...), which the list's page and its cards' `previewNovels` follow; the list's `updatedAt`
+changes when the order did. 200 is `{ "success": true, "message": "حُفظ ترتيب الروايات" }`, also when nothing moved.
+
+| HTTP | `code` | When |
+|---|---|---|
+| 400 | `NovelOrderMismatch` | the ids aren't exactly the list's novels: one missing (added elsewhere since), extra (removed since, or never on it) or repeated. Nothing changes; refetch the list and let the member try again. «الترتيب المرسل لا يطابق روايات القائمة: يجب أن يضم كل رواية فيها مرة واحدة، ولا شيء غيرها. حدّث القائمة وحاول مرة أخرى.» |
+| 400 | `ValidationFailed` | no `orderedNovelIds`, or an empty body |
+| 403 | `NotOwner` | someone else's list |
+| 404 | `ReadingListNotFound` | no such list |
+
+The list's novels are the ones readers can open. A novel still on the list but hidden (a draft, or deleted) isn't in
+`novels`, isn't sent, and keeps its place: it reappears where it was if it is published again.
+
 ### Reading, social and account API notes for the apps (#25)
 
 The small fixes the Android app asked for. Everything is additive unless it says otherwise; errors are

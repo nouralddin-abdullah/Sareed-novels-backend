@@ -7,6 +7,8 @@ public sealed record NovelPreview(Guid NovelId, string Slug, string CoverImageUr
 
 /// <summary>
 /// A reading list for list pages: <see cref="VisibleNovelsCount"/> counts only novels readers can open (not draft or
-/// deleted), and <see cref="PreviewNovels"/> holds the first few of them in list order.
+/// deleted), and <see cref="PreviewNovels"/> holds the first few of them in list order. <see cref="ContainsNovel"/> says
+/// whether the list has the novel the page was asked about, and is null when it wasn't asked about one.
 /// </summary>
-public sealed record ReadingListSummary(ReadingList List, int VisibleNovelsCount, IReadOnlyList<NovelPreview> PreviewNovels);
+public sealed record ReadingListSummary(ReadingList List, int VisibleNovelsCount, IReadOnlyList<NovelPreview> PreviewNovels,
+    bool? ContainsNovel = null);

@@ -3,6 +3,7 @@ using Application.ReadingLists.Commands.CreateReadingList;
 using Application.ReadingLists.Commands.DeleteReadingList;
 using Application.ReadingLists.Commands.FollowReadingList;
 using Application.ReadingLists.Commands.RemoveNovelFromList;
+using Application.ReadingLists.Commands.ReorderNovelsInList;
 using Application.ReadingLists.Commands.UnfollowReadingList;
 using Application.ReadingLists.Commands.UpdateReadingList;
 using Application.ReadingLists.Queries.GetFollowedReadingLists;
@@ -20,13 +21,19 @@ namespace Sareed_novels_backend.Controllers;
 [Route("api/readinglist")]
 public class ReadingListController(IMediator mediator) : ControllerBase
 {
+    /// <summary>
+    /// The caller's lists. With <c>containsNovelId</c>, each list also has <c>containsNovel</c>: whether that novel is on it
+    /// (the «أضف إلى قائمة» sheet); without it, the field is left out.
+    /// </summary>
     [HttpGet("my-lists")]
-    public async Task<IActionResult> GetMyReadingLists([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 12)
+    public async Task<IActionResult> GetMyReadingLists([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 12,
+        [FromQuery] Guid? containsNovelId = null)
     {
         var query = new GetMyReadingListsQuery
         {
             PageNumber = pageNumber,
-            PageSize = pageSize
+            PageSize = pageSize,
+            ContainsNovelId = containsNovelId
         };
         
         var result = await mediator.Send(query);
@@ -81,6 +88,10 @@ public class ReadingListController(IMediator mediator) : ControllerBase
         return BadRequest(result);
     }
 
+    /// <summary>
+    /// Multipart form; a field left out stays as it is. <c>Description=""</c> clears the description and
+    /// <c>RemoveCover=true</c> removes the picture (400 <c>CoverConflict</c> together with a new <c>CoverImage</c>).
+    /// </summary>
     [HttpPatch("{readingListId}")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> UpdateReadingList([FromRoute] Guid readingListId, [FromForm] UpdateReadingListRequest request)
@@ -90,7 +101,8 @@ public class ReadingListController(IMediator mediator) : ControllerBase
             request.Name,
             request.Description,
             request.IsPublic,
-            request.CoverImage
+            request.CoverImage,
+            request.RemoveCover
         );
 
         var result = await mediator.Send(command);
@@ -124,6 +136,21 @@ public class ReadingListController(IMediator mediator) : ControllerBase
         };
 
         var result = await mediator.Send(command);
+        if (result.Success)
+        {
+            return Ok(result);
+        }
+        return BadRequest(result);
+    }
+
+    /// <summary>
+    /// The owner puts the list's novels in a new order: JSON <c>{ "orderedNovelIds": [...] }</c> with every novel
+    /// GET /api/readinglist/{id} lists, each once (400 <c>NovelOrderMismatch</c> when one is missing, extra or repeated).
+    /// </summary>
+    [HttpPatch("{readingListId}/novels/order")]
+    public async Task<IActionResult> ReorderNovelsInReadingList([FromRoute] Guid readingListId, [FromBody] ReorderNovelsInListRequest request)
+    {
+        var result = await mediator.Send(new ReorderNovelsInListCommand(readingListId, request.OrderedNovelIds!));
         if (result.Success)
         {
             return Ok(result);

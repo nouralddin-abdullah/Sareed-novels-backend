@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Application.ReadingLists.DTOs;
 
 public class ReadingListPreviewDTO
@@ -13,6 +15,14 @@ public class ReadingListPreviewDTO
     public List<NovelPreviewDTO> PreviewNovels { get; set; } = new();
     public bool IsOwner { get; set; }
     public bool IsFollowing { get; set; }
+
+    /// <summary>
+    /// Whether the list has the novel GET /api/readinglist/my-lists was asked about (containsNovelId), whatever the
+    /// novel's state, as adding (AlreadyInList) and removing it see it. Left out of the JSON when no novel was asked
+    /// about, and on every other page.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ContainsNovel { get; set; }
 }
 
 public class NovelPreviewDTO

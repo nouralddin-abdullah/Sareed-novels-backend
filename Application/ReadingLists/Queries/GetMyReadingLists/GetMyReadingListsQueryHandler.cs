@@ -22,7 +22,8 @@ public class GetMyReadingListsQueryHandler(
         var (lists, totalCount) = await readingListsRepository.GetUserReadingListsWithPreviewAsync(
             currentUser.Id,
             pageNumber,
-            pageSize
+            pageSize,
+            request.ContainsNovelId
         );
 
         var dtos = lists.Select(list => list.ToPreviewDto(isOwner: true, isFollowing: false)).ToList();

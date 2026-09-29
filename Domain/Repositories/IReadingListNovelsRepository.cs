@@ -1,4 +1,5 @@
 using Domain.Entities;
+using Domain.ReadingLists;
 
 namespace Domain.Repositories;
 
@@ -15,4 +16,11 @@ public interface IReadingListNovelsRepository
     Task<int> RemoveDeletedNovelsAsync(Guid readingListId);
     /// <summary>The OrderIndex that puts a newly added novel at the end of the list.</summary>
     Task<int> GetNextOrderIndexAsync(Guid readingListId);
+
+    /// <summary>
+    /// Puts the list's novels in the order of <paramref name="orderedNovelIds"/>, which must be exactly the novels readers
+    /// can open on it (<see cref="ReadingListOrder.Apply"/>), and stores it as OrderIndex 0, 1, 2... Checked and written in
+    /// one transaction with the list and its novels locked, so a concurrent reorder, add or removal can't slip in between.
+    /// </summary>
+    Task<ReadingListReorderResult> ReorderAsync(Guid readingListId, IReadOnlyList<Guid> orderedNovelIds, CancellationToken cancellationToken = default);
 }

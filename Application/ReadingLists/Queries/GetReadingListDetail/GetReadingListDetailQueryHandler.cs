@@ -48,7 +48,9 @@ public class GetReadingListDetailQueryHandler(
             OwnerProfilePhoto = readingList.Owner.ProfilePhoto,
             Novels = readingList.Novels
                 .Where(rln => !rln.Novel.IsDraft)
+                // As the list cards and the reorder see it: older rows can share an OrderIndex.
                 .OrderBy(rln => rln.OrderIndex)
+                .ThenBy(rln => rln.AddedAt)
                 .Select(rln => new NovelInListDTO
                 {
                     NovelId = rln.Novel.Id,
