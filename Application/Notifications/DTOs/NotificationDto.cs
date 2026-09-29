@@ -49,6 +49,14 @@ public class NotificationDto
     public Guid? GiftId { get; set; }
     public string? GiftNameAr { get; set; }
     public int? GiftCount { get; set; }
+
+    /// <summary>
+    /// GiftReceived (#31): the gift record (the target id to report its message, type GiftMessage), and what the sender
+    /// wrote with the gift, read from that record now: null when they wrote nothing or a moderator removed it. Both are
+    /// null for other types and for gift notifications from before #31. <see cref="Message"/> is unchanged.
+    /// </summary>
+    public Guid? GiftTransactionId { get; set; }
+    public string? GiftMessage { get; set; }
 }
 
 public class NotificationListDto

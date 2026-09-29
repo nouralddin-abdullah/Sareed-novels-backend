@@ -8,6 +8,14 @@ public class SendGiftCommand : IRequest<OperationResult>
     public Guid GiftId { get; set; }
     public Guid NovelId { get; set; }
     public int Count { get; set; } = 1;
+
+    /// <summary>
+    /// Optional (#31): a short message to the author, shown publicly under the novel's recent gifts. Trimmed; empty or
+    /// whitespace-only is no message. At most AppConfig:Gifts:MessageMaxLength (200) user-perceived characters
+    /// (<see cref="GiftMessageRules"/>), else 400 GiftMessageTooLong; 403 Blocked when the author blocked the sender.
+    /// Either way nothing is charged.
+    /// </summary>
+    public string? Message { get; set; }
 }
 
 public class OperationResult

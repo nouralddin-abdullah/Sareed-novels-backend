@@ -18,6 +18,7 @@ public class GiftQueryPagingTests
 {
     private readonly IGiftRepository gifts = Substitute.For<IGiftRepository>();
     private readonly IGiftTransactionRepository transactions = Substitute.For<IGiftTransactionRepository>();
+    private readonly IUserBlocksRepository blocks = Substitute.For<IUserBlocksRepository>();
     private readonly IUserContext userContext = Substitute.For<IUserContext>();
     private readonly IMapper mapper = Substitute.For<IMapper>();
 
@@ -63,7 +64,7 @@ public class GiftQueryPagingTests
         var novelId = Guid.NewGuid();
         transactions.GetTransactionsByNovel(novelId, 2, 20).Returns((Enumerable.Repeat(new GiftTransaction(), 20), 45));
 
-        var page = await new GetNovelGiftsQueryHandler(transactions, mapper)
+        var page = await new GetNovelGiftsQueryHandler(transactions, blocks, userContext, mapper)
             .Handle(new GetNovelGiftsQuery(novelId, pageNumber: 2, pageSize: 20), CancellationToken.None);
 
         Assert.Equal(45, page.TotalItemsCount);
@@ -98,7 +99,7 @@ public class GiftQueryPagingTests
 
         var catalogue = await new GetAllGiftsQueryHandler(gifts, mapper)
             .Handle(new GetAllGiftsQuery(pageNumber, pageSize), CancellationToken.None);
-        var novelGifts = await new GetNovelGiftsQueryHandler(transactions, mapper)
+        var novelGifts = await new GetNovelGiftsQueryHandler(transactions, blocks, userContext, mapper)
             .Handle(new GetNovelGiftsQuery(novelId, pageNumber, pageSize), CancellationToken.None);
 
         await gifts.Received(1).GetAllGifts(usedPage, usedSize, false);

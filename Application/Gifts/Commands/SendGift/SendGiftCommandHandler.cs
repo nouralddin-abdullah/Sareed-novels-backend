@@ -5,6 +5,7 @@ using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Application.Wallet;
@@ -16,15 +17,17 @@ public class SendGiftCommandHandler(
     IGiftRepository giftRepository,
     IGiftTransactionRepository giftTransactionRepository,
     INovelsRepository novelsRepository,
+    IUserBlocksRepository blocksRepository,
     IUserContext userContext,
     IWalletService walletService,
     ITransactionManager transactionManager,
+    IConfiguration configuration,
     IServiceScopeFactory scopeFactory) : IRequestHandler<SendGiftCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(SendGiftCommand request, CancellationToken cancellationToken)
     {
-        logger.LogInformation("User sending gift: GiftId={GiftId}, NovelId={NovelId}, Count={Count}",
-            request.GiftId, request.NovelId, request.Count);
+        logger.LogInformation("User sending gift: GiftId={GiftId}, NovelId={NovelId}, Count={Count}, WithMessage={WithMessage}",
+            request.GiftId, request.NovelId, request.Count, !string.IsNullOrWhiteSpace(request.Message));
 
         // Validation
         if (request.Count < 1 || request.Count > 100)
@@ -35,6 +38,23 @@ public class SendGiftCommandHandler(
                 Code = "InvalidGiftCount",
                 Message = "عدد الهدايا يجب أن يكون من 1 إلى 100"
             };
+        }
+
+        // The message (#31) is checked before anything is charged. Its limit is the one GET /api/app/config gives the
+        // apps, read from the same setting.
+        var message = GiftMessageRules.Normalize(request.Message);
+        if (message is not null)
+        {
+            var maxLength = GiftMessageRules.MaxLength(configuration);
+            if (GiftMessageRules.IsTooLong(message, maxLength))
+            {
+                return new OperationResult
+                {
+                    Success = false,
+                    Code = GiftMessageRules.TooLongCode,
+                    Message = GiftMessageRules.TooLongMessage(maxLength)
+                };
+            }
         }
 
         var currentUser = userContext.GetCurrentUser()
@@ -65,6 +85,13 @@ public class SendGiftCommandHandler(
                 Code = "CannotGiftOwnNovel",
                 Message = "لا يمكنك إرسال هدية إلى روايتك"
             };
+        }
+
+        // An author who blocked someone gets no messages from them, as with comments on their posts; their gifts
+        // without a message still go.
+        if (message is not null && await blocksRepository.IsBlockedAsync(novel.AuthorId, currentUser.Id, cancellationToken))
+        {
+            throw new ForbidException(GiftMessageRules.BlockedMessage, GiftMessageRules.BlockedCode);
         }
 
         var totalCost = gift.Cost * request.Count;
@@ -114,7 +141,8 @@ public class SendGiftCommandHandler(
                     SenderId = currentUser.Id,
                     Count = request.Count,
                     TotalCost = totalCost,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    Message = message
                 };
                 await giftTransactionRepository.CreateTransaction(record);
                 return record;
@@ -152,7 +180,7 @@ public class SendGiftCommandHandler(
         {
             try
             {
-                await SendGiftNotificationInBackground(novel.AuthorId, currentUser.Id, novel, gift, request.Count);
+                await SendGiftNotificationInBackground(novel.AuthorId, currentUser.Id, novel, gift, request.Count, giftTransaction.Id);
             }
             catch (Exception ex)
             {
@@ -172,7 +200,8 @@ public class SendGiftCommandHandler(
         string senderId,
         Novel novel,
         Gift gift,
-        int count)
+        int count,
+        Guid giftTransactionId)
     {
         try
         {
@@ -183,13 +212,14 @@ public class SendGiftCommandHandler(
             var sender = await usersRepository.GetUserById(senderId);
             if (sender == null) return;
 
-            // Send notification to novel author
+            // Send notification to novel author; its message is read from the gift record, not copied.
             await notificationService.SendGiftReceivedNotification(
                 authorId,
                 sender,
                 novel,
                 gift,
-                count
+                count,
+                giftTransactionId
             );
 
             logger.LogDebug("Sent gift notification to author {AuthorId}", authorId);

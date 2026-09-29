@@ -13,6 +13,7 @@ using Infrastructure.Persistence;
 using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -201,9 +202,11 @@ public class WalletFlowTests(SqlServerDatabase database) : IClassFixture<SqlServ
         new GiftRepository(request.Db),
         new GiftTransactionRepository(request.Db),
         new NovelsRepository(request.Db),
+        new UserBlocksRepository(request.Db, TimeProvider.System),
         SignedIn(sender),
         request.Wallet,
         request.Transactions,
+        new ConfigurationBuilder().Build(),
         Substitute.For<IServiceScopeFactory>());
 
     [Fact]
@@ -271,7 +274,8 @@ public class WalletFlowTests(SqlServerDatabase database) : IClassFixture<SqlServ
         var failingRecords = Substitute.For<Domain.Repositories.IGiftTransactionRepository>();
         failingRecords.CreateTransaction(Arg.Any<GiftTransaction>()).Returns<GiftTransaction>(_ => throw new DbUpdateException("boom"));
         var handler = new SendGiftCommandHandler(NullLogger<SendGiftCommandHandler>.Instance, new GiftRepository(request.Db),
-            failingRecords, new NovelsRepository(request.Db), SignedIn(sender), request.Wallet, request.Transactions,
+            failingRecords, new NovelsRepository(request.Db), new UserBlocksRepository(request.Db, TimeProvider.System),
+            SignedIn(sender), request.Wallet, request.Transactions, new ConfigurationBuilder().Build(),
             Substitute.For<IServiceScopeFactory>());
 
         var result = await handler.Handle(new SendGiftCommand { GiftId = gift.Id, NovelId = novel.Id, Count = 2 }, CancellationToken.None);

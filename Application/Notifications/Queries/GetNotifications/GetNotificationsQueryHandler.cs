@@ -19,6 +19,7 @@ public partial class GetNotificationsQueryHandler(
     IChaptersRepository chaptersRepository,
     IReadingListsRepository readingListsRepository,
     IGiftRepository giftRepository,
+    IGiftTransactionRepository giftTransactionRepository,
     IUserContext userContext,
     IMapper mapper) : IRequestHandler<GetNotificationsQuery, NotificationListDto>
 {
@@ -94,6 +95,10 @@ public partial class GetNotificationsQueryHandler(
             .Where(n => n.Type == NotificationType.ReadingListFollowed)
             .Select(n => n.RelatedEntityId)));
         var giftNames = await giftRepository.GetArabicNamesAsync(Distinct(notifications.Select(n => n.GiftId)));
+        // Read from the gift record, not copied into the notification, so a moderator's removal shows here too (#31).
+        var giftMessages = await giftTransactionRepository.GetMessagesAsync(Distinct(notifications
+            .Where(n => n.Type == NotificationType.GiftReceived)
+            .Select(n => n.GiftTransactionId)));
 
         foreach (var notification in notifications)
         {
@@ -105,6 +110,9 @@ public partial class GetNotificationsQueryHandler(
             notification.ReadingListName = notification.Type == NotificationType.ReadingListFollowed
                 && notification.RelatedEntityId is { } listId ? listNames.GetValueOrDefault(listId) : null;
             notification.GiftNameAr = notification.GiftId is { } giftId ? giftNames.GetValueOrDefault(giftId) : null;
+            notification.GiftMessage = notification.GiftTransactionId is { } giftTransactionId
+                ? giftMessages.GetValueOrDefault(giftTransactionId)
+                : null;
         }
     }
 

@@ -25,6 +25,13 @@ public class Notification
     public Guid? GiftId { get; set; }
     public int? GiftCount { get; set; }
 
+    /// <summary>
+    /// A GiftReceived notification's <see cref="GiftTransaction"/> (#31), where its message is read from, so that a
+    /// moderator removing the message removes it here too; null for other types and gift notifications from before.
+    /// No foreign key, like <see cref="GiftId"/>.
+    /// </summary>
+    public Guid? GiftTransactionId { get; set; }
+
     public void MarkAsRead()
     {
         IsRead = true;

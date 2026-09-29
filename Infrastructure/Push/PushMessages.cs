@@ -29,11 +29,26 @@ public sealed record PushTarget
 
     public Guid? ReviewId { get; init; }
     public Guid? ReadingListId { get; init; }
+
+    /// <summary>
+    /// Not an id and not in the data: what a gift's sender wrote (#31), which the push body quotes under the sentence;
+    /// null when there is none or a moderator removed it.
+    /// </summary>
+    public string? GiftMessage { get; init; }
 }
 
 /// <summary>How a notification looks as a push: Arabic title per type, its message as the body, channel and data.</summary>
 public static class PushMessages
 {
+    /// <summary>How much of a gift's message a push quotes, in user-perceived characters, «…» included.</summary>
+    public const int GiftMessageExcerptLength = 100;
+
+    /// <summary>
+    /// And at most this many UTF-16 units (a hundred emoji can take well over a thousand), so the body stays far from
+    /// FCM's 4 KB limit for a whole message.
+    /// </summary>
+    internal const int GiftMessageExcerptMaxUnits = 300;
+
     /// <summary>
     /// The keys of a push's data. Every key is always present (empty when it doesn't apply), and every value is a
     /// string. <c>notificationId</c>, <c>type</c>, <c>relatedEntityId</c>, <c>relatedEntityType</c> and
@@ -58,11 +73,48 @@ public static class PushMessages
     public static PushMessage Build(Notification notification, PushTarget target, int unreadCount, string deviceToken) => new(
         deviceToken,
         TitleFor(notification.Type),
-        notification.Message,
+        BodyFor(notification, target),
         NotificationGroups.For(notification.Type),
         CollapseKeyFor(notification, target),
         unreadCount,
         DataFor(notification, target, unreadCount));
+
+    /// <summary>
+    /// The notification's message; for a gift with a message (#31), then a new line with «the message», cut at about
+    /// <see cref="GiftMessageExcerptLength"/> characters with «…».
+    /// </summary>
+    public static string BodyFor(Notification notification, PushTarget target) =>
+        notification.Type == NotificationType.GiftReceived && !string.IsNullOrWhiteSpace(target.GiftMessage)
+            ? $"{notification.Message}\n«{Excerpt(target.GiftMessage.Trim())}»"
+            : notification.Message;
+
+    /// <summary>
+    /// <paramref name="text"/> when it fits, else its first whole user-perceived characters (an emoji or a letter with
+    /// its marks is never split) and «…», within <see cref="GiftMessageExcerptLength"/> characters and
+    /// <see cref="GiftMessageExcerptMaxUnits"/> UTF-16 units.
+    /// </summary>
+    internal static string Excerpt(string text)
+    {
+        if (text.Length <= GiftMessageExcerptMaxUnits && new StringInfo(text).LengthInTextElements <= GiftMessageExcerptLength)
+        {
+            return text;
+        }
+
+        // Whole characters while they leave room for the «…».
+        var elements = StringInfo.GetTextElementEnumerator(text);
+        var (count, end) = (0, 0);
+        while (elements.MoveNext())
+        {
+            var element = (string)elements.Current;
+            if (count == GiftMessageExcerptLength - 1 || end + element.Length > GiftMessageExcerptMaxUnits - 1)
+            {
+                break;
+            }
+            count++;
+            end += element.Length;
+        }
+        return text[..end].TrimEnd() + "…";
+    }
 
     public static string TitleFor(string notificationType) => notificationType switch
     {
