@@ -3,9 +3,14 @@ using FluentValidation;
 
 namespace Application.ReadingLists.Commands.UpdateReadingList;
 
-public class UpdateReadingListCommandValidator : AbstractValidator<UpdateReadingListCommand>
+/// <summary>
+/// Checks the edit form as ASP.NET binds it. It validated <see cref="UpdateReadingListCommand"/>, which the controller
+/// builds itself and nothing validates, so an edit was never checked: a long name or description failed in the
+/// database (500) and any file was stored as the picture.
+/// </summary>
+public class UpdateReadingListRequestValidator : AbstractValidator<UpdateReadingListRequest>
 {
-    public UpdateReadingListCommandValidator()
+    public UpdateReadingListRequestValidator()
     {
         RuleFor(x => x.Name)
             .Length(1, 100)

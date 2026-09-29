@@ -14,10 +14,24 @@ public class UpdateReadingListCommandHandler(
     IFileUploadService fileUploadService,
     IUserContext userContext) : IRequestHandler<UpdateReadingListCommand, OperationResult>
 {
+    /// <summary>The code of an edit that sends a new picture and asks to remove the picture.</summary>
+    public const string CoverConflictCode = "CoverConflict";
+    public const string CoverConflictMessage = "لا يمكن رفع صورة جديدة وإزالة الصورة في الطلب نفسه";
+
     public async Task<OperationResult> Handle(UpdateReadingListCommand request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("Updating reading list {ListId} for user {UserId}", request.ReadingListId, currentUser.Id);
+
+        if (request.RemoveCover && request.CoverImage != null)
+        {
+            return new OperationResult
+            {
+                Success = false,
+                Code = CoverConflictCode,
+                Message = CoverConflictMessage
+            };
+        }
 
         var readingList = await readingListsRepository.GetByIdAsync(request.ReadingListId)
             ?? throw new NotFoundException("القائمة غير موجودة", "ReadingListNotFound");
@@ -42,16 +56,22 @@ public class UpdateReadingListCommandHandler(
             readingList.Name = request.Name;
         }
 
-        // Update description if provided
+        // Left out (null), it stays; sent empty or blank, it is removed (stored as null, as a list created without one).
         if (request.Description != null)
         {
-            readingList.Description = request.Description;
+            readingList.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description;
         }
 
         // Update visibility if provided
         if (request.IsPublic.HasValue)
         {
             readingList.IsPublic = request.IsPublic.Value;
+        }
+
+        if (request.RemoveCover)
+        {
+            // Only the list lets go of it: the stored file stays, as when a new picture replaces it.
+            readingList.CoverImageUrl = null;
         }
 
         // Upload cover image if provided

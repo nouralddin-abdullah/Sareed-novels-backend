@@ -32,6 +32,7 @@ internal static class ReadingListPreviewMapping
             })
             .ToList(),
         IsOwner = isOwner,
-        IsFollowing = isFollowing
+        IsFollowing = isFollowing,
+        ContainsNovel = summary.ContainsNovel
     };
 }
