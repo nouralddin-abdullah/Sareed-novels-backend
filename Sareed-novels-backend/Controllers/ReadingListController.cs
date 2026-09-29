@@ -20,13 +20,19 @@ namespace Sareed_novels_backend.Controllers;
 [Route("api/readinglist")]
 public class ReadingListController(IMediator mediator) : ControllerBase
 {
+    /// <summary>
+    /// The caller's lists. With <c>containsNovelId</c>, each list also has <c>containsNovel</c>: whether that novel is on it
+    /// (the «أضف إلى قائمة» sheet); without it, the field is left out.
+    /// </summary>
     [HttpGet("my-lists")]
-    public async Task<IActionResult> GetMyReadingLists([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 12)
+    public async Task<IActionResult> GetMyReadingLists([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 12,
+        [FromQuery] Guid? containsNovelId = null)
     {
         var query = new GetMyReadingListsQuery
         {
             PageNumber = pageNumber,
-            PageSize = pageSize
+            PageSize = pageSize,
+            ContainsNovelId = containsNovelId
         };
         
         var result = await mediator.Send(query);

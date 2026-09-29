@@ -1,6 +1,9 @@
+using System.Collections.Concurrent;
+using System.Data.Common;
 using Domain.Entities;
 using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Sareed_novels_backend.Tests.Integration;
 
@@ -179,5 +182,80 @@ public class ReadingListRepositoryTests(SqlServerDatabase database) : IClassFixt
         var repository = new ReadingListNovelsRepository(check);
         Assert.Equal(2, await repository.GetNextOrderIndexAsync(list.Id));
         Assert.Equal(0, await repository.GetNextOrderIndexAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task Whether_each_list_has_a_novel_comes_from_the_same_queries_as_the_page()
+    {
+        var owner = Seed.User();
+        var author = Seed.User();
+        var novel = Seed.Novel(author, "رواية " + Seed.Marker());
+        var draft = Seed.Novel(author, "مسودة " + Seed.Marker(), isDraft: true);
+        var lists = Enumerable.Range(0, 4).Select(i => List(owner, isPublic: i % 2 == 0, DateTime.UtcNow.AddMinutes(-i))).ToList();
+        await using (var db = database.CreateContext())
+        {
+            db.Users.AddRange(owner, author);
+            db.Novels.AddRange(novel, draft);
+            db.ReadingLists.AddRange(lists);
+            db.ReadingListNovels.AddRange(
+                new ReadingListNovel { ReadingListId = lists[0].Id, NovelId = novel.Id },
+                new ReadingListNovel { ReadingListId = lists[2].Id, NovelId = novel.Id, OrderIndex = 1 },
+                new ReadingListNovel { ReadingListId = lists[2].Id, NovelId = draft.Id },
+                new ReadingListNovel { ReadingListId = lists[3].Id, NovelId = draft.Id });
+            await db.SaveChangesAsync();
+        }
+
+        async Task<(List<bool?> Contains, CommandLog Log)> Page(Guid? containsNovelId)
+        {
+            var log = new CommandLog();
+            await using var db = database.CreateContext(log);
+            var (page, total) = await new ReadingListsRepository(db).GetUserReadingListsWithPreviewAsync(owner.Id, 1, 12, containsNovelId);
+            Assert.Equal(4, total);
+            Assert.Equal(lists.Select(l => l.Id), page.Select(s => s.List.Id));
+            return (page.Select(s => s.ContainsNovel).ToList(), log);
+        }
+
+        var (notAsked, plainLog) = await Page(null);
+        var (withNovel, novelLog) = await Page(novel.Id);
+        var (withDraft, _) = await Page(draft.Id);
+        var (withUnknown, _) = await Page(Guid.NewGuid());
+
+        Assert.All(notAsked, Assert.Null);
+        Assert.Equal([true, false, true, false], withNovel);
+        // A novel readers can't open (a draft since it was added) is still on the list.
+        Assert.Equal([false, false, true, true], withDraft);
+        Assert.Equal([false, false, false, false], withUnknown);
+
+        // The same commands (count, page, previews) with or without the novel: no query per list.
+        Assert.Equal(plainLog.Commands.Count, novelLog.Commands.Count);
+        Assert.Contains(novelLog.Commands, sql => sql.Contains("EXISTS"));
+        Assert.DoesNotContain(plainLog.Commands, sql => sql.Contains("EXISTS"));
+    }
+
+    /// <summary>The SQL of every command a context sends.</summary>
+    private sealed class CommandLog : DbCommandInterceptor
+    {
+        public ConcurrentQueue<string> Commands { get; } = new();
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Commands.Enqueue(command.CommandText);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<object> result, CancellationToken cancellationToken = default)
+        {
+            Commands.Enqueue(command.CommandText);
+            return base.ScalarExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            Commands.Enqueue(command.CommandText);
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 }

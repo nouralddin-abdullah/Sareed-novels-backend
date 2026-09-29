@@ -9,7 +9,12 @@ public interface IReadingListsRepository
     Task<ReadingList?> GetByIdWithNovelsAsync(Guid id);
     Task<ReadingList?> GetByIdWithDetailsAsync(Guid id);
     Task<(IEnumerable<ReadingList>, int)> GetUserReadingListsAsync(string userId, int pageNumber, int pageSize);
-    Task<(IReadOnlyList<ReadingListSummary>, int)> GetUserReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize);
+    /// <summary>
+    /// A page of the user's lists. With <paramref name="containsNovelId"/>, each says whether it has that novel
+    /// (<see cref="ReadingListSummary.ContainsNovel"/>), from the same query.
+    /// </summary>
+    Task<(IReadOnlyList<ReadingListSummary>, int)> GetUserReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize,
+        Guid? containsNovelId = null);
     /// <summary>One list as the list pages summarize them (visible-novel count and preview), or null if it doesn't exist.</summary>
     Task<ReadingListSummary?> GetSummaryAsync(Guid readingListId);
     Task<(IReadOnlyList<ReadingListSummary>, int)> GetUserPublicReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize);

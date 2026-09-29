@@ -62,8 +62,9 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
         return (lists, totalCount);
     }
 
-    public Task<(IReadOnlyList<ReadingListSummary>, int)> GetUserReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize) =>
-        PageWithPreviews(dbContext.ReadingLists.Where(rl => rl.UserId == userId), pageNumber, pageSize);
+    public Task<(IReadOnlyList<ReadingListSummary>, int)> GetUserReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize,
+        Guid? containsNovelId = null) =>
+        PageWithPreviews(dbContext.ReadingLists.Where(rl => rl.UserId == userId), pageNumber, pageSize, containsNovelId);
 
     public async Task<ReadingListSummary?> GetSummaryAsync(Guid readingListId)
     {
@@ -183,8 +184,11 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
     /// <summary>
     /// One page of lists, most recently updated first, each with its visible-novel count and first few visible novels,
     /// in the same few queries whatever the page size. Draft novels are skipped here; the Novel query filter skips deleted ones.
+    /// With <paramref name="containsNovelId"/>, each list also says whether it has that novel: one EXISTS in the page's
+    /// query, not a query per list.
     /// </summary>
-    private async Task<(IReadOnlyList<ReadingListSummary>, int)> PageWithPreviews(IQueryable<ReadingList> query, int pageNumber, int pageSize)
+    private async Task<(IReadOnlyList<ReadingListSummary>, int)> PageWithPreviews(IQueryable<ReadingList> query, int pageNumber, int pageSize,
+        Guid? containsNovelId = null)
     {
         var totalCount = await query.CountAsync();
 
@@ -198,6 +202,9 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
             {
                 List = rl,
                 VisibleNovelsCount = rl.Novels.Count(rln => !rln.Novel.IsDraft),
+                // The list's row for the novel, whatever the novel's state, as adding it (AlreadyInList) and removing it
+                // see it. Without a novel to ask about, SQL Server gets a constant instead.
+                ContainsNovel = containsNovelId != null && rl.Novels.Any(rln => rln.NovelId == containsNovelId),
                 Preview = rl.Novels
                     .Where(rln => !rln.Novel.IsDraft)
                     .OrderBy(rln => rln.OrderIndex)
@@ -209,6 +216,7 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
             .AsSplitQuery()
             .ToListAsync();
 
-        return (page.Select(p => new ReadingListSummary(p.List, p.VisibleNovelsCount, p.Preview)).ToList(), totalCount);
+        return (page.Select(p => new ReadingListSummary(p.List, p.VisibleNovelsCount, p.Preview,
+            containsNovelId is null ? null : p.ContainsNovel)).ToList(), totalCount);
     }
 }
