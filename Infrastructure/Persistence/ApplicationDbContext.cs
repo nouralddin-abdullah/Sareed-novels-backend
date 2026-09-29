@@ -1228,6 +1228,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(gt => gt.Count)
                 .HasDefaultValue(1);
 
+            // The sender's message to the author (#31), nvarchar(4000): see MessageMaxStoredLength.
+            entity.Property(gt => gt.Message)
+                .HasMaxLength(GiftTransaction.MessageMaxStoredLength);
+
             entity.HasIndex(gt => new { gt.NovelId, gt.CreatedAt })
                 .HasDatabaseName("IX_GiftTransactions_Novel_Created");
 

@@ -378,7 +378,7 @@ public class NotificationService(
         }
     }
 
-    public async Task SendGiftReceivedNotification(string novelAuthorId, User sender, Novel novel, Gift gift, int count)
+    public async Task SendGiftReceivedNotification(string novelAuthorId, User sender, Novel novel, Gift gift, int count, Guid giftTransactionId)
     {
         try
         {
@@ -398,6 +398,9 @@ public class NotificationService(
                 // What the message says in words, for clients (#25).
                 GiftId = gift.Id,
                 GiftCount = count,
+                // The sender's message is read from the gift record when the notification is listed or pushed (#31),
+                // so a moderator removing it removes it here too.
+                GiftTransactionId = giftTransactionId,
                 CreatedAt = DateTime.UtcNow
             };
 

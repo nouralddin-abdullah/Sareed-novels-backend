@@ -13,7 +13,7 @@ namespace Sareed_novels_backend.Controllers;
 public class ReportController(IMediator mediator) : ControllerBase
 {
     /// <summary>
-    /// Reports a comment, review, post, user, novel or reading list to the moderators: 201 with the new report, or 200
+    /// Reports a comment, review, post, user, novel, reading list or gift message to the moderators: 201 with the new report, or 200
     /// with the reporter's open report on the same target (nothing new is saved). The admin side is under /api/admin/reports.
     /// </summary>
     [HttpPost]

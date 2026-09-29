@@ -123,7 +123,7 @@ public class PushDeliveryTests(SqlServerDatabase database) : IClassFixture<SqlSe
         await Notify(s => s.SendLikeOnCommentNotification(me.Id, actor, mineOnParagraph.Id, mineOnParagraph, novel, chapter));
         await Notify(s => s.SendLikeOnReviewNotification(me.Id, actor, myReview.Id, otherNovel));
         await Notify(s => s.SendReadingListFollowedNotification(me.Id, actor, readingList.Id, readingList.Name));
-        await Notify(s => s.SendGiftReceivedNotification(me.Id, actor, novel, gift, 3));
+        await Notify(s => s.SendGiftReceivedNotification(me.Id, actor, novel, gift, 3, Guid.NewGuid()));
         await Notify(s => s.SendPrivilegeSubscribedNotification(me.Id, actor, novel));
 
         await Drain();
@@ -219,6 +219,47 @@ public class PushDeliveryTests(SqlServerDatabase database) : IClassFixture<SqlSe
         Assert.Equal(post.Id.ToString(), liked["postId"]);
         Assert.Equal(mine.Id.ToString(), liked["commentId"]);
         Assert.All(pushes.Values, p => Assert.Equal(PushMessages.DataKeys.Order(), p.Data.Keys.Order()));
+    }
+
+    [Fact]
+    public async Task A_gift_push_quotes_the_senders_message_as_the_gift_record_has_it_when_sent()
+    {
+        var world = await SeedWorld();
+        var (me, actor) = (world.Recipient, world.Actor);
+
+        // My novel, and four roses from the actor: with a message, a long one, one a moderator removes before the push
+        // goes, and none.
+        await using var db = database.CreateContext();
+        var novel = Seed.Novel(me, "رواية " + Seed.Marker());
+        var rose = new Gift { Id = Guid.NewGuid(), Name = "Rose", NameAr = "وردة", ImageUrl = "https://example.test/rose.png", Cost = 10 };
+        GiftTransaction Sent(string? message) => new()
+        {
+            Id = Guid.NewGuid(), GiftId = rose.Id, NovelId = novel.Id, SenderId = actor.Id, Count = 1, TotalCost = 10, Message = message
+        };
+        var (short_, long_, removed, none) = (Sent("شكراً على الفصل الأخير 🌹"), Sent(new string('ب', 150)), Sent("رسالة مخالفة"), Sent(null));
+        db.AddRange(novel, rose, short_, long_, removed, none);
+        await db.SaveChangesAsync();
+        foreach (var gift in new[] { short_, long_, removed, none })
+        {
+            await Notify(s => s.SendGiftReceivedNotification(me.Id, actor, novel, rose, 1, gift.Id));
+        }
+        await db.GiftTransactions.Where(t => t.Id == removed.Id).ExecuteUpdateAsync(s => s.SetProperty(t => t.Message, (string?)null));
+
+        await Drain();
+
+        await using var check = database.CreateContext();
+        var giftOf = await check.Notifications.AsNoTracking().Where(n => n.UserId == me.Id)
+            .ToDictionaryAsync(n => n.Id.ToString(), n => n.GiftTransactionId);
+        var bodies = fcm.Requests.ToDictionary(p => giftOf[p.Data["notificationId"]]!.Value, p => p);
+        Assert.Equal(4, bodies.Count);
+        var sentence = $"{actor.DisplayName} أرسل وردة إلى روايتك «{novel.Title}»";
+        Assert.All(bodies.Values, p => Assert.Equal("هدية جديدة", p.Title));
+        Assert.Equal($"{sentence}\n«شكراً على الفصل الأخير 🌹»", bodies[short_.Id].Text);
+        Assert.Equal($"{sentence}\n«{new string('ب', 99)}…»", bodies[long_.Id].Text);
+        Assert.Equal(sentence, bodies[removed.Id].Text);
+        Assert.Equal(sentence, bodies[none.Id].Text);
+        // The data are as before: the message isn't one of its keys.
+        Assert.All(bodies.Values, p => Assert.Equal(PushMessages.DataKeys.Order(), p.Data.Keys.Order()));
     }
 
     [Fact]

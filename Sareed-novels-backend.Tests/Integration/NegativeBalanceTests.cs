@@ -11,6 +11,7 @@ using Infrastructure.PlayBilling;
 using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -112,7 +113,8 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
 
     private static SendGiftCommandHandler SendGift(Request request, User sender) => new(
         NullLogger<SendGiftCommandHandler>.Instance, new GiftRepository(request.Db), new GiftTransactionRepository(request.Db),
-        new NovelsRepository(request.Db), SignedIn(sender), request.Wallet, request.Transactions, Substitute.For<IServiceScopeFactory>());
+        new NovelsRepository(request.Db), new UserBlocksRepository(request.Db, TimeProvider.System), SignedIn(sender), request.Wallet,
+        request.Transactions, new ConfigurationBuilder().Build(), Substitute.For<IServiceScopeFactory>());
 
     private static PrivilegeService Privileges(Request request) => new(
         NullLogger<PrivilegeService>.Instance, new NovelPrivilegeRepository(request.Db), new PrivilegeSubscriptionRepository(request.Db),

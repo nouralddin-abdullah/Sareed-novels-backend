@@ -17,6 +17,7 @@ public class ResolveReportCommandHandler(
     IPostsRepository postsRepository,
     INovelsRepository novelsRepository,
     IReadingListsRepository readingListsRepository,
+    IGiftTransactionRepository giftTransactionRepository,
     IAccountSuspensionService suspensions,
     TimeProvider time) : IRequestHandler<ResolveReportCommand, ResolveReportResult>
 {
@@ -81,6 +82,8 @@ public class ResolveReportCommandHandler(
         // Soft delete, out of the rankings, as the author's delete.
         ReportTargetType.Novel => await novelsRepository.SoftDeleteAsync(id),
         ReportTargetType.ReadingList => await readingListsRepository.DeleteAsync(id),
+        // The message goes; the gift, its payment and the author's earning stay (#31).
+        ReportTargetType.GiftMessage => await giftTransactionRepository.RemoveMessageAsync(id),
         _ => false
     };
 }

@@ -20,6 +20,12 @@ public interface IUserBlocksRepository
     /// <summary>Whether <paramref name="viewerId"/> and <paramref name="otherUserId"/> blocked each other, either way, in one query.</summary>
     Task<BlockRelation> GetRelationAsync(string viewerId, string otherUserId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Which of <paramref name="otherUserIds"/> and <paramref name="viewerId"/> blocked each other, either way, in one
+    /// query (for a page of items by different users).
+    /// </summary>
+    Task<IReadOnlySet<string>> GetBlockedEitherWayAsync(string viewerId, IReadOnlyCollection<string> otherUserIds, CancellationToken cancellationToken = default);
+
     /// <summary>The users <paramref name="blockerId"/> blocked, most recent first, with their current names.</summary>
     Task<(IReadOnlyList<BlockedUser> Users, int TotalCount)> GetBlockedUsersAsync(string blockerId, int pageNumber, int pageSize, CancellationToken cancellationToken = default);
 }

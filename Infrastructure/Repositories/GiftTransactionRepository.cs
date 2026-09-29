@@ -78,4 +78,24 @@ public class GiftTransactionRepository(ApplicationDbContext dbContext) : IGiftTr
             .Where(t => t.NovelId == novelId)
             .SumAsync(t => t.TotalCost);
     }
+
+    public async Task<Dictionary<Guid, string>> GetMessagesAsync(IReadOnlyCollection<Guid> transactionIds, CancellationToken cancellationToken = default)
+    {
+        var ids = transactionIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await dbContext.GiftTransactions
+            .AsNoTracking()
+            .Where(t => ids.Contains(t.Id) && t.Message != null)
+            .ToDictionaryAsync(t => t.Id, t => t.Message!, cancellationToken);
+    }
+
+    public async Task<bool> RemoveMessageAsync(Guid transactionId, CancellationToken cancellationToken = default) =>
+        // One statement, so a second removal (or a race with one) finds nothing left and says so.
+        await dbContext.GiftTransactions
+            .Where(t => t.Id == transactionId && t.Message != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Message, (string?)null), cancellationToken) > 0;
 }

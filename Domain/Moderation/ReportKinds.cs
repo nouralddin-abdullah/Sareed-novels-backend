@@ -10,7 +10,9 @@ public enum ReportTargetType
     Post,
     User,
     Novel,
-    ReadingList
+    ReadingList,
+    /// <summary>The message a sender wrote with a gift (#31); the target id is the GiftTransaction's.</summary>
+    GiftMessage
 }
 
 /// <summary>Why it was reported.</summary>

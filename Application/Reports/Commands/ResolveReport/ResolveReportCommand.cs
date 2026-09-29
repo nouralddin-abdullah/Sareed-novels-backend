@@ -31,8 +31,9 @@ public class ResolveReportRequestValidator : AbstractValidator<ResolveReportRequ
 
 /// <summary>
 /// An admin acts on a report, and with it on every open report on the same target: Dismiss (nothing wrong),
-/// RemoveContent (delete the item the way its author would, counters included), or SuspendUser (its author, or the
-/// reported user, for <see cref="SuspensionDays"/> days or for good).
+/// RemoveContent (delete the item the way its author would, counters included; for a gift's message, only the message
+/// goes, the gift stays), or SuspendUser (its author, or the reported user, for <see cref="SuspensionDays"/> days or for
+/// good).
 /// </summary>
 public class ResolveReportCommand(Guid reportId, string action, int? suspensionDays) : IRequest<ResolveReportResult>
 {

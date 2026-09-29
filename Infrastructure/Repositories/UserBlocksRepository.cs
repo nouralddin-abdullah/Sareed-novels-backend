@@ -62,6 +62,24 @@ public class UserBlocksRepository(ApplicationDbContext dbContext, TimeProvider t
             OtherBlockedViewer: blockers.Contains(otherUserId));
     }
 
+    public async Task<IReadOnlySet<string>> GetBlockedEitherWayAsync(string viewerId, IReadOnlyCollection<string> otherUserIds,
+        CancellationToken cancellationToken = default)
+    {
+        var others = otherUserIds.Where(id => id != viewerId).Distinct().ToList();
+        if (others.Count == 0)
+        {
+            return new HashSet<string>();
+        }
+
+        var blocked = await dbContext.UserBlocks
+            .AsNoTracking()
+            .Where(b => (b.BlockerId == viewerId && others.Contains(b.BlockedId))
+                        || (b.BlockedId == viewerId && others.Contains(b.BlockerId)))
+            .Select(b => b.BlockerId == viewerId ? b.BlockedId : b.BlockerId)
+            .ToListAsync(cancellationToken);
+        return blocked.ToHashSet();
+    }
+
     public async Task<(IReadOnlyList<BlockedUser> Users, int TotalCount)> GetBlockedUsersAsync(
         string blockerId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
     {

@@ -12,13 +12,15 @@ from the `appsettings*.json` files. An environment variable `Section__Key` sets 
 
 The mobile apps read this at startup: to force an update when an API change breaks older builds, to suggest one
 when a newer build is out, and to show a maintenance message. Each app reads its own section (`android`, `ios`). It is
-anonymous and cacheable for five minutes (`Cache-Control: public, max-age=300`).
+anonymous and cacheable for five minutes (`Cache-Control: public, max-age=300`). `gifts` says what gifts accept (#31):
+clients show the gift message box only when `gifts.messageMaxLength` is there (an older server has no `gifts`).
 
 ```json
 {
   "android": { "minVersion": "1.0.0", "latestVersion": "1.0.0" },
   "ios": { "minVersion": "1.0.0", "latestVersion": "1.0.0" },
-  "maintenance": { "enabled": false, "messageAr": null }
+  "maintenance": { "enabled": false, "messageAr": null },
+  "gifts": { "messageMaxLength": 200 }
 }
 ```
 
@@ -30,10 +32,12 @@ anonymous and cacheable for five minutes (`Cache-Control: public, max-age=300`).
 | `AppConfig:Ios:LatestVersion` | `1.0.0` | The newest version on the App Store. |
 | `AppConfig:Maintenance:Enabled` | `false` | While `true`, the app shows the maintenance message. |
 | `AppConfig:Maintenance:MessageAr` | `null` | The Arabic text of that message; empty or `null` lets the app use its own. |
+| `AppConfig:Gifts:MessageMaxLength` | `200` | The longest gift message, in user-perceived characters (below). `POST /api/gift/send` checks messages against this same setting, so the apps' counters and the server agree. |
 
 - Versions are `major.minor.patch`, digits only, and `MinVersion` can't be above `LatestVersion`, for each platform. A
   value that breaks either rule makes the endpoint answer 500 and log why, instead of telling every installed app
-  something wrong.
+  something wrong. So does a `MessageMaxLength` outside 1 to 1000 (and gifts with a message fail with 500 until it is
+  fixed; gifts without one still go).
 - The defaults are in `Sareed-novels-backend/appsettings.json`. To change a value without a deploy, edit
   `appsettings.Production.json` on the host (it is re-read when it changes, so the next request sees it), or set an
   environment variable with `__` in place of `:`, such as `AppConfig__Maintenance__Enabled=true` (read when the app
@@ -307,6 +311,46 @@ API (additive):
 Account deletion is unchanged: the whole balance, held earnings included, is forfeited, and pending withdrawals are
 cancelled.
 
+### Gift messages (#31)
+
+A reader may write the author a short message with a gift. **It is public**: it shows under the novel's recent gifts.
+
+**Sending.** `POST /api/gift/send` takes an optional `message` (string) with `giftId`, `novelId` and `count`. It is
+trimmed; empty or whitespace-only is no message. The limit is `AppConfig:Gifts:MessageMaxLength` (200), counted in
+user-perceived characters, .NET's `new StringInfo(text).LengthInTextElements`, as Flutter's counter and the web's
+`Intl.Segmenter` count: an emoji, a flag or a letter with its tashkeel is one. The column is `nvarchar(4000)`
+(`GiftTransactions.Message`, migration `AddGiftMessage`), room for 200 of any emoji (a family emoji is 11 UTF-16
+units); text within the limit but longer than that (letters under hundreds of combining marks) is refused as too long.
+Both refusals are checked before any payment, so **nothing is charged**:
+
+| HTTP | `code` | When | `message` |
+|---|---|---|---|
+| 400 | `GiftMessageTooLong` | over the limit | «الرسالة طويلة: الحد الأقصى 200 حرف.» (the configured number) |
+| 403 | `Blocked` | a message, and the novel's author blocked the sender (`IsBlockedAsync(authorId, senderId)`, as comments) | «لا يمكنك إرسال رسالة إلى هذا الكاتب.» |
+
+The 400 has the endpoint's other refusals' shape, `{ "success": false, "code", "message" }`; the 403 is `{ "code",
+"message" }`. A gift without a message is sent as before, blocked or not. A suspended member can't send anything (their
+sessions are refused: 401), as with comments.
+
+**Where it comes back** (always the stored text; `null` when there is none):
+
+| Where | Field |
+|---|---|
+| `GET /api/gift/novel/{novelId}` (public) | `message` on each item, anonymous callers included; `null` for a signed-in viewer who blocked the sender or whom the sender blocked (either way; the gift stays listed) |
+| `GET /api/notifications`, `GiftReceived` | `giftMessage` and `giftTransactionId` (the gift record's id, the target to report the message), next to `giftId`, `giftNameAr`, `giftCount`; `message` (the sentence) is unchanged. Read from the record, so a moderator's removal shows here too |
+| Push for `GiftReceived` | title «هدية جديدة»; body the sentence, then a new line with «the message», cut at 100 characters (whole ones: an emoji is never split) with «…», and at most 300 UTF-16 units. Read from the record when the push is sent. The data keys are unchanged |
+| `GET /api/gift/my-history` | `message` on each item (the sender's own) |
+
+Top supporters and the leaderboards carry no messages.
+
+**Moderation.** `POST /api/reports` with `targetType` `GiftMessage` and `targetId` the gift record's id (the item's `id`
+in `novel/{novelId}` and `my-history`, the notification's `giftTransactionId`). Any signed-in member can report it but
+its sender (400 `CannotReportOwnContent`); a gift without a message, or whose message was removed, is 404
+`TargetNotFound`. The report keeps the sender as owner and the message as excerpt; the admin list links it to
+`/novel/{slug}`. `RemoveContent` sets the message to null and keeps the gift, its payment and the author's earning;
+`SuspendUser` suspends the sender. Account deletion treats the message like the sender's comments: it stays, under
+«مستخدم محذوف» (open reports about it close as `AccountDeleted`).
+
 ### Account deletion: `DELETE /api/User/me`
 
 Both stores require in-app account deletion; the web has the same at `https://www.sardnovels.com/delete-account`, the
@@ -334,8 +378,8 @@ show the signed-out app (the server already removed the account's push devices, 
 the response was lost and the retry gets 401, the deletion went through. Suspended members can't sign in, so they
 email `support@sardnovels.com` instead, and an admin deletes the account for them (`OwnerRequest`, below).
 
-What deletion does (`IAccountDeletionService`, one transaction): the user row stays, anonymized, so comments, reviews
-and posts keep an author shown as «مستخدم محذوف» (user name `deleted-<id>`); email, phone, bio, links, photo and banner
+What deletion does (`IAccountDeletionService`, one transaction): the user row stays, anonymized, so comments, reviews,
+posts and gift messages keep an author shown as «مستخدم محذوف» (user name `deleted-<id>`); email, phone, bio, links, photo and banner
 (also from storage, after the commit), password, external sign-ins and old user names are removed. Their novels are
 soft-deleted. Library, reading lists (with others' follows of them), follows, notifications to them, likes (counters
 adjusted), privilege subscriptions, devices, preferences and blocks are deleted; notifications they caused lose their
@@ -424,6 +468,7 @@ with), and null when what they name was deleted since, or when the message doesn
 | `chapterId`, `chapterTitle` | NewChapterInLibrary (the new chapter) and CommentOnChapter (the chapter commented on) |
 | `readingListName` | ReadingListFollowed (the list is `relatedEntityId`) |
 | `giftId`, `giftNameAr`, `giftCount` | GiftReceived (gift notifications from before #25 have none) |
+| `giftTransactionId`, `giftMessage` | GiftReceived (#31, below): the gift record and the sender's message, read from the record (null when none or removed); gift notifications from before #31 have neither |
 
 **Wallet.** Each entry of `GET /api/wallet/transactions` with a `giftId` also has `giftNameAr`, the gift's Arabic name,
 retired gifts included (the public catalog lists only active ones).

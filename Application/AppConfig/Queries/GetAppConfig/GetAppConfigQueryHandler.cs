@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Application.Gifts;
 using MediatR;
 using Microsoft.Extensions.Configuration;
 
@@ -7,7 +8,8 @@ namespace Application.AppConfig.Queries.GetAppConfig;
 /// <summary>
 /// Reads the "AppConfig" section on every request, so a changed value (appsettings or environment) applies without a
 /// deploy. A version that isn't major.minor.patch, or a minimum above the latest, is a configuration mistake: it fails
-/// loudly (logged 500) rather than telling every installed app something wrong.
+/// loudly (logged 500) rather than telling every installed app something wrong. So is a gift message limit outside
+/// 1 to 1000.
 /// </summary>
 public partial class GetAppConfigQueryHandler(IConfiguration configuration) : IRequestHandler<GetAppConfigQuery, AppConfigDto>
 {
@@ -24,6 +26,9 @@ public partial class GetAppConfigQueryHandler(IConfiguration configuration) : IR
         {
             config.Maintenance.MessageAr = null;
         }
+
+        // The very number SendGift checks messages against (#31), which also refuses a value out of range.
+        config.Gifts.MessageMaxLength = GiftMessageRules.MaxLength(configuration);
 
         return Task.FromResult(config);
     }

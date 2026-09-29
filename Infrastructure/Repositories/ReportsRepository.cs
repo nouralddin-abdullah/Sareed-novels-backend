@@ -62,6 +62,15 @@ public class ReportsRepository(ApplicationDbContext dbContext) : IReportsReposit
                     ? null
                     : new ReportTarget(list.UserId, Excerpt(string.IsNullOrWhiteSpace(list.Description) ? list.Name : $"{list.Name}: {list.Description}"));
 
+            case ReportTargetType.GiftMessage:
+                // A gift's message (#31), whoever can see it; a gift without one (or whose message was removed) has
+                // nothing to report.
+                var gift = await dbContext.GiftTransactions.AsNoTracking()
+                    .Where(t => t.Id == targetId && t.Message != null)
+                    .Select(t => new { t.SenderId, t.Message })
+                    .FirstOrDefaultAsync(cancellationToken);
+                return gift is null ? null : new ReportTarget(gift.SenderId, Excerpt(gift.Message));
+
             default:
                 return null;
         }
@@ -227,6 +236,20 @@ public class ReportsRepository(ApplicationDbContext dbContext) : IReportsReposit
             foreach (var rl in lists)
             {
                 states[(ReportTargetType.ReadingList, rl.Id)] = new ReportTargetState(true, rl.UserId, Excerpt(rl.Name), $"/reading-list/{rl.Id}");
+            }
+        }
+
+        var giftIds = IdsOf(ReportTargetType.GiftMessage);
+        if (giftIds.Count > 0)
+        {
+            // Gone once removed (the gift stays, without its message). Shown under the novel's recent gifts.
+            var gifts = await dbContext.GiftTransactions.IgnoreQueryFilters().AsNoTracking()
+                .Where(t => giftIds.Contains(t.Id) && t.Message != null)
+                .Select(t => new { t.Id, t.SenderId, t.Message, t.Novel.Slug })
+                .ToListAsync(cancellationToken);
+            foreach (var t in gifts)
+            {
+                states[(ReportTargetType.GiftMessage, t.Id)] = new ReportTargetState(true, t.SenderId, Excerpt(t.Message), $"/novel/{t.Slug}");
             }
         }
 

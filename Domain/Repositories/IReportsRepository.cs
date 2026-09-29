@@ -8,7 +8,8 @@ public interface IReportsRepository
 {
     /// <summary>
     /// The item as it is now (its owner and a text excerpt) when it exists and <paramref name="viewerId"/> can see it:
-    /// comments and posts not deleted, novels not deleted or drafts, reading lists public (or the viewer's own).
+    /// comments and posts not deleted, novels not deleted or drafts, reading lists public (or the viewer's own), gift
+    /// messages not removed.
     /// </summary>
     Task<ReportTarget?> FindTargetAsync(ReportTargetType type, Guid targetId, string viewerId, CancellationToken cancellationToken = default);
 
