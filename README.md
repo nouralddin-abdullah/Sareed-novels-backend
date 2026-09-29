@@ -351,6 +351,46 @@ its sender (400 `CannotReportOwnContent`); a gift without a message, or whose me
 `SuspendUser` suspends the sender. Account deletion treats the message like the sender's comments: it stays, under
 «مستخدم محذوف» (open reports about it close as `AccountDeleted`).
 
+### Editing a review (#34)
+
+The author of a review edits it in place: it keeps its `id`, likes and `createdAt`. Before, fixing a typo or a score
+meant deleting the review and writing it again, which lost its likes.
+
+`PATCH /api/{novelId}/reviews/{reviewId}` (the review's own route, as `.../reviews/{reviewId}/like`), signed in, with a
+JSON body whose fields are all optional:
+
+```json
+{ "writingQualityScore": 4, "updatingStabilityScore": 5, "characterDevelopmentScore": 4, "worldBuildingScore": 3,
+  "content": "نص المراجعة", "isSpoiler": false }
+```
+
+- A field left out, or `null`, stays as it is. A field sent is checked as when writing a review, with the same
+  messages: each score from 1 to 5, the text 5 to 2000 characters. `"content": ""` (or only spaces) removes the text;
+  the review then has `content: null`, like one written without text.
+- 200 answers `{ "success": true, "message": "تم تعديل مراجعتك", "review": { ... } }`, where `review` is exactly the
+  item `GET /api/{novelId}` lists in `reviews` (the same shape and values), to replace it in place: the same `id`,
+  `likeCount` and `createdAt`, the new `content`, `isSpoiler` and `totalAverageScore`, and `updatedAt`.
+- `updatedAt` is new on every review: in `GET /api/{novelId}` (the `reviews` items and `currentUserReview`, which has
+  the four scores to fill the form in) and in the answer of `POST /api/{novelId}`. It is when its author last edited
+  it, in the format of `createdAt` (UTC, no `Z`), and `null` for a review never edited (every review from before
+  this). Show «(معدّلة)» when it isn't `null`.
+- Saving without a change (the form as it was, or `{}`) writes nothing: 200 with the review as it is, `updatedAt`
+  unchanged, so it isn't marked edited.
+- A changed score recomputes the review's own `totalAverageScore` and the novel's averages (novel page, novel lists,
+  search), with the same recount as writing and deleting a review do; `reviewCount` stays. Rankings read the new
+  score on their next run, as they read a new review.
+
+Errors are `{ "code", "message" }`:
+
+| HTTP | `code` | When | `message` |
+|---|---|---|---|
+| 400 | `ValidationFailed` | a field sent breaks a rule of writing a review; `errors` has it under the field's name, e.g. `WritingQualityScore` | the rule's, e.g. «تقييم جودة الكتابة يجب أن يكون من 1 إلى 5» |
+| 401 | | not signed in | |
+| 403 | `NotOwner` | another member's review, the novel's author included | «يمكنك تعديل مراجعاتك فقط» |
+| 404 | `ReviewNotFound` | no such review (deleted, for instance), or it is about another novel than `{novelId}` | «المراجعة غير موجودة» |
+
+The migration `AddReviewUpdatedAt` adds the nullable column `Reviews.UpdatedAt`; existing reviews have null.
+
 ### Account deletion: `DELETE /api/User/me`
 
 Both stores require in-app account deletion; the web has the same at `https://www.sardnovels.com/delete-account`, the
