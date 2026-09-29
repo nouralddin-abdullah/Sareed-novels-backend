@@ -15,6 +15,8 @@ public class Review
     public string? Content { get; set; }
     public bool IsSpoiler { get; set; } = false;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>When its author last edited it (#34); null when it was never edited.</summary>
+    public DateTime? UpdatedAt { get; set; }
     public int LikeCount { get; set; } = 0;
     public ICollection<ReviewLike> Likes { get; set; } = new List<ReviewLike>();
     public void CalculateAverageScore()
