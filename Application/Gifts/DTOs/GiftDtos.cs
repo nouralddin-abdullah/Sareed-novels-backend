@@ -26,6 +26,13 @@ public class GiftTransactionDto
     public int Count { get; set; }
     public decimal TotalCost { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// What the sender wrote to the author with the gift (#31), public, for anonymous callers too; null when there is
+    /// none, once a moderator removed it, and for a signed-in viewer who blocked the sender or whom the sender blocked.
+    /// Report it as target type GiftMessage with this item's <see cref="Id"/>.
+    /// </summary>
+    public string? Message { get; set; }
 }
 
 /// <summary>
@@ -44,6 +51,9 @@ public class GiftHistoryItemDto
     public int Count { get; set; }
     public decimal TotalCost { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>The message the user wrote with the gift (#31); null when none, or once a moderator removed it.</summary>
+    public string? Message { get; set; }
 }
 
 public class NovelGiftsSummaryDto

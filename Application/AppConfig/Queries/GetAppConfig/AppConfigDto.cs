@@ -1,3 +1,5 @@
+using Application.Gifts;
+
 namespace Application.AppConfig.Queries.GetAppConfig;
 
 /// <summary>
@@ -12,6 +14,9 @@ public class AppConfigDto
     public IosAppConfigDto Ios { get; set; } = new();
 
     public MaintenanceConfigDto Maintenance { get; set; } = new();
+
+    /// <summary>What gifts accept (#31). An older server has no such section: then the apps offer no message box.</summary>
+    public GiftsAppConfigDto Gifts { get; set; } = new();
 }
 
 public class AndroidAppConfigDto
@@ -30,6 +35,15 @@ public class IosAppConfigDto
 
     /// <summary>The newest version on the App Store, so the app can suggest (not force) an update.</summary>
     public string LatestVersion { get; set; } = "1.0.0";
+}
+
+public class GiftsAppConfigDto
+{
+    /// <summary>
+    /// The longest message a gift can carry, in user-perceived characters (an emoji is one), from
+    /// AppConfig:Gifts:MessageMaxLength; the server refuses longer ones (GiftMessageTooLong) by the same number.
+    /// </summary>
+    public int MessageMaxLength { get; set; } = GiftMessageRules.DefaultMaxLength;
 }
 
 public class MaintenanceConfigDto

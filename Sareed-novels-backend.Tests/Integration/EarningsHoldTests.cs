@@ -13,6 +13,7 @@ using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -54,8 +55,9 @@ public partial class EarningsHoldTests(SqlServerDatabase database) : IClassFixtu
             new UserWalletRepository(Db), new PointTransactionRepository(Db), Wallet, Transactions, clock, playLog);
 
         public SendGiftCommandHandler SendGift(User sender) => new(NullLogger<SendGiftCommandHandler>.Instance,
-            new GiftRepository(Db), new GiftTransactionRepository(Db), new NovelsRepository(Db), SignedIn(sender), Wallet,
-            Transactions, Substitute.For<IServiceScopeFactory>());
+            new GiftRepository(Db), new GiftTransactionRepository(Db), new NovelsRepository(Db),
+            new UserBlocksRepository(Db, TimeProvider.System), SignedIn(sender), Wallet, Transactions,
+            new ConfigurationBuilder().Build(), Substitute.For<IServiceScopeFactory>());
 
         public PrivilegeService Privileges => new(NullLogger<PrivilegeService>.Instance, new NovelPrivilegeRepository(Db),
             new PrivilegeSubscriptionRepository(Db), new NovelsRepository(Db), new ChaptersRepository(Db), Wallet, Transactions,

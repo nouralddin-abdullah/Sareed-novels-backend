@@ -1,3 +1,4 @@
+using Domain.Constants;
 using Domain.Entities;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -71,6 +72,17 @@ public sealed class PushTargetResolver(ApplicationDbContext dbContext)
             .Select(p => new { p.Id, p.User.UserName })
             .ToDictionaryAsync(p => p.Id, p => p.UserName, cancellationToken);
 
+        // What a gift's sender wrote (#31), read from the gift record now: a message a moderator removed is not pushed.
+        var giftTransactionIds = notifications
+            .Where(n => n.Type == NotificationType.GiftReceived && n.GiftTransactionId.HasValue)
+            .Select(n => n.GiftTransactionId!.Value)
+            .Distinct()
+            .ToList();
+        var giftMessages = giftTransactionIds.Count == 0 ? new Dictionary<Guid, string>() : await dbContext.GiftTransactions
+            .AsNoTracking()
+            .Where(t => giftTransactionIds.Contains(t.Id) && t.Message != null)
+            .ToDictionaryAsync(t => t.Id, t => t.Message!, cancellationToken);
+
         // The actor is a user, except for new chapters (the novel).
         var actorIds = notifications.Select(n => n.ActorId).Distinct().ToList();
         var userNames = await dbContext.Users
@@ -129,6 +141,10 @@ public sealed class PushTargetResolver(ApplicationDbContext dbContext)
             if (target.PostId is { } postId)
             {
                 target = target with { PostAuthorUserName = postAuthors.GetValueOrDefault(postId) };
+            }
+            if (n.GiftTransactionId is { } giftTransactionId)
+            {
+                target = target with { GiftMessage = giftMessages.GetValueOrDefault(giftTransactionId) };
             }
             targets[n.Id] = target;
         }
