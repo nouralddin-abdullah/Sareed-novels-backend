@@ -450,7 +450,7 @@ public class ChapterEditTests(SqlServerDatabase database) : IClassFixture<SqlSer
             var handler = new UpdateChapterCommandHandler(
                 logger ?? new ListLogger<UpdateChapterCommandHandler>(),
                 new ChaptersRepository(db), new ChapterParagraphsRepository(db), new NovelsRepository(db), userContext,
-                Mapper, Substitute.For<IChapterSequenceService>(), Substitute.For<IServiceProvider>());
+                Mapper, Substitute.For<IChapterSequenceService>(), Substitute.For<IServiceProvider>(), TimeProvider.System);
 
             var content = string.Concat(paragraphs.Select(p => p + "</p>"));
             var result = await handler.Handle(

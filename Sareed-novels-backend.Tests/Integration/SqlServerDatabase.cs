@@ -1,3 +1,4 @@
+using Domain.Constants;
 using Domain.Entities;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -91,6 +92,10 @@ internal static class Seed
         IsDraft = isDraft
     };
 
+    /// <summary>
+    /// Chapters <paramref name="startIndex"/>, ... of the novel, a minute apart from <paramref name="createdAt"/>; published
+    /// ones came out when they were created, as the API saves a chapter created published.
+    /// </summary>
     public static List<Chapter> Chapters(Novel novel, int count, DateTime createdAt, string status = "Published", int startIndex = 1) =>
         Enumerable.Range(startIndex, count).Select(i => new Chapter
         {
@@ -101,8 +106,28 @@ internal static class Seed
             Content = "text",
             Status = status,
             ChapterIndex = i,
-            CreatedAt = createdAt.AddMinutes(i)
+            CreatedAt = createdAt.AddMinutes(i),
+            PublishedAt = status == ChapterStatuses.Published ? createdAt.AddMinutes(i) : null
         }).ToList();
+
+    /// <summary>
+    /// Inserts <paramref name="chapters"/> with plain SQL, naming only columns that predate <c>AddChapterPublishedAt</c>
+    /// (so without <see cref="Chapter.PublishedAt"/>): for data-fix tests that seed a database migrated to an older
+    /// point, like <see cref="InsertUserRowAsync"/>.
+    /// </summary>
+    public static async Task InsertChapterRowsAsync(ApplicationDbContext db, IEnumerable<Chapter> chapters)
+    {
+        foreach (var c in chapters)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO Chapters (Id, NovelId, Title, Slug, Content, Status, ChapterIndex, PublishedChapterSequence,
+                    CreatedAt, CommentsCount, TotalCommentsCount, ParagraphsCount, ViewsCount)
+                VALUES ({c.Id}, {c.NovelId}, {c.Title}, {c.Slug}, {c.Content}, {c.Status}, {c.ChapterIndex},
+                    {c.PublishedChapterSequence}, {c.CreatedAt}, {c.CommentsCount}, {c.TotalCommentsCount},
+                    {c.ParagraphsCount}, {c.ViewsCount})
+                """);
+        }
+    }
 
     public static UserNovelProgress Progress(User reader, Chapter chapter, int chapterNumber, DateTime lastReadAt) => new()
     {

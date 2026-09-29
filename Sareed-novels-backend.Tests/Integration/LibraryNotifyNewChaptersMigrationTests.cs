@@ -35,8 +35,8 @@ public class LibraryNotifyNewChaptersMigrationTests(EmptySqlServerDatabase datab
         var novel = Seed.Novel(author, "رواية في مكتبتين", createdAt: readAt);
         var chapters = Seed.Chapters(novel, 2, readAt);
         db.Novels.Add(novel);
-        db.Chapters.AddRange(chapters);
         await db.SaveChangesAsync();
+        await Seed.InsertChapterRowsAsync(db, chapters);
         // As the API inserted entries before this migration: without the column.
         for (var i = 0; i < readers.Length; i++)
         {

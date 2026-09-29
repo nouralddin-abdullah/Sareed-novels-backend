@@ -24,8 +24,26 @@ public class LibraryHttpTests(SardApiFactory api)
         return (novel, chapter);
     }
 
-    private async Task Read(ApiUser reader, Chapter chapter) =>
-        (await api.Send(HttpMethod.Post, $"/api/library/track-progress/{chapter.Id}", reader)).EnsureSuccessStatusCode();
+    private Task Read(ApiUser reader, Chapter chapter) => Read(reader, chapter.Id);
+
+    private async Task Read(ApiUser reader, Guid chapterId) =>
+        (await api.Send(HttpMethod.Post, $"/api/library/track-progress/{chapterId}", reader)).EnsureSuccessStatusCode();
+
+    /// <summary>A chapter the author writes in the editor (POST /api/novel/{id}/chapter), published or as a draft.</summary>
+    private async Task<Guid> Write(ApiUser author, Novel novel, string status) =>
+        (await (await api.Send(HttpMethod.Post, $"/api/novel/{novel.Id}/chapter", author,
+            JsonContent.Create(new { status, title = "فصل " + Seed.Marker(), content = "<p>نص</p>" }))).OkJson())
+        .GetProperty("id").GetGuid();
+
+    /// <summary>The author saves a chapter with this status (PATCH), sending its title and text as the editor does.</summary>
+    private async Task SetStatus(ApiUser author, Novel novel, Guid chapterId, string status) =>
+        (await api.Send(HttpMethod.Patch, $"/api/novel/{novel.Id}/chapter/{chapterId}", author,
+            JsonContent.Create(new { status, title = "فصل", content = "<p>نص</p>" }))).EnsureSuccessStatusCode();
+
+    /// <summary>A date of a library item as UTC: lastChapterPublishedAt says so ("Z"); lastReadAt is UTC without it.</summary>
+    private static DateTime Utc(JsonElement item, string name) =>
+        DateTime.Parse(item.GetProperty(name).GetString()!, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
 
     private Task<HttpResponseMessage> Remove(ApiUser? reader, Guid novelId) =>
         api.Send(HttpMethod.Delete, $"/api/library/novel/{novelId}", reader);
@@ -204,7 +222,7 @@ public class LibraryHttpTests(SardApiFactory api)
         var emptied = await api.AddNovel(author);
         var newest = new DateTime(2026, 9, 20, 10, 3, 0, DateTimeKind.Utc);
         var published = Seed.Chapters(novel, 2, newest.AddDays(-3));
-        published[1].CreatedAt = newest;
+        published[1].PublishedAt = newest; // written with the first, out three days later
         var draft = Seed.Chapters(novel, 1, newest.AddDays(1), status: "Draft", startIndex: 3).Single();
         var emptiedChapter = Seed.Chapters(emptied, 1, newest).Single();
         await using (var db = api.Db())
@@ -230,6 +248,38 @@ public class LibraryHttpTests(SardApiFactory api)
         Assert.Equal(2, library[novel.Id].GetProperty("totalChapters").GetInt32());
         Assert.Equal(JsonValueKind.Null, library[emptied.Id].GetProperty("lastChapterPublishedAt").ValueKind);
         Assert.Equal(0, library[emptied.Id].GetProperty("totalChapters").GetInt32());
+    }
+
+    [Fact]
+    public async Task A_draft_written_before_her_last_read_and_published_after_it_is_new_to_her_once()
+    {
+        var (author, reader) = (await api.SignUp(), await api.SignUp());
+        var novel = await api.AddNovel(author);
+        var first = await Write(author, novel, "Published");
+        var draft = await Write(author, novel, "Draft");
+        await Read(reader, first); // after the draft was written
+        await SetStatus(author, novel, draft, "Published"); // after her read
+
+        var item = (await Library(reader))[novel.Id];
+        var (lastReadAt, cameOut) = (Utc(item, "lastReadAt"), Utc(item, "lastChapterPublishedAt"));
+        await using (var db = api.Db())
+        {
+            var stored = await db.Chapters.Where(c => c.Id == draft).Select(c => new { c.CreatedAt, c.PublishedAt }).SingleAsync();
+            Assert.True(stored.CreatedAt < lastReadAt, $"written {stored.CreatedAt:O}, last read {lastReadAt:O}");
+            Assert.Equal(stored.PublishedAt, cameOut); // when it was published, not when it was written
+        }
+        Assert.True(cameOut > lastReadAt, $"out {cameOut:O}, last read {lastReadAt:O}"); // «فصول جديدة»
+        Assert.Equal(2, item.GetProperty("totalChapters").GetInt32());
+
+        // She reads it. The author unpublishes it and publishes it again: it keeps when it first came out, so it
+        // isn't new to her a second time.
+        await Read(reader, draft);
+        await SetStatus(author, novel, draft, "Draft");
+        await SetStatus(author, novel, draft, "Published");
+
+        item = (await Library(reader))[novel.Id];
+        Assert.Equal(cameOut, Utc(item, "lastChapterPublishedAt"));
+        Assert.True(Utc(item, "lastChapterPublishedAt") < Utc(item, "lastReadAt"));
     }
 
     [Fact]

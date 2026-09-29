@@ -44,7 +44,7 @@ public class ChapterOwnershipTests
     {
         var handler = new UpdateChapterCommandHandler(
             NullLogger<UpdateChapterCommandHandler>.Instance, chapters, paragraphs, novels, userContext, mapper,
-            sequences, services);
+            sequences, services, TimeProvider.System);
 
         await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(
             new UpdateChapterCommand(victimsChapter.Id, attackersNovel.Id, "hacked", "Published", "<p>defaced</p>"),
