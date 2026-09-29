@@ -367,9 +367,11 @@ JSON body whose fields are all optional:
 - A field left out, or `null`, stays as it is. A field sent is checked as when writing a review, with the same
   messages: each score from 1 to 5, the text 5 to 2000 characters. `"content": ""` (or only spaces) removes the text;
   the review then has `content: null`, like one written without text.
-- 200 answers `{ "success": true, "message": "تم تعديل مراجعتك", "review": { ... } }`, where `review` is exactly the
-  item `GET /api/{novelId}` lists in `reviews` (the same shape and values), to replace it in place: the same `id`,
-  `likeCount` and `createdAt`, the new `content`, `isSpoiler` and `totalAverageScore`, and `updatedAt`.
+- 200 answers the review itself, with no `{ success, message }` around it: exactly the item `GET /api/{novelId}`
+  lists in `reviews`, the same fields (`reviewer`, `id`, `totalAverageScore`, `content`, `isSpoiler`, `likeCount`,
+  `isLikedByCurrentUser`, `createdAt`, `updatedAt`) and values, to replace it in place: the same `id`, `likeCount`
+  and `createdAt`, the new `content`, `isSpoiler` and `totalAverageScore`, and `updatedAt`. (Writing a review,
+  `POST /api/{novelId}`, still answers `{ success, message, review }`.)
 - `updatedAt` is new on every review: in `GET /api/{novelId}` (the `reviews` items and `currentUserReview`, which has
   the four scores to fill the form in) and in the answer of `POST /api/{novelId}`. It is when its author last edited
   it, in the format of `createdAt` (UTC, no `Z`), and `null` for a review never edited (every review from before

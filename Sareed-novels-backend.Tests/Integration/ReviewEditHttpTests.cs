@@ -13,20 +13,22 @@ namespace Sareed_novels_backend.Tests.Integration;
 [Collection(ReaderApiCollection.Name)]
 public class ReviewEditHttpTests(SardApiFactory api)
 {
-    private const string Edited = "تم تعديل مراجعتك";
-
     private static string Route(Guid novelId, Guid reviewId) => $"/api/{novelId}/reviews/{reviewId}";
 
     private Task<HttpResponseMessage> Edit(ApiUser? user, Guid novelId, Guid reviewId, object body) =>
         api.Send(HttpMethod.Patch, Route(novelId, reviewId), user, JsonContent.Create(body));
 
-    /// <summary>The review a successful edit answers, after checking the answer's success and message.</summary>
+    /// <summary>
+    /// What a successful edit answers: the review itself, as an item of the novel's review list, with no
+    /// { success, message, review } around it.
+    /// </summary>
     private static async Task<JsonElement> EditedReview(HttpResponseMessage response)
     {
-        var body = await response.OkJson();
-        Assert.True(body.GetProperty("success").GetBoolean());
-        Assert.Equal(Edited, body.GetProperty("message").GetString());
-        return body.GetProperty("review");
+        var review = await response.OkJson();
+        Assert.Equal(JsonValueKind.Object, review.ValueKind);
+        Assert.True(review.TryGetProperty("id", out _), review.GetRawText());
+        Assert.False(review.TryGetProperty("success", out _), review.GetRawText());
+        return review;
     }
 
     /// <summary>A review with these scores, written through the API; its id.</summary>
@@ -227,7 +229,11 @@ public class ReviewEditHttpTests(SardApiFactory api)
         Assert.NotNull(stored.UpdatedAt);
         Assert.InRange(stored.UpdatedAt.Value, before.AddSeconds(-1), DateTime.UtcNow.AddSeconds(1));
 
-        // The same JSON as the list's item, for her and for the reader who liked it (whose like is still there).
+        // The whole answer is the list's item, the same JSON, for her; and for the reader who liked it, whose like is
+        // still there.
+        Assert.Equal(
+            new[] { "reviewer", "id", "totalAverageScore", "content", "isSpoiler", "likeCount", "isLikedByCurrentUser", "createdAt", "updatedAt" },
+            edited.EnumerateObject().Select(p => p.Name));
         var listed = (await (await api.Get($"/api/{novel.Id}?sorting=newest", reader)).OkJson()).GetProperty("reviews")[0];
         Assert.Equal(listed.GetRawText(), edited.GetRawText());
         var forLiker = (await (await api.Get($"/api/{novel.Id}?sorting=newest", liker)).OkJson()).GetProperty("reviews")[0];

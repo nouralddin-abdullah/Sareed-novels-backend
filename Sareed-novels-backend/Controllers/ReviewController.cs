@@ -40,8 +40,8 @@ namespace Sareed_novels_backend.Controllers
         }
         /// <summary>
         /// Its author edits a review (#34). Every field of the body is optional; one left out stays as it is. 200 with
-        /// { success, message, review }, the review as the review list shows it (id, likes and createdAt kept,
-        /// updatedAt set); 400 ValidationFailed as when writing one; 403 NotOwner; 404 ReviewNotFound.
+        /// the review itself, exactly an item of GET /api/{novelId} (id, likes and createdAt kept, updatedAt set), to
+        /// replace it in place; 400 ValidationFailed as when writing one; 403 NotOwner; 404 ReviewNotFound.
         /// </summary>
         [HttpPatch("reviews/{reviewId}")]
         public async Task<IActionResult> UpdateReview([FromRoute] Guid novelId, [FromRoute] Guid reviewId, [FromBody] UpdateReviewRequest request) =>

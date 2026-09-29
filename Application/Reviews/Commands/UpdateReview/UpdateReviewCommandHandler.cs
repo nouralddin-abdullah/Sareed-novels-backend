@@ -1,3 +1,4 @@
+using Application.Reviews.DTO;
 using Application.Reviews.Queries;
 using Application.Users;
 using AutoMapper;
@@ -19,13 +20,12 @@ public class UpdateReviewCommandHandler(
     IMapper mapper,
     IReviewsRepository reviewsRepository,
     IReviewLikesRepository reviewLikesRepository,
-    TimeProvider time) : IRequestHandler<UpdateReviewCommand, UpdateReviewResult>
+    TimeProvider time) : IRequestHandler<UpdateReviewCommand, ReviewsDTO>
 {
     public const string NotFoundMessage = "المراجعة غير موجودة";
     public const string NotOwnerMessage = "يمكنك تعديل مراجعاتك فقط";
-    public const string UpdatedMessage = "تم تعديل مراجعتك";
 
-    public async Task<UpdateReviewResult> Handle(UpdateReviewCommand request, CancellationToken cancellationToken)
+    public async Task<ReviewsDTO> Handle(UpdateReviewCommand request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         var review = await reviewsRepository.GetReviewById(request.ReviewId);
@@ -53,13 +53,6 @@ public class UpdateReviewCommandHandler(
         // Read back as the novel's review list reads reviews, so the app can replace it in that list.
         var listed = await reviewsRepository.GetReviewAsListedAsync(review.Id)
             ?? throw new NotFoundException(NotFoundMessage, "ReviewNotFound");
-        var reviewDtos = await ReviewListDtos.Build([listed], mapper, reviewLikesRepository, currentUser);
-
-        return new UpdateReviewResult
-        {
-            Success = true,
-            Message = UpdatedMessage,
-            Review = reviewDtos.Single()
-        };
+        return (await ReviewListDtos.Build([listed], mapper, reviewLikesRepository, currentUser)).Single();
     }
 }
