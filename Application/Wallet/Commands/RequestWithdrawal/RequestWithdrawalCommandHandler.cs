@@ -110,7 +110,7 @@ public class RequestWithdrawalCommandHandler(
         return new OperationResult
         {
             Success = true,
-            Message = $"أُرسل طلب السحب. ستستلم {RequestMessages.Egp(netAmount)} جنيه بعد خصم ضريبة قدرها {RequestMessages.Egp(tax)} جنيه. تتم مراجعة الطلب خلال 12 إلى 24 ساعة."
+            Message = $"أُرسل طلب السحب. ستستلم {RequestMessages.Egp(netAmount)} جنيه بعد اقتطاع قدره {RequestMessages.Egp(tax)} جنيه. تتم مراجعة الطلب خلال 12 إلى 24 ساعة."
         };
     }
 }
