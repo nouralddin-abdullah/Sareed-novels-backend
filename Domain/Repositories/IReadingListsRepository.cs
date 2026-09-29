@@ -21,6 +21,10 @@ public interface IReadingListsRepository
     /// </summary>
     Task<(IReadOnlyList<ReadingListSummary>, int)> GetFollowedReadingListsWithPreviewAsync(string userId, int pageNumber, int pageSize);
     Task<bool> CreateAsync(ReadingList readingList);
+    /// <summary>
+    /// Saves the changes made to a list read with <see cref="GetByIdAsync"/> (tracked) and touches UpdatedAt: only the
+    /// columns that changed are written, never the counters as they were read.
+    /// </summary>
     Task<bool> UpdateAsync(ReadingList readingList);
     Task<bool> DeleteAsync(Guid id);
     Task<bool> IsNameTakenByUserAsync(string userId, string name, Guid? excludeListId = null);

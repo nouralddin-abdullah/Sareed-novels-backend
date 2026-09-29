@@ -125,6 +125,39 @@ public class ReadingListRepositoryTests(SqlServerDatabase database) : IClassFixt
     }
 
     [Fact]
+    public async Task Saving_an_edit_keeps_the_counts_changed_since_the_list_was_read()
+    {
+        var owner = Seed.User();
+        var list = List(owner, isPublic: true);
+        await using (var db = database.CreateContext())
+        {
+            db.Users.Add(owner);
+            db.ReadingLists.Add(list);
+            await db.SaveChangesAsync();
+        }
+
+        await using var editing = database.CreateContext();
+        var repository = new ReadingListsRepository(editing);
+        var read = (await repository.GetByIdAsync(list.Id))!;
+
+        // While the edit is in progress (a picture upload takes seconds), a novel is added and someone follows the list.
+        await using (var other = database.CreateContext())
+        {
+            await new ReadingListsRepository(other).AdjustNovelsCountAsync(list.Id, +1);
+            await new ReadingListsRepository(other).AdjustFollowersCountAsync(list.Id, +1);
+        }
+
+        read.Description = "وصف جديد";
+        Assert.True(await repository.UpdateAsync(read));
+
+        await using var check = database.CreateContext();
+        var saved = await check.ReadingLists.SingleAsync(rl => rl.Id == list.Id);
+        Assert.Equal("وصف جديد", saved.Description);
+        Assert.Equal(1, saved.NovelsCount);
+        Assert.Equal(1, saved.FollowersCount);
+    }
+
+    [Fact]
     public async Task A_novel_added_after_a_removal_goes_to_the_end_of_the_list()
     {
         var owner = Seed.User();

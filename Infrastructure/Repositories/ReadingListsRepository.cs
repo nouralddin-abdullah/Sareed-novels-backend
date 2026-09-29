@@ -125,7 +125,9 @@ public class ReadingListsRepository(ApplicationDbContext dbContext) : IReadingLi
     public async Task<bool> UpdateAsync(ReadingList readingList)
     {
         readingList.UpdatedAt = DateTime.UtcNow;
-        dbContext.ReadingLists.Update(readingList);
+        // Change tracking writes only the columns the caller changed. DbSet.Update marked every column modified, so an
+        // edit wrote NovelsCount and FollowersCount back as they were when the list was read, undoing the adds,
+        // removals and follows made meanwhile (a picture upload makes that window seconds long).
         return await dbContext.SaveChangesAsync() > 0;
     }
 
