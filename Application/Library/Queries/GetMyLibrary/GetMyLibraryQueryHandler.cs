@@ -49,6 +49,11 @@ public class GetMyLibraryQueryHandler(
                 LastReadChapterTitle = resume.ChapterTitle,
                 ProgressPercentage = resume.ProgressPercentage,
                 LastReadAt = entry.LastReadAt,
+                NotifyNewChapters = entry.NotifyNewChapters,
+                // SQL Server gives dates back without a kind; this one is UTC and says so ("Z").
+                LastChapterPublishedAt = entry.LastChapterPublishedAt is { } publishedAt
+                    ? DateTime.SpecifyKind(publishedAt, DateTimeKind.Utc)
+                    : null,
                 Author = new NovelAuthorDTO
                 {
                     UserName = entry.AuthorUserName,

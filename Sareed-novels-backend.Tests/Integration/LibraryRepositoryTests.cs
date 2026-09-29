@@ -41,6 +41,41 @@ public class LibraryRepositoryTests(SqlServerDatabase database) : IClassFixture<
         await db.SaveChangesAsync();
     }
 
+    private async Task<User> SeedUser()
+    {
+        await using var db = database.CreateContext();
+        var user = Seed.User();
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        return user;
+    }
+
+    /// <summary>Reads a chapter the way track-progress records it (the first read counts the novel in the library).</summary>
+    private async Task Read(User reader, Chapter chapter, int number)
+    {
+        await using var db = database.CreateContext();
+        await new LibraryRepository(db).SaveProgressAsync(reader.Id, chapter.NovelId, chapter.Id, number, DateTime.UtcNow);
+    }
+
+    private async Task<T> WithRepository<T>(Func<LibraryRepository, Task<T>> action)
+    {
+        await using var db = database.CreateContext();
+        return await action(new LibraryRepository(db));
+    }
+
+    private async Task<List<UserNovelProgress>> EntriesOf(params User[] readers)
+    {
+        var ids = readers.Select(r => r.Id).ToList();
+        await using var db = database.CreateContext();
+        return await db.UserNovelProgress.AsNoTracking().Where(p => ids.Contains(p.UserId)).ToListAsync();
+    }
+
+    private async Task<int> LibraryCount(User reader)
+    {
+        await using var db = database.CreateContext();
+        return await db.Users.Where(u => u.Id == reader.Id).Select(u => u.LibraryNovelsCount).SingleAsync();
+    }
+
     [Fact]
     public async Task The_library_leaves_out_draft_and_deleted_novels_and_its_total_matches_the_pages()
     {
@@ -127,5 +162,172 @@ public class LibraryRepositoryTests(SqlServerDatabase database) : IClassFixture<
         Assert.Equal(chapters[0].Id, progress.LastReadChapterId);
         Assert.Equal(1, progress.LastReadChapterNumber);
         Assert.Equal(1, (await check.Users.SingleAsync(u => u.Id == reader.Id)).LibraryNovelsCount);
+    }
+    // #33: removing a novel from the library, muting its new chapters, and when its newest chapter came out.
+
+    [Fact]
+    public async Task Removing_a_novel_deletes_only_that_readers_entry_and_its_count_in_her_library()
+    {
+        var (author, reader) = await SeedUsers();
+        var other = await SeedUser();
+        var (kept, keptChapters) = await SeedNovel(author);
+        var (removed, removedChapters) = await SeedNovel(author);
+        await Read(reader, keptChapters[0], 1);
+        await Read(reader, removedChapters[1], 2);
+        await Read(other, removedChapters[0], 1);
+
+        Assert.True(await WithRepository(r => r.RemoveFromLibraryAsync(reader.Id, removed.Id)));
+
+        var entries = await EntriesOf(reader, other);
+        Assert.Equal(
+            new[] { (reader.Id, kept.Id), (other.Id, removed.Id) }.Order(),
+            entries.Select(e => (e.UserId, e.NovelId)).Order());
+        Assert.Equal(1, await LibraryCount(reader));
+        Assert.Equal(1, await LibraryCount(other));
+        // The other reader's entry is as it was.
+        var others = Assert.Single(entries, e => e.UserId == other.Id);
+        Assert.Equal((removedChapters[0].Id, true), (others.LastReadChapterId, others.NotifyNewChapters));
+    }
+
+    [Fact]
+    public async Task Removing_a_novel_not_in_the_library_changes_nothing()
+    {
+        var (author, reader) = await SeedUsers();
+        var (novel, chapters) = await SeedNovel(author);
+        var (neverRead, _) = await SeedNovel(author);
+        await Read(reader, chapters[0], 1);
+
+        Assert.False(await WithRepository(r => r.RemoveFromLibraryAsync(reader.Id, neverRead.Id)));
+        Assert.False(await WithRepository(r => r.RemoveFromLibraryAsync(reader.Id, Guid.NewGuid())));
+
+        Assert.Equal(novel.Id, Assert.Single(await EntriesOf(reader)).NovelId);
+        Assert.Equal(1, await LibraryCount(reader));
+    }
+
+    [Fact]
+    public async Task Removals_at_once_delete_the_entry_and_count_it_out_once()
+    {
+        var (author, reader) = await SeedUsers();
+        var (novel, chapters) = await SeedNovel(author);
+        var (other, otherChapters) = await SeedNovel(author);
+        await Read(reader, chapters[0], 1);
+        await Read(reader, otherChapters[0], 1);
+
+        var removed = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(() =>
+            WithRepository(r => r.RemoveFromLibraryAsync(reader.Id, novel.Id)))));
+
+        Assert.Equal(1, removed.Count(r => r));
+        Assert.Equal(other.Id, Assert.Single(await EntriesOf(reader)).NovelId);
+        Assert.Equal(1, await LibraryCount(reader));
+    }
+
+    [Fact]
+    public async Task Muting_sets_one_entry_and_a_novel_not_in_the_library_is_refused_without_adding_it()
+    {
+        var (author, reader) = await SeedUsers();
+        var other = await SeedUser();
+        var (novel, chapters) = await SeedNovel(author);
+        var (neverRead, _) = await SeedNovel(author);
+        await Read(reader, chapters[0], 1);
+        await Read(other, chapters[0], 1);
+
+        Assert.True(await WithRepository(r => r.SetNewChapterNotificationsAsync(reader.Id, novel.Id, false)));
+        Assert.False(Assert.Single(await EntriesOf(reader)).NotifyNewChapters);
+        Assert.True(Assert.Single(await EntriesOf(other)).NotifyNewChapters);
+
+        // Off again: the entry is there, so it is done, not refused.
+        Assert.True(await WithRepository(r => r.SetNewChapterNotificationsAsync(reader.Id, novel.Id, false)));
+        Assert.False(await WithRepository(r => r.SetNewChapterNotificationsAsync(reader.Id, neverRead.Id, false)));
+        Assert.Equal(novel.Id, Assert.Single(await EntriesOf(reader)).NovelId);
+
+        Assert.True(await WithRepository(r => r.SetNewChapterNotificationsAsync(reader.Id, novel.Id, true)));
+        Assert.True(Assert.Single(await EntriesOf(reader)).NotifyNewChapters);
+    }
+
+    [Fact]
+    public async Task A_new_chapter_notifies_the_readers_with_the_novel_in_their_library_except_those_who_muted_it()
+    {
+        var (author, notified) = await SeedUsers();
+        var (mutedByEf, muted, unmutedAgain, readsAnother) = (await SeedUser(), await SeedUser(), await SeedUser(), await SeedUser());
+        var (novel, chapters) = await SeedNovel(author);
+        var (another, anotherChapters) = await SeedNovel(author);
+        await Read(notified, chapters[0], 1);
+        await Read(muted, chapters[1], 2);
+        await Read(unmutedAgain, chapters[0], 1);
+        await Read(readsAnother, anotherChapters[0], 1);
+        // Saved through EF with false: stored false (the column's default is true).
+        await using (var db = database.CreateContext())
+        {
+            var entry = Seed.Progress(mutedByEf, chapters[2], 3, DateTime.UtcNow);
+            entry.NotifyNewChapters = false;
+            db.UserNovelProgress.Add(entry);
+            await db.SaveChangesAsync();
+        }
+        Assert.True(await WithRepository(r => r.SetNewChapterNotificationsAsync(muted.Id, novel.Id, false)));
+        Assert.True(await WithRepository(r => r.SetNewChapterNotificationsAsync(unmutedAgain.Id, novel.Id, false)));
+        Assert.True(await WithRepository(r => r.SetNewChapterNotificationsAsync(unmutedAgain.Id, novel.Id, true)));
+
+        var recipients = await WithRepository(r => r.GetUsersWithNovelInLibrary(novel.Id));
+
+        Assert.Equal(new[] { notified.Id, unmutedAgain.Id }.Order(), recipients.Order());
+        Assert.False(Assert.Single(await EntriesOf(mutedByEf)).NotifyNewChapters);
+        Assert.Equal([readsAnother.Id], await WithRepository(r => r.GetUsersWithNovelInLibrary(another.Id)));
+    }
+
+    [Fact]
+    public async Task Reading_a_removed_novel_again_adds_it_back_with_notifications_on()
+    {
+        var (author, reader) = await SeedUsers();
+        var (novel, chapters) = await SeedNovel(author);
+        await Read(reader, chapters[1], 2);
+        Assert.True(await WithRepository(r => r.SetNewChapterNotificationsAsync(reader.Id, novel.Id, false)));
+        Assert.True(await WithRepository(r => r.RemoveFromLibraryAsync(reader.Id, novel.Id)));
+        Assert.Empty(await EntriesOf(reader));
+        Assert.Equal(0, await LibraryCount(reader));
+
+        Assert.True(await WithRepository(r => r.SaveProgressAsync(reader.Id, novel.Id, chapters[0].Id, 1, DateTime.UtcNow)));
+
+        var entry = Assert.Single(await EntriesOf(reader));
+        Assert.Equal((chapters[0].Id, true), (entry.LastReadChapterId, entry.NotifyNewChapters));
+        Assert.Equal(1, await LibraryCount(reader));
+        Assert.Equal([reader.Id], await WithRepository(r => r.GetUsersWithNovelInLibrary(novel.Id)));
+    }
+
+    [Fact]
+    public async Task An_entry_says_when_the_newest_published_chapter_came_out_and_null_when_none_is_published()
+    {
+        var (author, reader) = await SeedUsers();
+        var (novel, chapters) = await SeedNovel(author, chapters: 3);
+        var (emptied, emptiedChapters) = await SeedNovel(author, chapters: 2);
+        var newest = new DateTime(2026, 9, 20, 10, 3, 0, DateTimeKind.Utc);
+        await using (var db = database.CreateContext())
+        {
+            // The newest published chapter isn't the last in reading order (it was moved up), and a newer draft
+            // doesn't count.
+            await db.Chapters.Where(c => c.Id == chapters[1].Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.CreatedAt, newest));
+            await db.Chapters.Where(c => c.Id == chapters[2].Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.CreatedAt, newest.AddMinutes(-5)));
+            var draft = Seed.Chapters(novel, 1, newest.AddDays(1), status: "Draft", startIndex: 4).Single();
+            db.Chapters.Add(draft);
+            await db.SaveChangesAsync();
+        }
+        await Read(reader, chapters[0], 1);
+        await Read(reader, emptiedChapters[0], 1);
+        await using (var db = database.CreateContext())
+        {
+            // Unpublished after she read it: still in her library, with nothing published.
+            await db.Chapters.Where(c => c.NovelId == emptied.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.Status, "Draft"));
+        }
+
+        var (entries, total) = await WithRepository(r => r.GetUserLibraryAsync(reader.Id, 1, 10));
+
+        Assert.Equal(2, total);
+        var withChapters = Assert.Single(entries, e => e.NovelId == novel.Id);
+        Assert.Equal(newest, withChapters.LastChapterPublishedAt);
+        Assert.True(withChapters.NotifyNewChapters);
+        var withoutChapters = Assert.Single(entries, e => e.NovelId == emptied.Id);
+        Assert.Null(withoutChapters.LastChapterPublishedAt);
+        Assert.Empty(withoutChapters.PublishedChapters);
+        Assert.Equal(newest, (await WithRepository(r => r.GetLibraryEntryAsync(reader.Id, novel.Id)))!.LastChapterPublishedAt);
+        Assert.Null((await WithRepository(r => r.GetLibraryEntryAsync(reader.Id, emptied.Id)))!.LastChapterPublishedAt);
     }
 }
