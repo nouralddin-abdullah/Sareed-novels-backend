@@ -39,11 +39,13 @@ public class LibraryRepository(ApplicationDbContext dbContext) : ILibraryReposit
         }
 
         // First read of this novel: insert the row and count it in the user's library in one transaction. The
-        // UPDLOCK/HOLDLOCK existence check makes a concurrent first read (two tabs) insert only once.
+        // UPDLOCK/HOLDLOCK existence check makes a concurrent first read (two tabs) insert only once. A new entry
+        // notifies new chapters, also when the reader had removed the novel (with them muted) and reads it again.
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
         var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO UserNovelProgress (UserId, NovelId, LastReadChapterId, LastReadChapterNumber, LastReadAt, CreatedAt)
-            SELECT {userId}, {novelId}, {chapterId}, {chapterNumber}, {readAt}, {readAt}
+            INSERT INTO UserNovelProgress (UserId, NovelId, LastReadChapterId, LastReadChapterNumber, LastReadAt, CreatedAt,
+                                           NotifyNewChapters)
+            SELECT {userId}, {novelId}, {chapterId}, {chapterNumber}, {readAt}, {readAt}, 1
             WHERE NOT EXISTS (
                 SELECT 1 FROM UserNovelProgress WITH (UPDLOCK, HOLDLOCK)
                 WHERE UserId = {userId} AND NovelId = {novelId})
@@ -64,10 +66,36 @@ public class LibraryRepository(ApplicationDbContext dbContext) : ILibraryReposit
         return inserted == 1;
     }
 
+    public async Task<bool> RemoveFromLibraryAsync(string userId, Guid novelId)
+    {
+        // The row and its count in the user's library go together. Of concurrent removals (a double tap, a retry) one
+        // deletes the row; the others wait for it on the row's lock, then delete nothing and count nothing.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        var removed = await dbContext.UserNovelProgress
+            .Where(p => p.UserId == userId && p.NovelId == novelId)
+            .ExecuteDeleteAsync() > 0;
+
+        if (removed)
+        {
+            await dbContext.Users
+                .Where(u => u.Id == userId && u.LibraryNovelsCount > 0)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.LibraryNovelsCount, u => u.LibraryNovelsCount - 1));
+        }
+
+        await transaction.CommitAsync();
+        return removed;
+    }
+
+    public async Task<bool> SetNewChapterNotificationsAsync(string userId, Guid novelId, bool notify) =>
+        // SQL Server counts the row even when it already had the value, so 0 means there is no row.
+        await dbContext.UserNovelProgress
+            .Where(p => p.UserId == userId && p.NovelId == novelId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.NotifyNewChapters, notify)) > 0;
+
     public async Task<List<string>> GetUsersWithNovelInLibrary(Guid novelId)
     {
         return await dbContext.UserNovelProgress
-            .Where(unp => unp.NovelId == novelId)
+            .Where(unp => unp.NovelId == novelId && unp.NotifyNewChapters)
             .Select(unp => unp.UserId)
             .Distinct()
             .ToListAsync();
@@ -99,7 +127,11 @@ public class LibraryRepository(ApplicationDbContext dbContext) : ILibraryReposit
             p.LastReadChapterId,
             p.LastReadChapter.Title,
             p.LastReadChapter.ChapterIndex,
-            p.LastReadAt));
+            p.LastReadAt,
+            p.NotifyNewChapters,
+            // Joined, not stored (#33). Chapters have no publish date: a chapter is stamped when it is created, which
+            // is when it came out unless it was saved as a draft and published later.
+            p.Novel.Chapters.Where(c => c.Status == PublishedStatus).Max(c => (DateTime?)c.CreatedAt)));
 
     /// <summary>Loads the published chapter outlines (no content) for all rows' novels in one query.</summary>
     private async Task<IReadOnlyList<LibraryEntry>> WithPublishedChapters(List<ProgressRow> rows)
@@ -132,7 +164,9 @@ public class LibraryRepository(ApplicationDbContext dbContext) : ILibraryReposit
             r.AuthorProfilePhoto,
             new ChapterOutline(r.LastReadChapterId, r.LastReadChapterTitle, r.LastReadChapterIndex),
             r.LastReadAt,
-            byNovel.TryGetValue(r.NovelId, out var published) ? published : [])).ToList();
+            byNovel.TryGetValue(r.NovelId, out var published) ? published : [],
+            r.NotifyNewChapters,
+            r.LastChapterPublishedAt)).ToList();
     }
 
     private sealed record ProgressRow(
@@ -148,5 +182,7 @@ public class LibraryRepository(ApplicationDbContext dbContext) : ILibraryReposit
         Guid LastReadChapterId,
         string LastReadChapterTitle,
         int LastReadChapterIndex,
-        DateTime LastReadAt);
+        DateTime LastReadAt,
+        bool NotifyNewChapters,
+        DateTime? LastChapterPublishedAt);
 }

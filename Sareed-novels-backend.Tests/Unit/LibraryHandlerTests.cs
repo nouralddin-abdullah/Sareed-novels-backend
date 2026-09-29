@@ -46,7 +46,7 @@ public class LibraryHandlerTests
         var published = new[] { Outline(1), Outline(2) };
         var unpublished = Outline(3);
         var entry = new LibraryEntry(Guid.NewGuid(), "t", "s", "c", 4.5m, 10, "author", "Author", null,
-            unpublished, DateTime.UtcNow, published);
+            unpublished, DateTime.UtcNow, published, NotifyNewChapters: true, LastChapterPublishedAt: null);
         library.GetUserLibraryAsync("reader-1", 1, 20).Returns((new[] { entry }, 1));
         var handler = new GetMyLibraryQueryHandler(NullLogger<GetMyLibraryQueryHandler>.Instance, library, userContext);
 
@@ -58,6 +58,26 @@ public class LibraryHandlerTests
         Assert.Equal(2, item.LastReadChapterNumber);
         Assert.Equal(2, item.TotalChapters);
         Assert.Equal(100m, item.ProgressPercentage);
+    }
+
+    [Fact]
+    public async Task The_library_says_whether_new_chapters_notify_and_when_the_newest_came_out_in_utc()
+    {
+        // As SQL Server gives it back: no kind.
+        var publishedAt = new DateTime(2026, 9, 29, 21, 57, 47, DateTimeKind.Unspecified);
+        var muted = new LibraryEntry(Guid.NewGuid(), "t", "s", "c", 4.5m, 10, "author", "Author", null,
+            Outline(1), DateTime.UtcNow, [Outline(1)], NotifyNewChapters: false, LastChapterPublishedAt: publishedAt);
+        var nothingPublished = muted with { NovelId = Guid.NewGuid(), PublishedChapters = [], NotifyNewChapters = true, LastChapterPublishedAt = null };
+        library.GetUserLibraryAsync("reader-1", 1, 20).Returns((new[] { muted, nothingPublished }, 2));
+        var handler = new GetMyLibraryQueryHandler(NullLogger<GetMyLibraryQueryHandler>.Instance, library, userContext);
+
+        var items = (await handler.Handle(new GetMyLibraryQuery(), CancellationToken.None)).Items.ToList();
+
+        Assert.False(items[0].NotifyNewChapters);
+        Assert.Equal(publishedAt, items[0].LastChapterPublishedAt);
+        Assert.Equal(DateTimeKind.Utc, items[0].LastChapterPublishedAt!.Value.Kind); // serialized with "Z"
+        Assert.True(items[1].NotifyNewChapters);
+        Assert.Null(items[1].LastChapterPublishedAt);
     }
 
     private TrackReadingProgressCommandHandler TrackHandler() =>
