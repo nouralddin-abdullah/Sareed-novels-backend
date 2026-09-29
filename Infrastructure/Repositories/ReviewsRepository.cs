@@ -1,5 +1,6 @@
 ﻿using Domain.Entities;
 using Domain.Repositories;
+using Domain.Reviews;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,6 +47,46 @@ public class ReviewsRepository(ApplicationDbContext dbContext) : IReviewsReposit
             await transaction.CommitAsync();
         }
 
+        await RefreshNovelReviewStats(review.NovelId);
+        return true;
+    }
+
+    public async Task<bool> UpdateReview(Review review, ReviewEdit edit, DateTime updatedAt)
+    {
+        var writing = edit.WritingQualityScore;
+        var stability = edit.UpdatingStabilityScore;
+        var characters = edit.CharacterDevelopmentScore;
+        var world = edit.WorldBuildingScore;
+        var replacesContent = edit.ReplacesContent;
+        var content = edit.Content;
+        var isSpoiler = edit.IsSpoiler;
+
+        var thisReview = dbContext.Reviews.Where(r => r.Id == review.Id && r.ReviewerId == review.ReviewerId);
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync())
+        {
+            // A field not sent is set to itself.
+            if (await thisReview.ExecuteUpdateAsync(s => s
+                    .SetProperty(r => r.WritingQualityScore, r => writing ?? r.WritingQualityScore)
+                    .SetProperty(r => r.UpdatingStabilityScore, r => stability ?? r.UpdatingStabilityScore)
+                    .SetProperty(r => r.CharacterDevelopmentScore, r => characters ?? r.CharacterDevelopmentScore)
+                    .SetProperty(r => r.WorldBuildingScore, r => world ?? r.WorldBuildingScore)
+                    .SetProperty(r => r.Content, r => replacesContent ? content : r.Content)
+                    .SetProperty(r => r.IsSpoiler, r => isSpoiler ?? r.IsSpoiler)
+                    .SetProperty(r => r.UpdatedAt, (DateTime?)updatedAt)) == 0)
+            {
+                return false;
+            }
+
+            // The review's own average (Review.CalculateAverageScore's formula, which creating uses), from its four
+            // scores as they are now, in SQL: the row stays locked from the first UPDATE to the commit, so a concurrent
+            // edit waits and can't leave the average out of step with the scores. (Not in the first UPDATE: EF folds
+            // the scores sent into one parameter typed like a score column, and 5 + 5 doesn't fit decimal(3,2).)
+            await thisReview.ExecuteUpdateAsync(s => s.SetProperty(r => r.TotalAverageScore,
+                r => (r.WritingQualityScore + r.UpdatingStabilityScore + r.CharacterDevelopmentScore + r.WorldBuildingScore) / 4));
+            await transaction.CommitAsync();
+        }
+
+        // As after creating or deleting a review, after the commit: a changed score changes the novel's averages.
         await RefreshNovelReviewStats(review.NovelId);
         return true;
     }

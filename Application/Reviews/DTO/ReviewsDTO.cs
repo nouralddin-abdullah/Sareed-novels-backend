@@ -10,6 +10,8 @@ public class ReviewsDTO
     public int LikeCount { get; set; }
     public bool IsLikedByCurrentUser { get; set; }
     public DateTime CreatedAt { get; set; }
+    /// <summary>When its author last edited it (#34); null when it was never edited (the apps show «(معدّلة)» otherwise).</summary>
+    public DateTime? UpdatedAt { get; set; }
 }
 
 public class NovelReviewsResponse
@@ -34,6 +36,8 @@ public class CurrentUserReviewDTO
     public bool IsSpoiler { get; set; }
     public int LikeCount { get; set; }
     public DateTime CreatedAt { get; set; }
+    /// <summary>When she last edited it (#34); null when never.</summary>
+    public DateTime? UpdatedAt { get; set; }
 }
 
 public class ReviewerDTO

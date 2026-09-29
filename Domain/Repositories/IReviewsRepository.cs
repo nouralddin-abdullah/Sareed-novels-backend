@@ -1,4 +1,5 @@
 ﻿using Domain.Entities;
+using Domain.Reviews;
 
 namespace Domain.Repositories;
 
@@ -9,6 +10,12 @@ public interface IReviewsRepository
     Task<Review?> GetUserReviewForNovel(string userId, Guid novelId);
     /// <summary>Deletes the review with its likes, uncounts it for its author and recomputes the novel's review stats.</summary>
     Task<bool> DeleteReview(Review review);
+    /// <summary>
+    /// Applies its author's edit to the review (#34) in one transaction: the fields sent, UpdatedAt, and the review's own
+    /// average of its four scores as they end up, computed in SQL. Then recomputes the novel's review stats, as creating
+    /// and deleting do. False when the review is gone.
+    /// </summary>
+    Task<bool> UpdateReview(Review review, ReviewEdit edit, DateTime updatedAt);
     /// <summary>Recomputes ReviewCount and the score averages of a novel from its reviews in one SQL statement.</summary>
     Task RefreshNovelReviewStats(Guid novelId);
     /// <summary>A page of the novel's reviews; reviews by users the viewer blocked are left out (and not counted).</summary>

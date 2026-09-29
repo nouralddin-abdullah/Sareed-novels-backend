@@ -2,6 +2,7 @@
 using Application.Reviews.Commands.CreateReview;
 using Application.Reviews.Commands.DeleteReview;
 using Application.Reviews.Commands.DeleteReviewLike;
+using Application.Reviews.Commands.UpdateReview;
 using Application.Reviews.Queries.GetNovelReviews;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -37,6 +38,15 @@ namespace Sareed_novels_backend.Controllers
             }
             return NoContent();
         }
+        /// <summary>
+        /// Its author edits a review (#34). Every field of the body is optional; one left out stays as it is. 200 with
+        /// { success, message, review }, the review as the review list shows it (id, likes and createdAt kept,
+        /// updatedAt set); 400 ValidationFailed as when writing one; 403 NotOwner; 404 ReviewNotFound.
+        /// </summary>
+        [HttpPatch("reviews/{reviewId}")]
+        public async Task<IActionResult> UpdateReview([FromRoute] Guid novelId, [FromRoute] Guid reviewId, [FromBody] UpdateReviewRequest request) =>
+            Ok(await mediator.Send(new UpdateReviewCommand(novelId, reviewId, request)));
+
         [HttpGet]
         [AllowAnonymous]
         public async Task<IActionResult> GetNovelReviews([FromRoute] Guid novelId, [FromQuery] int? pageSize, [FromQuery] int? pageNumber, [FromQuery] string? sorting)

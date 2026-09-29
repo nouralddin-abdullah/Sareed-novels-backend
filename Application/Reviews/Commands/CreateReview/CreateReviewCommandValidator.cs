@@ -2,39 +2,33 @@
 
 namespace Application.Reviews.Commands.CreateReview;
 
+/// <summary>The rules of <see cref="ReviewRules"/>, which editing a review applies to the fields it sends.</summary>
 public class CreateReviewCommandValidator : AbstractValidator<CreateReviewCommandrRequest>
 {
     public CreateReviewCommandValidator()
     {
         RuleFor(d => d.WritingQualityScore)
             .NotNull()
-            .WithMessage("قيّم جودة الكتابة")
-            .InclusiveBetween(1.0m, 5.0m)
-            .WithMessage("تقييم جودة الكتابة يجب أن يكون من 1 إلى 5");
+            .WithMessage(ReviewRules.MissingScoreMessage(ReviewRules.WritingQuality))
+            .ReviewScore(ReviewRules.WritingQuality);
 
         RuleFor(d => d.UpdatingStabilityScore)
             .NotNull()
-            .WithMessage("قيّم استقرار التحديثات")
-            .InclusiveBetween(1.0m, 5.0m)
-            .WithMessage("تقييم استقرار التحديثات يجب أن يكون من 1 إلى 5");
+            .WithMessage(ReviewRules.MissingScoreMessage(ReviewRules.UpdatingStability))
+            .ReviewScore(ReviewRules.UpdatingStability);
 
         RuleFor(d => d.CharacterDevelopmentScore)
             .NotNull()
-            .WithMessage("قيّم بناء الشخصيات")
-            .InclusiveBetween(1.0m, 5.0m)
-            .WithMessage("تقييم بناء الشخصيات يجب أن يكون من 1 إلى 5");
+            .WithMessage(ReviewRules.MissingScoreMessage(ReviewRules.CharacterDevelopment))
+            .ReviewScore(ReviewRules.CharacterDevelopment);
 
         RuleFor(d => d.WorldBuildingScore)
             .NotNull()
-            .WithMessage("قيّم بناء العالم القصصي")
-            .InclusiveBetween(1.0m, 5.0m)
-            .WithMessage("تقييم بناء العالم القصصي يجب أن يكون من 1 إلى 5");
+            .WithMessage(ReviewRules.MissingScoreMessage(ReviewRules.WorldBuilding))
+            .ReviewScore(ReviewRules.WorldBuilding);
 
         RuleFor(d => d.Content)
-            .MaximumLength(2000)
-            .WithMessage("يجب ألا تتجاوز المراجعة 2000 حرف")
-            .Must(content => string.IsNullOrWhiteSpace(content) || content.Trim().Length >= 5)
-            .WithMessage("المراجعة قصيرة جدًا. اكتب 5 أحرف على الأقل أو اتركها فارغة.")
+            .ReviewContent()
             .When(d => !string.IsNullOrWhiteSpace(d.Content));
     }
 }
