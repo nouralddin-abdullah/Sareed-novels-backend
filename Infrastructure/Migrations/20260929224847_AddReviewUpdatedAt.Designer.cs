@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260929223002_AddReviewUpdatedAt")]
+    [Migration("20260929224847_AddReviewUpdatedAt")]
     partial class AddReviewUpdatedAt
     {
         /// <inheritdoc />
@@ -2342,6 +2342,11 @@ namespace Infrastructure.Migrations
 
                     b.Property<int>("LastReadChapterNumber")
                         .HasColumnType("int");
+
+                    b.Property<bool>("NotifyNewChapters")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.HasKey("UserId", "NovelId");
 
