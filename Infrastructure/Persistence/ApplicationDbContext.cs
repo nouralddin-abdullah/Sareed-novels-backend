@@ -664,6 +664,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(unp => unp.LastReadChapterId)
                 .OnDelete(DeleteBehavior.NoAction);
 
+            // Default 1: the rows from before the column (and inserts that don't name it) keep their notifications.
+            // The sentinel is true so that EF still sends an explicit false instead of leaving it to the default.
+            entity.Property(unp => unp.NotifyNewChapters)
+                .HasDefaultValue(true)
+                .HasSentinel(true);
+
             entity.HasIndex(unp => unp.UserId)
                 .HasDatabaseName("IX_UserNovelProgress_UserId");
 
