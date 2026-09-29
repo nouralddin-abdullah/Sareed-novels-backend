@@ -3,6 +3,7 @@ using Application.ReadingLists.Commands.CreateReadingList;
 using Application.ReadingLists.Commands.DeleteReadingList;
 using Application.ReadingLists.Commands.FollowReadingList;
 using Application.ReadingLists.Commands.RemoveNovelFromList;
+using Application.ReadingLists.Commands.ReorderNovelsInList;
 using Application.ReadingLists.Commands.UnfollowReadingList;
 using Application.ReadingLists.Commands.UpdateReadingList;
 using Application.ReadingLists.Queries.GetFollowedReadingLists;
@@ -135,6 +136,21 @@ public class ReadingListController(IMediator mediator) : ControllerBase
         };
 
         var result = await mediator.Send(command);
+        if (result.Success)
+        {
+            return Ok(result);
+        }
+        return BadRequest(result);
+    }
+
+    /// <summary>
+    /// The owner puts the list's novels in a new order: JSON <c>{ "orderedNovelIds": [...] }</c> with every novel
+    /// GET /api/readinglist/{id} lists, each once (400 <c>NovelOrderMismatch</c> when one is missing, extra or repeated).
+    /// </summary>
+    [HttpPatch("{readingListId}/novels/order")]
+    public async Task<IActionResult> ReorderNovelsInReadingList([FromRoute] Guid readingListId, [FromBody] ReorderNovelsInListRequest request)
+    {
+        var result = await mediator.Send(new ReorderNovelsInListCommand(readingListId, request.OrderedNovelIds!));
         if (result.Success)
         {
             return Ok(result);

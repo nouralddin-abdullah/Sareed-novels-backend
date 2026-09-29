@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Data.Common;
 using Domain.Entities;
+using Domain.ReadingLists;
 using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -230,6 +231,53 @@ public class ReadingListRepositoryTests(SqlServerDatabase database) : IClassFixt
         Assert.Equal(plainLog.Commands.Count, novelLog.Commands.Count);
         Assert.Contains(novelLog.Commands, sql => sql.Contains("EXISTS"));
         Assert.DoesNotContain(plainLog.Commands, sql => sql.Contains("EXISTS"));
+    }
+
+    [Fact]
+    public async Task A_removal_or_an_add_during_a_reorder_waits_for_it()
+    {
+        var owner = Seed.User();
+        var list = List(owner, isPublic: false);
+        var novels = Enumerable.Range(0, 4).Select(i => Seed.Novel(owner, $"رواية {i} {Seed.Marker()}")).ToList();
+        var (a, b, c, added) = (novels[0].Id, novels[1].Id, novels[2].Id, novels[3].Id);
+        await using (var db = database.CreateContext())
+        {
+            db.Users.Add(owner);
+            db.ReadingLists.Add(list);
+            db.Novels.AddRange(novels);
+            db.ReadingListNovels.AddRange(new[] { a, b, c }.Select((id, i) => new ReadingListNovel
+            {
+                ReadingListId = list.Id, NovelId = id, OrderIndex = i, AddedAt = DateTime.UtcNow.AddMinutes(i - 10)
+            }));
+            await db.SaveChangesAsync();
+        }
+
+        // Paused after checking the ids against the list, before writing the order.
+        var pause = new PauseBefore("[UpdatedAt]");
+        await using var reordering = database.CreateContext(pause);
+        var reorder = new ReadingListNovelsRepository(reordering).ReorderAsync(list.Id, [c, b, a]);
+        await pause.Reached.WaitAsync();
+
+        await using var removing = database.CreateContext();
+        await using var adding = database.CreateContext();
+        var removal = new ReadingListNovelsRepository(removing).RemoveNovelAsync(list.Id, b);
+        var add = new ReadingListNovelsRepository(adding).AddNovelAsync(new ReadingListNovel
+        {
+            ReadingListId = list.Id, NovelId = added, OrderIndex = 3, AddedAt = DateTime.UtcNow
+        });
+        // Without the locks the removal went through here, and writing b's new place then failed (a 500).
+        var first = await Task.WhenAny(removal, add, Task.Delay(TimeSpan.FromSeconds(2)));
+        Assert.False(first == removal || first == add, "a removal or an add got past a reorder in progress");
+
+        pause.Release();
+        Assert.Equal(ReadingListReorderResult.Reordered, await reorder);
+        Assert.True(await removal);
+        Assert.True(await add);
+
+        await using var check = database.CreateContext();
+        var order = await check.ReadingListNovels.Where(r => r.ReadingListId == list.Id)
+            .OrderBy(r => r.OrderIndex).Select(r => new { r.NovelId, r.OrderIndex }).ToListAsync();
+        Assert.Equal([(c, 0), (a, 2), (added, 3)], order.Select(r => (r.NovelId, r.OrderIndex)));
     }
 
     /// <summary>The SQL of every command a context sends.</summary>

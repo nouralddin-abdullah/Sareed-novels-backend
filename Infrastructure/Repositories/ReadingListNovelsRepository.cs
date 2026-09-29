@@ -1,4 +1,5 @@
 ﻿using Domain.Entities;
+using Domain.ReadingLists;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -80,6 +81,59 @@ public class ReadingListNovelsRepository(ApplicationDbContext dbContext) : IRead
             .Where(rln => rln.ReadingListId == readingListId)
             .MaxAsync(rln => (int?)rln.OrderIndex);
         return last + 1 ?? 0;
+    }
+
+    public async Task<ReadingListReorderResult> ReorderAsync(Guid readingListId, IReadOnlyList<Guid> orderedNovelIds,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        // The list first, then its novels: the order deleting the list locks them in, so the two never deadlock. Both
+        // stay locked until the commit: a concurrent reorder, add or removal waits, and the check below still holds
+        // when the order is written.
+        var listExists = await dbContext.ReadingLists
+            .FromSqlInterpolated($"SELECT * FROM ReadingLists WITH (UPDLOCK, ROWLOCK) WHERE Id = {readingListId}")
+            .AnyAsync(cancellationToken);
+        if (!listExists)
+        {
+            return ReadingListReorderResult.ListNotFound;
+        }
+
+        var rows = await dbContext.ReadingListNovels
+            .FromSqlInterpolated($"SELECT * FROM ReadingListNovels WITH (UPDLOCK, HOLDLOCK) WHERE ReadingListId = {readingListId}")
+            .IgnoreQueryFilters() // novels readers can't open are read too: they keep their places
+            .Select(rln => new { Row = rln, Visible = !rln.Novel.IsDraft && !rln.Novel.IsDeleted })
+            .ToListAsync(cancellationToken);
+
+        // The current order, as the list pages show it (older rows can share an OrderIndex).
+        var current = rows
+            .OrderBy(r => r.Row.OrderIndex)
+            .ThenBy(r => r.Row.AddedAt)
+            .ThenBy(r => r.Row.NovelId)
+            .ToList();
+        var order = ReadingListOrder.Apply(current.Select(r => (r.Row.NovelId, r.Visible)).ToList(), orderedNovelIds);
+        if (order is null)
+        {
+            return ReadingListReorderResult.Mismatch;
+        }
+
+        var positions = order.Select((novelId, index) => (novelId, index)).ToDictionary(p => p.novelId, p => p.index);
+        foreach (var row in current)
+        {
+            row.Row.OrderIndex = positions[row.Row.NovelId]; // only rows whose index changes are written
+        }
+        var reordered = !order.SequenceEqual(current.Select(r => r.Row.NovelId));
+        if (reordered)
+        {
+            // A new order is a change to the list, as adding or removing a novel is.
+            await dbContext.ReadingLists
+                .Where(rl => rl.Id == readingListId)
+                .ExecuteUpdateAsync(s => s.SetProperty(rl => rl.UpdatedAt, DateTime.UtcNow), cancellationToken);
+        }
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return reordered ? ReadingListReorderResult.Reordered : ReadingListReorderResult.AlreadyInOrder;
     }
 
     public async Task<int> RemoveDeletedNovelsAsync(Guid readingListId)
