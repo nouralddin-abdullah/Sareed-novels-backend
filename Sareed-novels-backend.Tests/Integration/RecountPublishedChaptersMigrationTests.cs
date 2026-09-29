@@ -36,12 +36,14 @@ public class RecountPublishedChaptersMigrationTests(EmptySqlServerDatabase datab
         deleted.IsDeleted = true;
         (countedDrafts.ChapterCount, allPublished.ChapterCount, noChapters.ChapterCount, deleted.ChapterCount) = (16, 3, 0, 2);
         db.Novels.AddRange(countedDrafts, allPublished, noChapters, deleted);
-        db.Chapters.AddRange(Seed.Chapters(countedDrafts, 14, updatedAt));
-        db.Chapters.AddRange(Seed.Chapters(countedDrafts, 2, updatedAt, status: "Draft", startIndex: 15));
-        db.Chapters.AddRange(Seed.Chapters(allPublished, 3, updatedAt));
-        db.Chapters.AddRange(Seed.Chapters(deleted, 1, updatedAt));
-        db.Chapters.AddRange(Seed.Chapters(deleted, 1, updatedAt, status: "Draft", startIndex: 2));
         await db.SaveChangesAsync();
+        await Seed.InsertChapterRowsAsync(db, [
+            .. Seed.Chapters(countedDrafts, 14, updatedAt),
+            .. Seed.Chapters(countedDrafts, 2, updatedAt, status: "Draft", startIndex: 15),
+            .. Seed.Chapters(allPublished, 3, updatedAt),
+            .. Seed.Chapters(deleted, 1, updatedAt),
+            .. Seed.Chapters(deleted, 1, updatedAt, status: "Draft", startIndex: 2)
+        ]);
 
         await migrator.MigrateAsync();
         await AssertCounts(lancelot: 14, deletedOne: 1);

@@ -1,5 +1,6 @@
 using Domain.Entities;
 using Domain.Library;
+using Infrastructure.Persistence;
 using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -62,6 +63,12 @@ public class LibraryRepositoryTests(SqlServerDatabase database) : IClassFixture<
         await using var db = database.CreateContext();
         return await action(new LibraryRepository(db));
     }
+
+    /// <summary>When a chapter was written (CreatedAt) and when it came out (PublishedAt).</summary>
+    private static Task SetTimes(ApplicationDbContext db, Chapter chapter, DateTime written, DateTime cameOut) =>
+        db.Chapters.Where(c => c.Id == chapter.Id).ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.CreatedAt, written)
+            .SetProperty(c => c.PublishedAt, cameOut));
 
     private async Task<List<UserNovelProgress>> EntriesOf(params User[] readers)
     {
@@ -302,19 +309,24 @@ public class LibraryRepositoryTests(SqlServerDatabase database) : IClassFixture<
         var newest = new DateTime(2026, 9, 20, 10, 3, 0, DateTimeKind.Utc);
         await using (var db = database.CreateContext())
         {
-            // The newest published chapter isn't the last in reading order (it was moved up), and a newer draft
-            // doesn't count.
-            await db.Chapters.Where(c => c.Id == chapters[1].Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.CreatedAt, newest));
-            await db.Chapters.Where(c => c.Id == chapters[2].Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.CreatedAt, newest.AddMinutes(-5)));
+            // The newest to come out is chapter 2, a draft published after it was written, not the last in reading
+            // order and not the newest written: chapter 3 was written after it and came out before it.
+            await SetTimes(db, chapters[0], written: newest.AddDays(-3), cameOut: newest.AddDays(-3));
+            await SetTimes(db, chapters[1], written: newest.AddDays(-2), cameOut: newest);
+            await SetTimes(db, chapters[2], written: newest.AddDays(-1), cameOut: newest.AddDays(-1));
+            // Neither counts: a newer draft, and a chapter unpublished after it came out (it keeps that time).
             var draft = Seed.Chapters(novel, 1, newest.AddDays(1), status: "Draft", startIndex: 4).Single();
-            db.Chapters.Add(draft);
+            var unpublished = Seed.Chapters(novel, 1, newest.AddDays(1), startIndex: 5).Single();
+            unpublished.Status = "Draft";
+            db.Chapters.AddRange(draft, unpublished);
             await db.SaveChangesAsync();
         }
         await Read(reader, chapters[0], 1);
         await Read(reader, emptiedChapters[0], 1);
         await using (var db = database.CreateContext())
         {
-            // Unpublished after she read it: still in her library, with nothing published.
+            // Unpublished after she read it: still in her library, with nothing published (the chapters keep their
+            // publish times, which no longer count).
             await db.Chapters.Where(c => c.NovelId == emptied.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.Status, "Draft"));
         }
 

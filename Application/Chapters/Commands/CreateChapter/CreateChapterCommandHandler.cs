@@ -22,7 +22,8 @@ public class CreateChapterCommandHandler(
     INovelsRepository novelsRepository, 
     IMapper mapper,
     IChapterSequenceService sequenceService,
-    IServiceProvider serviceProvider) : IRequestHandler<CreateChapterCommand, ChapterSingleAuthorDTO>
+    IServiceProvider serviceProvider,
+    TimeProvider time) : IRequestHandler<CreateChapterCommand, ChapterSingleAuthorDTO>
 {
     public async Task<ChapterSingleAuthorDTO> Handle(CreateChapterCommand request, CancellationToken cancellationToken)
     {
@@ -34,10 +35,14 @@ public class CreateChapterCommandHandler(
         if (novel.AuthorId != currentUser.Id) 
             throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         
+        var now = time.GetUtcNow().UtcDateTime;
         var chapter = mapper.Map<Chapter>(request);
         chapter.ChapterIndex = await chaptersRepository.GetNextChapterIndex(novel.Id);
         chapter.Id = Guid.NewGuid();
         chapter.Slug = Slugs.For(chapter.Id, request.Title);
+        // Created now; created published, it also comes out now (#33).
+        chapter.CreatedAt = now;
+        chapter.SetStatus(request.Status, now);
         
         // Split content into paragraphs
         var paragraphTexts = SplitIntoParagraphs(request.Content);
@@ -49,7 +54,7 @@ public class CreateChapterCommandHandler(
             ContentHash = ComputeContentHash(text),
             OrderIndex = index,
             ContentType = "text",
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = now,
             CommentsCount = 0
         }).ToList();
         
@@ -63,7 +68,7 @@ public class CreateChapterCommandHandler(
             throw new InvalidOperationException("Failed to create the chapter");
         }
 
-        await novelsRepository.RefreshChapterCountAsync(novel.Id, lastUpdatedAt: DateTime.UtcNow);
+        await novelsRepository.RefreshChapterCountAsync(novel.Id, lastUpdatedAt: now);
         
         // If chapter is Published, recalculate sequences
         if (chapter.Status == "Published")

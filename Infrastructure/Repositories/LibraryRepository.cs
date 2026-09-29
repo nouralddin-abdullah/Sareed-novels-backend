@@ -129,9 +129,9 @@ public class LibraryRepository(ApplicationDbContext dbContext) : ILibraryReposit
             p.LastReadChapter.ChapterIndex,
             p.LastReadAt,
             p.NotifyNewChapters,
-            // Joined, not stored (#33). Chapters have no publish date: a chapter is stamped when it is created, which
-            // is when it came out unless it was saved as a draft and published later.
-            p.Novel.Chapters.Where(c => c.Status == PublishedStatus).Max(c => (DateTime?)c.CreatedAt)));
+            // Joined, not stored (#33): when the newest of the published chapters first came out, a draft published
+            // later counting from when it was published.
+            p.Novel.Chapters.Where(c => c.Status == PublishedStatus).Max(c => c.PublishedAt)));
 
     /// <summary>Loads the published chapter outlines (no content) for all rows' novels in one query.</summary>
     private async Task<IReadOnlyList<LibraryEntry>> WithPublishedChapters(List<ProgressRow> rows)

@@ -22,7 +22,8 @@ public class UpdateChapterCommandHandler(
     IUserContext userContext, 
     IMapper mapper,
     IChapterSequenceService sequenceService,
-    IServiceProvider serviceProvider) : IRequestHandler<UpdateChapterCommand, OperationResult>
+    IServiceProvider serviceProvider,
+    TimeProvider time) : IRequestHandler<UpdateChapterCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(UpdateChapterCommand request, CancellationToken cancellationToken)
     {
@@ -60,8 +61,13 @@ public class UpdateChapterCommandHandler(
             }
         }
         
-        // Update basic fields
+        // Update basic fields, and the status through SetStatus: publishing a draft stamps when it comes out, the first
+        // time only (#33).
         mapper.Map(request, chapter);
+        if (request.Status != null)
+        {
+            chapter.SetStatus(request.Status, time.GetUtcNow().UtcDateTime);
+        }
         
         var result = await chaptersRepository.UpdateChapter(chapter);
         

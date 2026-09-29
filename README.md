@@ -641,10 +641,16 @@ New fields (additive):
   as before: a new entry at that chapter, with notifications on. For «تراجع», hold the DELETE until the undo bar
   closes, or undo with `POST /api/library/track-progress/{lastReadChapterId}` (her position comes back, with
   notifications on and `lastReadAt` now).
-- **`lastChapterPublishedAt`**: the newest of the novel's published chapters, read from the chapters with the page
-  (not stored). «فصول جديدة» when it is later than `lastReadAt`; both are UTC (`lastReadAt` is sent without the `Z`,
-  as before). Chapters have no publish date, so this is the chapter's creation time: exact for a chapter published as
-  it was written, but a chapter saved as a draft and published later carries the time the draft was created. If she
-  read the novel between those two times, no badge shows for it (she still gets its notification and push).
+- **`lastChapterPublishedAt`**: when the newest of the novel's published chapters came out, read from the chapters with
+  the page (not stored). «فصول جديدة» when it is later than `lastReadAt`; both are UTC (`lastReadAt` is sent without the
+  `Z`, as before). A chapter comes out when it is first published: a chapter created published, when it is created; a
+  chapter saved as a draft and published later, when it is published, so a draft written before her last read and
+  published after it shows as new. A chapter unpublished and published again keeps the time it first came out, so it
+  isn't new a second time (the new-chapter notification and push are still sent again, as before). The field's name,
+  type and format are unchanged.
 - **Schema**: `UserNovelProgress.NotifyNewChapters bit NOT NULL DEFAULT 1`, migration `AddLibraryNotifyNewChapters`:
-  every existing entry keeps its notifications.
+  every existing entry keeps its notifications. `Chapters.PublishedAt datetime2 NULL` (UTC, null while the chapter has
+  never been published), migration `AddChapterPublishedAt`, which fills it in for the chapters that came out before
+  it: the first new-chapter notification sent for the chapter (by its id, `RelatedEntityId`), which is when it actually
+  came out, or its `CreatedAt` when none was sent (nobody had the novel in their library then). A chapter unpublished
+  since keeps the time of its notification; a draft never published stays null.
