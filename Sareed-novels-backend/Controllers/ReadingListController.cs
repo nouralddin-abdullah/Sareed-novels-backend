@@ -81,6 +81,10 @@ public class ReadingListController(IMediator mediator) : ControllerBase
         return BadRequest(result);
     }
 
+    /// <summary>
+    /// Multipart form; a field left out stays as it is. <c>Description=""</c> clears the description and
+    /// <c>RemoveCover=true</c> removes the picture (400 <c>CoverConflict</c> together with a new <c>CoverImage</c>).
+    /// </summary>
     [HttpPatch("{readingListId}")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> UpdateReadingList([FromRoute] Guid readingListId, [FromForm] UpdateReadingListRequest request)
@@ -90,7 +94,8 @@ public class ReadingListController(IMediator mediator) : ControllerBase
             request.Name,
             request.Description,
             request.IsPublic,
-            request.CoverImage
+            request.CoverImage,
+            request.RemoveCover
         );
 
         var result = await mediator.Send(command);
