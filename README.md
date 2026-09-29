@@ -511,3 +511,39 @@ the viewer blocked, while the comment lists leave those out for the viewer. So a
 lists 2. The counts are stored per paragraph, chapter and post, shared by every viewer; subtracting per viewer would cost
 a query per item, so it isn't done. Clients should treat these counts as "about this many" and not as the list's
 length: page through the list with its own `totalItemsCount`, which does leave blocked members out.
+
+### Library: removing a novel, and muting one novel's new chapters (#33)
+
+Every novel a reader opens joins her library (`POST /api/library/track-progress/{chapterId}`), and every chapter
+published in a library novel notifies her, in the app and by push. Now she can take a novel out of her library, or keep
+it and mute its new chapters. Both act for the signed-in reader (`Authorization: Bearer`; 401 without); errors are
+`{ "code", "message" }` with an Arabic message.
+
+| Request | Answer |
+|---|---|
+| `DELETE /api/library/novel/{novelId}` | 204 No Content, no body. Deletes her progress entry for the novel, nothing else. Also 204 when the novel isn't in her library (already as asked, like the idempotent writes since #25) |
+| `PATCH /api/library/novel/{novelId}`, body `{ "notifyNewChapters": true }` or `false` | 204 No Content, no body, also when it was so already. 404 `NotInLibrary` «هذه الرواية ليست في مكتبتك.» when the novel isn't in her library (never added, or removed). 400 `ValidationFailed` when the body has no boolean `notifyNewChapters` |
+
+New fields (additive):
+
+| Where | Field |
+|---|---|
+| `GET /api/library/reading-progress`, each item | `notifyNewChapters` (bool); `lastChapterPublishedAt` (UTC with `Z`, e.g. `"2026-09-29T21:57:47.1234567Z"`, or `null` when the novel has no published chapter) |
+| `GET /api/library/novel/{novelId}/progress`, in `progress` | `notifyNewChapters` (bool) |
+
+- **Muted** (`notifyNewChapters: false`): a chapter published in that novel, new or a draft published later, creates
+  no `NewChapterInLibrary` notification for her, so no push either. The novel stays in her library with its progress;
+  reading it doesn't turn notifications back on. Her other novels, other readers and her push preferences are
+  unchanged; the push still also follows her `chapters` push group.
+- **Removed**: `reading-progress` no longer lists it and `novel/{novelId}/progress` answers `{ "hasProgress": false }`;
+  her `libraryNovelsCount` goes down by one. Reading a chapter of the novel again adds it back through track-progress
+  as before: a new entry at that chapter, with notifications on. For «تراجع», hold the DELETE until the undo bar
+  closes, or undo with `POST /api/library/track-progress/{lastReadChapterId}` (her position comes back, with
+  notifications on and `lastReadAt` now).
+- **`lastChapterPublishedAt`**: the newest of the novel's published chapters, read from the chapters with the page
+  (not stored). «فصول جديدة» when it is later than `lastReadAt`; both are UTC (`lastReadAt` is sent without the `Z`,
+  as before). Chapters have no publish date, so this is the chapter's creation time: exact for a chapter published as
+  it was written, but a chapter saved as a draft and published later carries the time the draft was created. If she
+  read the novel between those two times, no badge shows for it (she still gets its notification and push).
+- **Schema**: `UserNovelProgress.NotifyNewChapters bit NOT NULL DEFAULT 1`, migration `AddLibraryNotifyNewChapters`:
+  every existing entry keeps its notifications.

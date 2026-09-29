@@ -5,6 +5,11 @@ public sealed record ChapterOutline(Guid Id, string Title, int ChapterIndex);
 
 /// <summary>One novel in a reader's library: the stored "stopped at" row plus what the novel looks like now.</summary>
 /// <param name="PublishedChapters">The novel's published chapters in reading order.</param>
+/// <param name="NotifyNewChapters">Whether the reader gets the novel's new chapters as notifications (#33).</param>
+/// <param name="LastChapterPublishedAt">
+/// When the newest of the published chapters came out (UTC), read from the chapters, not stored; null when none is
+/// published. Chapters have no publish date, so this is the newest published chapter's <c>CreatedAt</c>.
+/// </param>
 public sealed record LibraryEntry(
     Guid NovelId,
     string Title,
@@ -17,7 +22,9 @@ public sealed record LibraryEntry(
     string? AuthorProfilePhoto,
     ChapterOutline LastReadChapter,
     DateTime LastReadAt,
-    IReadOnlyList<ChapterOutline> PublishedChapters);
+    IReadOnlyList<ChapterOutline> PublishedChapters,
+    bool NotifyNewChapters,
+    DateTime? LastChapterPublishedAt);
 
 /// <summary>Where a reader resumes a novel: chapter <see cref="ChapterNumber"/> of the published chapters.</summary>
 public sealed record ResumePoint(Guid ChapterId, string ChapterTitle, int ChapterNumber, int PublishedChapters, decimal ProgressPercentage);

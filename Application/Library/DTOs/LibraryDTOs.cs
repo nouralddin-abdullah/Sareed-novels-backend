@@ -14,6 +14,16 @@ public class ReadingProgressDTO
     public string LastReadChapterTitle { get; set; } = default!;
     public decimal ProgressPercentage { get; set; }
     public DateTime LastReadAt { get; set; }
+
+    /// <summary>Whether the novel's new chapters notify the reader (#33); PATCH /api/library/novel/{novelId} sets it.</summary>
+    public bool NotifyNewChapters { get; set; }
+
+    /// <summary>
+    /// When the newest published chapter came out, UTC ("Z"); null when the novel has no published chapter (#33). The
+    /// app shows «فصول جديدة» when it is later than <see cref="LastReadAt"/>.
+    /// </summary>
+    public DateTime? LastChapterPublishedAt { get; set; }
+
     public NovelAuthorDTO Author { get; set; } = default!;
 }
 
@@ -31,4 +41,7 @@ public class NovelProgressDTO
     public int? LastReadChapterNumber { get; set; }
     public decimal ProgressPercentage { get; set; }
     public DateTime? LastReadAt { get; set; }
+
+    /// <summary>Whether the novel's new chapters notify the reader (#33).</summary>
+    public bool NotifyNewChapters { get; set; }
 }
