@@ -30,6 +30,9 @@ public partial class GetAppConfigQueryHandler(IConfiguration configuration) : IR
         // The very number SendGift checks messages against (#31), which also refuses a value out of range.
         config.Gifts.MessageMaxLength = GiftMessageRules.MaxLength(configuration);
 
+        // The post rules themselves (#43), whatever an "AppConfig:Posts" section might say.
+        config.Posts = new PostsAppConfigDto();
+
         return Task.FromResult(config);
     }
 
