@@ -14,8 +14,15 @@ public interface ICompetitionRepository
     
     // Queries
     Task<IEnumerable<Competition>> GetAllAsync();
-    Task<IEnumerable<Competition>> GetByStatusAsync(string status);
-    Task<IEnumerable<Competition>> GetActiveCompetitionsAsync();
+
+    /// <summary>
+    /// Competitions whose status at <paramref name="utcNow"/> (<see cref="Competition.EffectiveStatus"/>, decided in SQL)
+    /// is <paramref name="status"/>, one of the four as written in <see cref="CompetitionStatus"/>; newest first.
+    /// </summary>
+    Task<IEnumerable<Competition>> GetByStatusAsync(string status, DateTime utcNow);
+
+    /// <summary>Active competitions not completed at <paramref name="utcNow"/>; latest participation start first.</summary>
+    Task<IEnumerable<Competition>> GetActiveCompetitionsAsync(DateTime utcNow);
     Task<bool> ExistsAsync(Guid id);
     Task<bool> SlugExistsAsync(string slug);
 

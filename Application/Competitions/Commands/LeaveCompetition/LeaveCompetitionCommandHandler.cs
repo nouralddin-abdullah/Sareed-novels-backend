@@ -1,5 +1,4 @@
 ﻿using Application.Users;
-using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
@@ -10,7 +9,8 @@ public class LeaveCompetitionCommandHandler(
     ICompetitionRepository competitionRepository,
     ICompetitionParticipantRepository participantRepository,
     INovelsRepository novelsRepository,
-    IUserContext userContext) : IRequestHandler<LeaveCompetitionCommand, bool>
+    IUserContext userContext,
+    TimeProvider time) : IRequestHandler<LeaveCompetitionCommand, bool>
 {
     public async Task<bool> Handle(LeaveCompetitionCommand request, CancellationToken cancellationToken)
     {
@@ -20,8 +20,8 @@ public class LeaveCompetitionCommandHandler(
         var competition = await competitionRepository.GetByIdAsync(request.CompetitionId)
             ?? throw new NotFoundException("المسابقة غير موجودة", "CompetitionNotFound");
 
-        // Can only leave during participation phase
-        if (competition.Status != CompetitionStatus.Participation && competition.Status != CompetitionStatus.Upcoming)
+        // Only until participation ends, by the same rule as joining (CompetitionSchedule).
+        if (!competition.CanLeave(time.GetUtcNow().UtcDateTime))
         {
             throw new ForbidException("انتهت فترة المشاركة، فلا يمكن سحب الرواية من المسابقة", "ParticipationEnded");
         }

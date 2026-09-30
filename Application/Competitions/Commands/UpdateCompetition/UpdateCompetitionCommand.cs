@@ -26,7 +26,11 @@ public class UpdateCompetitionCommand : IRequest<CompetitionDetailDto>
     public int? MaxNovelAgeDays { get; set; }
     public int? MinChapters { get; set; }
     
-    // Status
+    /// <summary>
+    /// Stored as the admin's override (one of the four, any letter case; 400 InvalidStatus otherwise). It counts only
+    /// where it is further along than the dates: it can open early, close early or complete early, not hold a
+    /// competition back (move the dates for that). Upcoming removes the override.
+    /// </summary>
     public string? Status { get; set; }
     public bool? IsActive { get; set; }
 }

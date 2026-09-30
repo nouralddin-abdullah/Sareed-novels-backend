@@ -26,41 +26,42 @@ public class FinalizeCompetitionCommandHandler(
                 throw new NotFoundException("المسابقة غير موجودة", "CompetitionNotFound");
             }
 
-            // Already finalized: return the existing winners
-            var existing = (await winnerRepository.GetByCompetitionIdAsync(request.CompetitionId)).ToList();
-            if (existing.Count > 0)
-            {
-                return existing;
-            }
-
             var competition = (await competitionRepository.GetByIdAsync(request.CompetitionId))!;
 
-            // Get top 3 participants
-            var topList = (await participantRepository.GetTopParticipantsAsync(request.CompetitionId, 3)).ToList();
-            if (topList.Count == 0)
+            // Winners are chosen once: finalizing again keeps the ones there are.
+            var existing = await winnerRepository.GetByCompetitionIdAsync(request.CompetitionId);
+            if (!existing.Any())
             {
-                throw new InvalidOperationException("No participants in competition to finalize");
+                // The top 3 participants win. A competition nobody took part in has no winners, and is completed all
+                // the same: that is how an admin closes it.
+                var topList = (await participantRepository.GetTopParticipantsAsync(request.CompetitionId, 3)).ToList();
+                if (topList.Count > 0)
+                {
+                    var prizes = new[] { competition.PrizeFirstPlace, competition.PrizeSecondPlace, competition.PrizeThirdPlace };
+                    var created = topList.Select((participant, i) => new CompetitionWinner
+                    {
+                        Id = Guid.NewGuid(),
+                        CompetitionId = request.CompetitionId,
+                        NovelId = participant.NovelId,
+                        AuthorId = participant.Novel.AuthorId,
+                        Rank = i + 1,
+                        FinalPoints = participant.CurrentPoints + participant.ExtraPoints,
+                        FinalViews = participant.Novel.TotalViews - participant.ViewsAtJoin,
+                        PrizeWon = prizes[i],
+                        AwardedAt = DateTime.UtcNow
+                    }).ToList();
+
+                    await winnerRepository.CreateRangeAsync(created);
+                }
             }
 
-            var prizes = new[] { competition.PrizeFirstPlace, competition.PrizeSecondPlace, competition.PrizeThirdPlace };
-            var created = topList.Select((participant, i) => new CompetitionWinner
+            // Finalized means Completed, whatever the dates say (the stored status wins once it is further along), also
+            // when it is finalized again after an admin changed the status.
+            if (competition.Status != CompetitionStatus.Completed)
             {
-                Id = Guid.NewGuid(),
-                CompetitionId = request.CompetitionId,
-                NovelId = participant.NovelId,
-                AuthorId = participant.Novel.AuthorId,
-                Rank = i + 1,
-                FinalPoints = participant.CurrentPoints + participant.ExtraPoints,
-                FinalViews = participant.Novel.TotalViews - participant.ViewsAtJoin,
-                PrizeWon = prizes[i],
-                AwardedAt = DateTime.UtcNow
-            }).ToList();
-
-            await winnerRepository.CreateRangeAsync(created);
-
-            // Update competition status to completed
-            competition.Status = CompetitionStatus.Completed;
-            await competitionRepository.UpdateAsync(competition);
+                competition.Status = CompetitionStatus.Completed;
+                await competitionRepository.UpdateAsync(competition);
+            }
 
             // Reload winners with navigation properties
             return (await winnerRepository.GetByCompetitionIdAsync(request.CompetitionId)).ToList();

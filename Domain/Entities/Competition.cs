@@ -1,4 +1,6 @@
-﻿namespace Domain.Entities;
+﻿using Domain.Competitions;
+
+namespace Domain.Entities;
 
 public class Competition
 {
@@ -13,7 +15,7 @@ public class Competition
     public decimal PrizeSecondPlace { get; set; }
     public decimal PrizeThirdPlace { get; set; }
     
-    // Schedule - Three Phases
+    // Schedule (UTC). The status follows it: see CompetitionSchedule.
     public DateTime ParticipationStartDate { get; set; }
     public DateTime ParticipationEndDate { get; set; }
     public DateTime JudgmentStartDate { get; set; }
@@ -24,7 +26,11 @@ public class Competition
     public int? MaxNovelAgeDays { get; set; } // e.g., 30 = only novels created in last 30 days
     public int MinChapters { get; set; } = 5; // Minimum published chapters required
     
-    // Status - Updated by admin via UpdateCompetition endpoint
+    /// <summary>
+    /// The stored status: what an admin set (UpdateCompetition) or finalizing did (Completed). It is an override that
+    /// counts only where it is further along than the dates (<see cref="CompetitionSchedule"/>); a new competition has
+    /// Upcoming, which overrides nothing. Show and act on <see cref="EffectiveStatus"/>, never this alone.
+    /// </summary>
     public string Status { get; set; } = CompetitionStatus.Upcoming;
     public bool IsActive { get; set; } = true;
     
@@ -36,8 +42,18 @@ public class Competition
     public ICollection<CompetitionParticipant> Participants { get; set; } = new List<CompetitionParticipant>();
     public ICollection<CompetitionWinner> Winners { get; set; } = new List<CompetitionWinner>();
     
-    // Simple check based on stored Status (no date calculations)
-    public bool CanJoin() => IsActive && Status == CompetitionStatus.Participation;
+    /// <summary>The status at <paramref name="utcNow"/>: the dates, or the stored status where it is further along.</summary>
+    public string EffectiveStatus(DateTime utcNow) => CompetitionSchedule.StatusAt(this, utcNow);
+
+    /// <summary>Whether a novel can join at <paramref name="utcNow"/>: an active competition in Participation.</summary>
+    public bool CanJoin(DateTime utcNow) => IsActive && EffectiveStatus(utcNow) == CompetitionStatus.Participation;
+
+    /// <summary>
+    /// Whether a novel can be withdrawn at <paramref name="utcNow"/>: until participation ends (Upcoming, for a
+    /// competition postponed after novels joined, or Participation).
+    /// </summary>
+    public bool CanLeave(DateTime utcNow) =>
+        EffectiveStatus(utcNow) is CompetitionStatus.Upcoming or CompetitionStatus.Participation;
 }
 
 public static class CompetitionStatus
