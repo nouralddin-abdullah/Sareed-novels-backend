@@ -14,7 +14,12 @@ public sealed record NovelSitemapEntry(
     IReadOnlyList<string> Genres,
     IReadOnlyList<WikiSitemapEntry> Wiki);
 
-public sealed record ChapterSitemapEntry(Guid Id, DateTime LastModified);
+/// <summary>
+/// A published chapter and when it came out (<see cref="Domain.Entities.Chapter.PublishedAt"/>, #39). Null only for a
+/// chapter that code from before PublishedAt published after AddChapterPublishedAt filled the dates in; the SEO worker
+/// then leaves its lastmod out.
+/// </summary>
+public sealed record ChapterSitemapEntry(Guid Id, DateTime? LastModified);
 
 /// <summary>A wiki entry of the novel that passes <see cref="WikiPages.IsIndexable(Domain.Entities.NovelEntity)"/>.</summary>
 public sealed record WikiSitemapEntry(Guid Id, DateTime LastModified);

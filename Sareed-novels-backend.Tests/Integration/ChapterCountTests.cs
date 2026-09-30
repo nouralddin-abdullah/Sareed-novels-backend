@@ -8,15 +8,16 @@ public class ChapterCountTests(SqlServerDatabase database) : IClassFixture<SqlSe
     [Fact]
     public async Task Refreshing_sets_the_count_of_published_chapters_from_the_chapters_table_and_heals_drift()
     {
+        var created = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
         await using (var seed = database.CreateContext())
         {
             var author = Seed.User();
-            var novel = Seed.Novel(author, "رواية " + Seed.Marker());
+            var novel = Seed.Novel(author, "رواية " + Seed.Marker(), createdAt: created);
             novel.ChapterCount = -1; // what the cross-novel delete bug left behind
             seed.Users.Add(author);
             seed.Novels.Add(novel);
-            seed.Chapters.AddRange(Seed.Chapters(novel, 3, DateTime.UtcNow, status: "Published"));
-            seed.Chapters.AddRange(Seed.Chapters(novel, 2, DateTime.UtcNow, status: "Draft", startIndex: 4));
+            seed.Chapters.AddRange(Seed.Chapters(novel, 3, created, status: "Published"));
+            seed.Chapters.AddRange(Seed.Chapters(novel, 2, created, status: "Draft", startIndex: 4));
             await seed.SaveChangesAsync();
             novelId = novel.Id;
         }
@@ -38,6 +39,35 @@ public class ChapterCountTests(SqlServerDatabase database) : IClassFixture<SqlSe
         var stored = await check.Novels.SingleAsync(n => n.Id == novelId);
         Assert.Equal(3, stored.ChapterCount);
         Assert.Equal(updatedAt, stored.LastUpdatedAt);
+    }
+
+    [Fact]
+    public async Task The_last_update_only_moves_forward()
+    {
+        // #39: two chapters coming out at once each move it to when they came out; whichever statement runs last, the
+        // later time stays.
+        var created = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+        var (earlier, later) = (created.AddDays(3), created.AddDays(3).AddSeconds(1));
+        await using (var seed = database.CreateContext())
+        {
+            var author = Seed.User();
+            var novel = Seed.Novel(author, "رواية " + Seed.Marker(), createdAt: created);
+            seed.Users.Add(author);
+            seed.Novels.Add(novel);
+            await seed.SaveChangesAsync();
+            novelId = novel.Id;
+        }
+
+        await using (var db = database.CreateContext())
+        {
+            var repository = new NovelsRepository(db);
+            await repository.RefreshChapterCountAsync(novelId, later);
+            await repository.RefreshChapterCountAsync(novelId, earlier);
+            await repository.RefreshChapterCountAsync(novelId); // a count refresh alone leaves it
+        }
+
+        await using var check = database.CreateContext();
+        Assert.Equal(later, (await check.Novels.SingleAsync(n => n.Id == novelId)).LastUpdatedAt);
     }
 
     private Guid novelId;

@@ -615,10 +615,10 @@ length: page through the list with its own `totalItemsCount`, which does leave b
 
 ### Library: removing a novel, and muting one novel's new chapters (#33)
 
-Every novel a reader opens joins her library (`POST /api/library/track-progress/{chapterId}`), and every chapter
-published in a library novel notifies her, in the app and by push. Now she can take a novel out of her library, or keep
-it and mute its new chapters. Both act for the signed-in reader (`Authorization: Bearer`; 401 without); errors are
-`{ "code", "message" }` with an Arabic message.
+Every novel a reader opens joins her library (`POST /api/library/track-progress/{chapterId}`), and every new chapter of
+a library novel notifies her once, in the app and by push, when it comes out (#39, below). Now she can take a novel out
+of her library, or keep it and mute its new chapters. Both act for the signed-in reader (`Authorization: Bearer`; 401
+without); errors are `{ "code", "message" }` with an Arabic message.
 
 | Request | Answer |
 |---|---|
@@ -646,11 +646,52 @@ New fields (additive):
   `Z`, as before). A chapter comes out when it is first published: a chapter created published, when it is created; a
   chapter saved as a draft and published later, when it is published, so a draft written before her last read and
   published after it shows as new. A chapter unpublished and published again keeps the time it first came out, so it
-  isn't new a second time (the new-chapter notification and push are still sent again, as before). The field's name,
-  type and format are unchanged.
+  isn't new a second time, and since #39 its new-chapter notification and push aren't sent again either. The field's
+  name, type and format are unchanged.
 - **Schema**: `UserNovelProgress.NotifyNewChapters bit NOT NULL DEFAULT 1`, migration `AddLibraryNotifyNewChapters`:
   every existing entry keeps its notifications. `Chapters.PublishedAt datetime2 NULL` (UTC, null while the chapter has
   never been published), migration `AddChapterPublishedAt`, which fills it in for the chapters that came out before
   it: the first new-chapter notification sent for the chapter (by its id, `RelatedEntityId`), which is when it actually
   came out, or its `CreatedAt` when none was sent (nobody had the novel in their library then). A chapter unpublished
   since keeps the time of its notification; a draft never published stays null.
+
+### Chapter dates: when a chapter came out (#39)
+
+A chapter comes out when it is first published: when it is created, if it is created published; when it is published,
+if it was saved as a draft first. That time is kept if the chapter is unpublished and published again. Until #39,
+several places took a chapter's creation time for it, or counted a draft as an update, so a draft published days after
+it was written was dated the day it was written. Everything below now follows when chapters came out.
+
+New field (additive; nothing is renamed or removed, and `createdAt` stays as it was: when the chapter was written):
+
+| Where | Field |
+|---|---|
+| `GET /api/novel/{novelId}/chapter` (the novel's chapter list), each item | `publishedAt` |
+| `GET /api/myworks/{workId}/chapters` (the author's list), each item | `publishedAt` (null for a draft never published) |
+| `GET /api/novel/{novelId}/chapter/{chapterId}` (the reader) | `publishedAt` |
+| `GET /api/myworks/{workId}/chapters/{chapterId}`, and the chapter `POST /api/novel/{novelId}/chapter` returns | `publishedAt` |
+
+`publishedAt` is UTC with `Z` (e.g. `"2026-09-29T21:57:47.1234567Z"`, like `lastChapterPublishedAt` in the library), and
+`null` while the chapter has never been published. It is the date to show for a chapter: the web shows it in the
+novel's and the author's chapter lists and in the reader page's published-time tags (the SEO worker's chapter pages
+too), falling back to `createdAt` against an API without it.
+
+- **New-chapter notification and push**: sent once per chapter, when it comes out (created published, or a draft
+  published for the first time). Unpublishing a chapter and publishing it again tells no one again, as the library's
+  «فصول جديدة» doesn't show it again. Whether a save is a chapter's first publish is decided in the database, so two
+  saves publishing a draft at the same moment tell readers once.
+- **The novel's `lastUpdatedAt`** (the "last updated" search sort, the novel page, my works, the sitemap): moves to the
+  time a chapter comes out, and only then. Writing a draft, saving or editing a chapter that is out, unpublishing a
+  chapter, publishing it again or deleting one don't move it (editing never did). It only moves forward. The migration
+  `RecomputeNovelLastUpdatedAt` put the stored values under this rule: when the novel's newest chapter came out (a
+  chapter unpublished since counts, it came out then), or when the novel was created if none has; a chapter deleted
+  after it came out no longer counts.
+- **Rankings**: Trending's boost for a fresh chapter, the New lists' 60-day window and head start, and the tie-break by
+  the newest chapter use when the novel's published chapters came out. Drafts and unpublished chapters don't count. The
+  lists are recomputed a minute after the app starts and every 30 minutes, so a deploy updates them.
+- **Sitemap** (`GET /api/seo/sitemap`): a chapter's `lastModified` is when it came out, and a novel's is the later of
+  its `lastUpdatedAt` and when its newest published chapter came out.
+- A published chapter always has a publish date (AddChapterPublishedAt filled them in, #33). Only code from before
+  that could publish one without it after the migration ran (during a deploy or after a rollback): the rankings then
+  place the novel by its other chapters (or leave it out while none has a date) and log an error naming it, and the
+  sitemap gives that chapter no `lastModified`.

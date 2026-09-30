@@ -19,7 +19,8 @@ public class Chapter
     /// When the chapter first came out to readers (UTC): stamped the first time it is published and kept from then on,
     /// also when it is unpublished and published again, so it never comes out as new twice. Null while it has never
     /// been published. A draft published later is stamped when it is published, not when it was written (#33).
-    /// Set it through <see cref="SetStatus"/>.
+    /// Set it through <see cref="SetStatus"/>; saving an edit stores it only while the stored chapter has none, so the
+    /// save that stores it is the chapter's one first publish (#39).
     /// </summary>
     public DateTime? PublishedAt { get; set; }
 

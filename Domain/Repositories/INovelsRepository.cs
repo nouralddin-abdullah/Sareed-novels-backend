@@ -20,7 +20,9 @@ public interface INovelsRepository
     Task<bool> SoftDeleteAsync(Guid novelId);
     /// <summary>
     /// Sets ChapterCount to the novel's current number of published chapters (what readers can open; drafts don't count)
-    /// in one SQL statement (no read-modify-write).
+    /// in one SQL statement (no read-modify-write). With <paramref name="lastUpdatedAt"/>, when one of its chapters came
+    /// out, the same statement moves the novel's LastUpdatedAt forward to it (never back): only a chapter coming out is
+    /// an update to readers (#39), not a draft, a chapter published again, an edit or a deletion.
     /// </summary>
     Task RefreshChapterCountAsync(Guid novelId, DateTime? lastUpdatedAt = null);
     Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber);

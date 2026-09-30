@@ -4,6 +4,7 @@ using Application.Services;
 using Application.Users;
 using Application.Users.Commands.FollowUser;
 using AutoMapper;
+using Domain.Constants;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
@@ -62,40 +63,48 @@ public class UpdateChapterCommandHandler(
         }
         
         // Update basic fields, and the status through SetStatus: publishing a draft stamps when it comes out, the first
-        // time only (#33).
+        // time only (#33). UpdateChapter stores that stamp only while the chapter has none, and says whether this save
+        // is the one that brought the chapter out (#39).
         mapper.Map(request, chapter);
         if (request.Status != null)
         {
             chapter.SetStatus(request.Status, time.GetUtcNow().UtcDateTime);
         }
         
-        var result = await chaptersRepository.UpdateChapter(chapter);
-        
+        var saved = await chaptersRepository.UpdateChapter(chapter);
+
         // Recalculate sequences if status changed to/from Published
-        if (result && needsSequenceRecalculation)
+        if (saved.Saved && needsSequenceRecalculation)
         {
             logger.LogInformation(
-                "Chapter {ChapterId} status changed from {OldStatus} to {NewStatus}, triggering sequence recalculation", 
+                "Chapter {ChapterId} status changed from {OldStatus} to {NewStatus}, triggering sequence recalculation",
                 chapter.Id, oldStatus, request.Status);
-            
+
             await sequenceService.RecalculateSequencesForNovelAsync(request.NovelId);
             await sequenceService.UpdateReadingProgressForNovelAsync(request.NovelId);
 
-            // The novel's ChapterCount counts published chapters, so publishing or unpublishing one changes it.
-            await novelsRepository.RefreshChapterCountAsync(request.NovelId);
+            // The novel's ChapterCount counts published chapters, so publishing or unpublishing one changes it. Its last
+            // update moves only when the chapter comes out, published for the first time (#39); unpublishing it, or
+            // publishing it again after that, isn't an update to readers.
+            await novelsRepository.RefreshChapterCountAsync(
+                request.NovelId, lastUpdatedAt: saved.CameOut ? chapter.PublishedAt : null);
 
             // Trigger privilege update if status changed to Published
-            if (request.Status == "Published" && oldStatus != "Published")
+            if (request.Status == ChapterStatuses.Published && oldStatus != ChapterStatuses.Published)
             {
                 var privilegeService = serviceProvider.GetRequiredService<IPrivilegeService>();
                 await privilegeService.OnChapterPublishedAsync(request.NovelId);
-                
-                // Fire-and-forget: Send notifications
-                _ = SendNewChapterNotificationsInBackground(novel.Id, chapter.Id, chapter.Slug, chapter.Title);
+
+                // Readers are told once, when the chapter comes out (#39): published again, it isn't new, as the
+                // library's «فصول جديدة» doesn't show it again either. Fire-and-forget.
+                if (saved.CameOut)
+                {
+                    _ = SendNewChapterNotificationsInBackground(novel.Id, chapter.Id, chapter.Slug, chapter.Title);
+                }
             }
         }
-        
-        if (result)
+
+        if (saved.Saved)
         {
             return new OperationResult
             {
