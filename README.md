@@ -712,7 +712,9 @@ when a novel joins or leaves. The field keeps its name and its four values; what
 - **Boundaries.** A date is the first instant of the phase it opens: at exactly `participationStartDate` the
   competition is open, at exactly `participationEndDate` it is closed. `judgmentStartDate`, `judgmentEndDate` and
   `resultsDate` are for showing: the competition stays `Judging` through them and after, until an admin finalizes it.
-  The dates are UTC, sent without the `Z` as before (`"2025-12-25T14:45:38.138"`): read them as UTC.
+  The dates are UTC, sent without the `Z` as before (`"2025-12-25T14:45:38.138"`): read them as UTC. Admins send
+  them as UTC too, with the `Z` (`toISOString()`): a date with another offset is converted to the server's local time
+  before it is stored.
 - **Where.** The list `GET /api/competition`, the page `GET /api/competition/{idOrSlug}`, what creating and updating
   answer, and `competitionStatus` in `GET /api/competition/my-participations`; joining and leaving decide by the same
   status. One request reads the clock once, so a list and its filter agree.
