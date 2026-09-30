@@ -45,7 +45,8 @@ public class RecountPublishedChaptersMigrationTests(EmptySqlServerDatabase datab
             .. Seed.Chapters(deleted, 1, updatedAt, status: "Draft", startIndex: 2)
         ]);
 
-        await migrator.MigrateAsync();
+        // Up to this migration only: later ones have data fixes of their own (RecomputeNovelLastUpdatedAt, #39).
+        await migrator.MigrateAsync(Recount);
         await AssertCounts(lancelot: 14, deletedOne: 1);
 
         // The new notification columns take a gift and its count.
@@ -61,7 +62,7 @@ public class RecountPublishedChaptersMigrationTests(EmptySqlServerDatabase datab
         await migrator.MigrateAsync(Before);
         Assert.DoesNotContain(Recount, await db.Database.GetAppliedMigrationsAsync());
         await AssertCounts(lancelot: 16, deletedOne: 2);
-        await migrator.MigrateAsync();
+        await migrator.MigrateAsync(Recount);
         await AssertCounts(lancelot: 14, deletedOne: 1);
 
         async Task AssertCounts(int lancelot, int deletedOne)
