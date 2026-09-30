@@ -102,14 +102,17 @@ public class CreatePostCommandHandler(
     private static CreatePostResult Refused(string code, string message) =>
         new() { Success = false, Code = code, Message = message };
 
-    /// <summary>Best effort: a picture left behind costs storage only, so failing to delete it is logged, not thrown.</summary>
+    /// <summary>
+    /// Best effort: a picture left behind only costs storage, so failing to delete it is a warning, never thrown over the
+    /// save's own error (which the error middleware logs).
+    /// </summary>
     private async Task DeleteUnusedImage(Guid postId, string imageUrl)
     {
         try
         {
             if (await fileUploadService.DeleteImageAsync(imageUrl))
             {
-                logger.LogWarning("Post {PostId} could not be saved; its picture {ImageUrl} was deleted", postId, imageUrl);
+                logger.LogInformation("Post {PostId} could not be saved; its picture {ImageUrl} was deleted", postId, imageUrl);
                 return;
             }
             logger.LogWarning("Post {PostId} could not be saved, and its picture {ImageUrl} could not be deleted", postId, imageUrl);
