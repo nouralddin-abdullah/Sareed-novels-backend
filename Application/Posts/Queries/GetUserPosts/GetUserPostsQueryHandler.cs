@@ -22,7 +22,8 @@ public class GetUserPostsQueryHandler(
         var currentUser = userContext.GetCurrentUser();
 
         // Posts of a user the viewer blocked are left out, and so, for someone they blocked, are the posts of a user
-        // whose profile they can't open: an empty page, as for a user who doesn't exist.
+        // whose profile they can't open: an empty page, as for a user who doesn't exist. So every post listed has
+        // authorBlockedByMe false, rightly.
         if (currentUser != null && currentUser.Id != request.UserId
             && (await blocksRepository.GetRelationAsync(currentUser.Id, request.UserId, cancellationToken)).Either)
         {

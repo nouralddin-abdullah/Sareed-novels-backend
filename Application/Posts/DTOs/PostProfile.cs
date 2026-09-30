@@ -12,6 +12,7 @@ public class PostProfile : Profile
         CreateMap<Novel, PostNovelDTO>();
 
         CreateMap<Post, PostDTO>()
-            .ForMember(dest => dest.IsLikedByCurrentUser, opt => opt.Ignore());
+            .ForMember(dest => dest.IsLikedByCurrentUser, opt => opt.Ignore())
+            .ForMember(dest => dest.AuthorBlockedByMe, opt => opt.Ignore());
     }
 }

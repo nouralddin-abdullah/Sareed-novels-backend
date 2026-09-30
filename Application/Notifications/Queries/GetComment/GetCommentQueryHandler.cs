@@ -1,6 +1,7 @@
 using Application.Comments;
 using Application.Common;
 using Application.Notifications.DTOs;
+using Application.Posts;
 using Application.Services;
 using Application.Users;
 using AutoMapper;
@@ -21,6 +22,7 @@ public class GetCommentQueryHandler(
     INovelsRepository novelsRepository,
     IPostsRepository postsRepository,
     ICommentLikesRepository commentLikesRepository,
+    IUserBlocksRepository blocksRepository,
     IPrivilegeService privilegeService,
     IUserContext userContext,
     IMapper mapper) : IRequestHandler<GetCommentQuery, CommentDetailDto>
@@ -75,6 +77,9 @@ public class GetCommentQueryHandler(
         {
             var post = await postsRepository.GetPostById(comment.PostId.Value)
                 ?? throw new NotFoundException("هذا المنشور لم يعد موجودًا", "PostNotFound");
+            // To someone the post's author blocked, the post is unavailable, and so are its comments (PostBlocks).
+            await PostBlocks.EnsureNotBlockedByAuthorAsync(blocksRepository, post.UserId, currentUser?.Id,
+                cancellationToken);
 
             context.PostId = post.Id;
             context.TotalComments = post.CommentsCount;

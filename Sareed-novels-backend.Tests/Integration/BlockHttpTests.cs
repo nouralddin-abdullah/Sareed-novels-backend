@@ -12,7 +12,7 @@ namespace Sareed_novels_backend.Tests.Integration;
 /// the blocker.
 /// </summary>
 [Collection(ReaderApiCollection.Name)]
-public class BlockHttpTests(SardApiFactory api)
+public partial class BlockHttpTests(SardApiFactory api)
 {
     private async Task<JsonElement> BlockedList(ApiUser user) => await (await api.Get("/api/User/blocked", user)).OkJson();
 
