@@ -1,15 +1,23 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Application.Services;
 using Application.Users;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace Sareed_novels_backend.Tests.Integration;
 
 /// <summary>
 /// PATCH /api/User/update-me: a field left out stays as it is, a field sent empty clears the bio and the links, and an
 /// empty user name or display name is refused. The web sends the text fields in the query string (useUpdateMe.js);
-/// the app may send multipart form-data. Both go through the real model binding here.
+/// the app may send multipart form-data. Both go through the real model binding here. A success answers with the saved
+/// profile, exactly as GET my-profile returns it after the save (#44); a refusal answers as before, without one.
 /// </summary>
 [Collection(ReaderApiCollection.Name)]
 public class UpdateMeHttpTests(SardApiFactory api)
@@ -36,6 +44,39 @@ public class UpdateMeHttpTests(SardApiFactory api)
 
     private Func<ApiUser, (string, string)[], Task<HttpResponseMessage>> Transport(string name) =>
         name == "query" ? (u, f) => ByQuery(u, f) : (u, f) => ByForm(u, f);
+
+    /// <summary>
+    /// The profile a successful update answers with (#44), once it is checked to be the JSON GET my-profile returns
+    /// right after: the same fields with the same values.
+    /// </summary>
+    private async Task<JsonElement> SavedProfile(HttpResponseMessage response, ApiUser user)
+    {
+        var body = await response.OkJson();
+        string[] fields = ["success", "message", "profile"];
+        Assert.Equal(fields, body.EnumerateObject().Select(p => p.Name));
+        Assert.True(body.GetProperty("success").GetBoolean());
+        Assert.Equal("تم تحديث الملف الشخصي", body.GetProperty("message").GetString());
+        var profile = body.GetProperty("profile");
+        Assert.Equal((await Profile(user)).GetRawText(), profile.GetRawText());
+        return profile;
+    }
+
+    /// <summary>A refusal as update-me answered it before #44: these fields and no others (no profile).</summary>
+    private static void AssertRefusal(JsonElement body, string code, params string[] moreFields)
+    {
+        string[] fields = ["success", "code", "message", .. moreFields];
+        Assert.Equal(fields, body.EnumerateObject().Select(p => p.Name));
+        Assert.False(body.GetProperty("success").GetBoolean());
+        Assert.Equal(code, body.GetProperty("code").GetString());
+    }
+
+    private static MultipartFormDataContent WithImage(MultipartFormDataContent form, string field)
+    {
+        var image = new ByteArrayContent([0x89, 0x50, 0x4E, 0x47]);
+        image.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(image, field, field + ".png");
+        return form;
+    }
 
     [Theory]
     [MemberData(nameof(Transports))]
@@ -167,5 +208,124 @@ public class UpdateMeHttpTests(SardApiFactory api)
         var response = await api.Send(HttpMethod.Patch, Url, user, JsonContent.Create(new { userBio = "نبذة" }));
 
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
+    }
+
+    [Theory]
+    [MemberData(nameof(Transports))]
+    public async Task A_new_user_name_comes_back_in_the_answer_as_my_profile_shows_it(string transport)
+    {
+        var update = Transport(transport);
+        var (user, follower) = (await api.SignUp(), await api.SignUp());
+        (await api.Follow(follower, user)).EnsureSuccessStatusCode();
+        var name = "n" + Guid.NewGuid().ToString("N")[..10];
+
+        // The token still has the old name: the profile is the account's, read after the save.
+        var renamed = await SavedProfile(await update(user, [("UserName", name), ("DisplayName", "اسم جديد")]), user);
+        var recased = await SavedProfile(await update(user, [("UserName", name.ToUpperInvariant())]), user);
+
+        Assert.Equal(name, renamed.GetProperty("userName").GetString());
+        Assert.Equal("اسم جديد", renamed.GetProperty("displayName").GetString());
+        Assert.Equal(1, renamed.GetProperty("totalFollowers").GetInt32());
+        Assert.Equal(name.ToUpperInvariant(), recased.GetProperty("userName").GetString());
+    }
+
+    [Theory]
+    [MemberData(nameof(Transports))]
+    public async Task A_bio_set_or_cleared_comes_back_in_the_answer_as_my_profile_shows_it(string transport)
+    {
+        var update = Transport(transport);
+        var user = await api.SignUp();
+
+        var set = await SavedProfile(await update(user, [("UserBio", "أكتب الروايات")]), user);
+        var cleared = await SavedProfile(await update(user, [("UserBio", "")]), user);
+
+        Assert.Equal("أكتب الروايات", set.GetProperty("userBio").GetString());
+        Assert.Equal(JsonValueKind.Null, cleared.GetProperty("userBio").ValueKind);
+    }
+
+    [Theory]
+    [MemberData(nameof(Transports))]
+    public async Task Each_link_set_or_cleared_comes_back_in_the_answer_as_my_profile_shows_it(string transport)
+    {
+        var update = Transport(transport);
+        var user = await api.SignUp();
+        (string Field, string Property, string Value)[] links =
+            [("FacebookUrl", "facebookUrl", "https://facebook.com/me"), ("TwitterUrl", "twitterUrl", "x.com/me"), ("DiscordUrl", "discordUrl", "discord.gg/me")];
+
+        foreach (var (field, property, value) in links)
+        {
+            var set = await SavedProfile(await update(user, [(field, value)]), user);
+            Assert.Equal(value, set.GetProperty(property).GetString());
+        }
+        foreach (var (field, property, _) in links)
+        {
+            var cleared = await SavedProfile(await update(user, [(field, "")]), user);
+            Assert.Equal(JsonValueKind.Null, cleared.GetProperty(property).ValueKind);
+        }
+    }
+
+    [Fact]
+    public async Task A_new_photo_or_banner_comes_back_in_the_answer_as_my_profile_shows_it()
+    {
+        var user = await api.SignUp();
+
+        var photo = await SavedProfile(await api.Send(HttpMethod.Patch, Url, user, WithImage(ReaderApi.Form(), "ProfilePhoto")), user);
+        var banner = await SavedProfile(await api.Send(HttpMethod.Patch, Url, user, WithImage(ReaderApi.Form(), "ProfileBanner")), user);
+
+        Assert.StartsWith($"https://files.test/profile-images/{user.Id}/", photo.GetProperty("profilePhoto").GetString());
+        Assert.StartsWith($"https://files.test/profile-banners/{user.Id}/", banner.GetProperty("profileBanner").GetString());
+        Assert.Equal(photo.GetProperty("profilePhoto").GetString(), banner.GetProperty("profilePhoto").GetString());
+    }
+
+    [Fact]
+    public async Task Refusals_answer_as_before_without_a_profile()
+    {
+        var (user, other) = (await api.SignUp(), await api.SignUp());
+
+        var taken = await (await ByForm(user, ("UserName", other.UserName))).Error(HttpStatusCode.BadRequest);
+        var deleted = await (await ByForm(user, ("UserName", "deleted-" + Guid.NewGuid().ToString("N")[..8]))).Error(HttpStatusCode.BadRequest);
+        var identity = await (await ByForm(user, ("UserName", "اسم عربي"))).Error(HttpStatusCode.BadRequest);
+        var invalid = await (await ByForm(user, ("UserBio", new string('ن', 151)))).Error(HttpStatusCode.BadRequest);
+
+        AssertRefusal(taken, "UserNameTaken");
+        AssertRefusal(deleted, UserNameRules.DeletedPrefixCode);
+        AssertRefusal(identity, "InvalidUserName");
+        // The validators' refusal is still the validation problem.
+        Assert.Equal("ValidationFailed", invalid.GetProperty("code").GetString());
+        Assert.True(invalid.GetProperty("errors").TryGetProperty("UserBio", out _));
+        Assert.False(invalid.TryGetProperty("profile", out _));
+    }
+
+    [Fact]
+    public async Task A_failed_upload_answers_as_before_without_a_profile()
+    {
+        var uploads = Substitute.For<IFileUploadService>();
+        uploads.UploadImageAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+            .ThrowsAsync(new IOException("R2 is down"));
+        await using var broken = api.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IFileUploadService>();
+            services.AddSingleton(uploads);
+        }));
+        var user = await api.SignUp();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, Url)
+        {
+            Content = WithImage(ReaderApi.Form(("UserBio", "نبذة")), "ProfilePhoto")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", user.Token);
+
+        var refused = await (await broken.CreateClient().SendAsync(request)).Error(HttpStatusCode.BadRequest);
+
+        AssertRefusal(refused, "UploadFailed", "field");
+        Assert.Equal("ProfilePhoto", refused.GetProperty("field").GetString());
+        Assert.Equal(JsonValueKind.Null, (await Profile(user)).GetProperty("userBio").ValueKind); // nothing was saved
+    }
+
+    [Fact]
+    public async Task Signed_out_is_401()
+    {
+        var response = await api.Send(HttpMethod.Patch, Url, null, ReaderApi.Form(("UserBio", "نبذة")));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 }
