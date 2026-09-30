@@ -17,9 +17,14 @@ public static class UserNameRules
 
     /// <summary>
     /// Names that are also routes next to GET /api/User/{userName} (routes match them first, whatever the case), so
-    /// a profile with such a name could never be opened.
+    /// a profile with such a name could never be opened: "blocked" and "my-profile"; and next to its lists
+    /// {userName}/reviews and {userName}/comments (#54), which "followers-list/{userId}" and "following-list/{userId}"
+    /// would win.
     /// </summary>
-    private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase) { "blocked", "my-profile" };
+    private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "blocked", "my-profile", "followers-list", "following-list"
+    };
 
     public static bool IsNotReserved(string? userName) => userName is null || !Reserved.Contains(userName.Trim());
 
