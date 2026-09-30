@@ -27,7 +27,12 @@ public interface INovelsRepository
     Task RefreshChapterCountAsync(Guid novelId, DateTime? lastUpdatedAt = null);
     Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber);
     Task<(IEnumerable<Novel?>, int)> GetWorks(string userId, int PageNumber, int PageSize);
-    Task<(IEnumerable<Novel>, int)> GetUserPublishedWorks(string userId, int pageNumber, int pageSize);
+    /// <summary>
+    /// A page of the user's public novels (never drafts or deleted ones), latest update first, and how many there are in
+    /// all. With <paramref name="readableOnly"/>, only those a reader can open, with at least one published chapter
+    /// (withChapters=true, #46), and the count is of those.
+    /// </summary>
+    Task<(IEnumerable<Novel>, int)> GetUserPublishedWorks(string userId, int pageNumber, int pageSize, bool readableOnly);
     Task<(IEnumerable<Novel>, int)> GetAllNovelsBasicAsync(int pageNumber, int pageSize);
     Task<int> GetPublishedChaptersCountAsync(Guid novelId);
     Task<int> RecalculatePublishedSequencesAsync(Guid novelId);
