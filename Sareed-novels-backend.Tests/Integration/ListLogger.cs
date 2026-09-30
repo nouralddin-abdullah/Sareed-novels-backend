@@ -4,12 +4,12 @@ using Microsoft.Extensions.Logging;
 namespace Sareed_novels_backend.Tests.Integration;
 
 /// <summary>
-/// Keeps what was logged, with the structured values: to check that failures are surfaced and what a summary line
-/// reported. Thread-safe, since background workers log while a test reads.
+/// Keeps what was logged, with the structured values and the exception: to check that failures are surfaced and what a
+/// summary line reported. Thread-safe, since background workers log while a test reads.
 /// </summary>
 public sealed class ListLogger<T> : ILogger<T>
 {
-    public ConcurrentQueue<(LogLevel Level, string Message, IReadOnlyDictionary<string, object?> Values)> Entries { get; } = new();
+    public ConcurrentQueue<(LogLevel Level, string Message, IReadOnlyDictionary<string, object?> Values, Exception? Exception)> Entries { get; } = new();
 
     public IEnumerable<string> Warnings => Entries.Where(e => e.Level == LogLevel.Warning).Select(e => e.Message);
 
@@ -28,6 +28,6 @@ public sealed class ListLogger<T> : ILogger<T>
                 values.TryAdd(key, value);
             }
         }
-        Entries.Enqueue((logLevel, formatter(state, exception), values));
+        Entries.Enqueue((logLevel, formatter(state, exception), values, exception));
     }
 }

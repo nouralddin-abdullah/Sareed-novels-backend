@@ -1,4 +1,4 @@
-using System.Globalization;
+using Application.Common;
 using Domain.Entities;
 using Microsoft.Extensions.Configuration;
 
@@ -6,8 +6,8 @@ namespace Application.Gifts;
 
 /// <summary>
 /// The short message a sender may write to the author with a gift (#31). It is public: it shows under the novel's
-/// recent gifts. Its limit counts user-perceived characters (text elements, as Flutter's counter and the web's
-/// Intl.Segmenter count them), so an emoji is one character, not the two or more UTF-16 units it takes.
+/// recent gifts. Its limit counts user-perceived characters (<see cref="TextElements"/>, as Flutter's counter and the
+/// web's Intl.Segmenter count them), so an emoji is one character, not the two or more UTF-16 units it takes.
 /// </summary>
 public static class GiftMessageRules
 {
@@ -51,7 +51,7 @@ public static class GiftMessageRules
     /// UTF-16 units than its column holds (<see cref="GiftTransaction.MessageMaxStoredLength"/>).
     /// </summary>
     public static bool IsTooLong(string message, int maxLength) =>
-        message.Length > GiftTransaction.MessageMaxStoredLength || Length(message) > maxLength;
+        message.Length > GiftTransaction.MessageMaxStoredLength || TextElements.Count(message) > maxLength;
 
     /// <summary>What a sender's message becomes: <see cref="Normalize"/>d, and whether it is too long to be sent.</summary>
     public static GiftMessageCheck Check(string? message, int maxLength)
@@ -59,9 +59,6 @@ public static class GiftMessageRules
         var normalized = Normalize(message);
         return new GiftMessageCheck(normalized, normalized is not null && IsTooLong(normalized, maxLength));
     }
-
-    /// <summary>The length in user-perceived characters (extended grapheme clusters).</summary>
-    public static int Length(string text) => new StringInfo(text).LengthInTextElements;
 }
 
 /// <param name="Message">The message to store; null when there is none.</param>

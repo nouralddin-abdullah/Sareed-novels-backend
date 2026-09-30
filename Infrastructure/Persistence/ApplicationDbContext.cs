@@ -715,6 +715,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             entity.HasKey(p => p.Id);
 
+            // nvarchar(max), as SQL Server makes any length over 4000, so 5000 isn't enforced here: the post rules
+            // (PostRules, #43) allow 5000 user-perceived characters, up to 100,000 UTF-16 units.
             entity.Property(p => p.Content)
                 .IsRequired()
                 .HasMaxLength(5000);

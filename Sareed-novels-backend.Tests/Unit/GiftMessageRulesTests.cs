@@ -1,3 +1,4 @@
+using Application.Common;
 using Application.Gifts;
 using Domain.Constants;
 using Domain.Entities;
@@ -60,11 +61,11 @@ public class GiftMessageRulesTests
     [Fact]
     public void An_emoji_counts_as_one_character()
     {
-        Assert.Equal(1, GiftMessageRules.Length(Smile));
-        Assert.Equal(1, GiftMessageRules.Length(Family));
-        Assert.Equal(1, GiftMessageRules.Length("\U0001F44D\U0001F3FD")); // with a skin tone
-        Assert.Equal(1, GiftMessageRules.Length("\U0001F1F8\U0001F1E6")); // a flag
-        Assert.Equal(1, GiftMessageRules.Length("بَ")); // a letter with its tashkeel
+        Assert.Equal(1, TextElements.Count(Smile));
+        Assert.Equal(1, TextElements.Count(Family));
+        Assert.Equal(1, TextElements.Count("\U0001F44D\U0001F3FD")); // with a skin tone
+        Assert.Equal(1, TextElements.Count("\U0001F1F8\U0001F1E6")); // a flag
+        Assert.Equal(1, TextElements.Count("بَ")); // a letter with its tashkeel
 
         // 400 and 2200 UTF-16 units, 200 characters: accepted, as the app's counter allowed them.
         Assert.False(GiftMessageRules.Check(Repeat(Smile, 200), Limit).TooLong);
@@ -79,7 +80,7 @@ public class GiftMessageRulesTests
         // One letter under thousands of combining marks is one character, but doesn't fit nvarchar(4000).
         var zalgo = "a" + Repeat("́", GiftTransaction.MessageMaxStoredLength);
 
-        Assert.Equal(1, GiftMessageRules.Length(zalgo));
+        Assert.Equal(1, TextElements.Count(zalgo));
         Assert.True(GiftMessageRules.Check(zalgo, Limit).TooLong);
         Assert.False(GiftMessageRules.Check("a" + Repeat("́", GiftTransaction.MessageMaxStoredLength - 1), Limit).TooLong);
     }
@@ -151,7 +152,7 @@ public class GiftMessageRulesTests
 
         var cut = PushMessages.Excerpt(hundred + "ب");
         Assert.Equal(Repeat("ب", 99) + "…", cut);
-        Assert.Equal(100, GiftMessageRules.Length(cut));
+        Assert.Equal(100, TextElements.Count(cut));
 
         // Emoji stay whole, and a hundred of the long ones are cut shorter, to keep the push small.
         var smiles = PushMessages.Excerpt(Repeat(Smile, 150));

@@ -7,7 +7,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Sareed_novels_backend.Tests.Integration;
 
-/// <summary>GET /api/app/config: the mobile apps' minimum versions (Android, iOS) and maintenance flag, from configuration.</summary>
+/// <summary>
+/// GET /api/app/config: the mobile apps' minimum versions (Android, iOS) and maintenance flag, from configuration, and
+/// the limits the apps mirror (gift messages, posts).
+/// </summary>
 [Collection(ReaderApiCollection.Name)]
 public class AppConfigHttpTests(SardApiFactory api)
 {
@@ -57,6 +60,29 @@ public class AppConfigHttpTests(SardApiFactory api)
         configured.Services.GetRequiredService<IConfiguration>()["AppConfig:Maintenance:Enabled"] = "false";
         var later = await (await configured.CreateClient().GetAsync("/api/app/config")).OkJson();
         Assert.False(later.GetProperty("maintenance").GetProperty("enabled").GetBoolean());
+    }
+
+    [Fact]
+    public async Task The_post_limits_are_the_rules_posts_are_checked_against_whatever_the_configuration_says()
+    {
+        static void AssertPostRules(JsonElement config)
+        {
+            var posts = config.GetProperty("posts");
+            Assert.Equal(5000, posts.GetProperty("contentMaxLength").GetInt32());
+            Assert.Equal(5 * 1024 * 1024, posts.GetProperty("imageMaxBytes").GetInt64());
+            Assert.Equal(["image/jpeg", "image/png", "image/webp"], posts.GetProperty("imageTypes").EnumerateArray().Select(t => t.GetString()));
+        }
+
+        AssertPostRules(await (await api.Get("/api/app/config")).OkJson());
+
+        // They aren't settings: a section written by mistake changes nothing.
+        await using var configured = With(new()
+        {
+            ["AppConfig:Posts:ContentMaxLength"] = "10",
+            ["AppConfig:Posts:ImageMaxBytes"] = "1",
+            ["AppConfig:Posts:ImageTypes:0"] = "image/gif"
+        });
+        AssertPostRules(await (await configured.CreateClient().GetAsync("/api/app/config")).OkJson());
     }
 
     [Theory]
