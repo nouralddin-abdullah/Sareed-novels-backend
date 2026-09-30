@@ -665,7 +665,10 @@ New fields (additive):
   never been published), migration `AddChapterPublishedAt`, which fills it in for the chapters that came out before
   it: the first new-chapter notification sent for the chapter (by its id, `RelatedEntityId`), which is when it actually
   came out, or its `CreatedAt` when none was sent (nobody had the novel in their library then). A chapter unpublished
-  since keeps the time of its notification; a draft never published stays null.
+  since keeps the time of its notification; a draft never published stays null. The chapters' `(NovelId, Status)`
+  index became `IX_Chapters_Novel_Status_PublishedAt (NovelId, Status, PublishedAt)`, migration
+  `AddPublishedAtToChapterNovelStatusIndex` (#45), so `lastChapterPublishedAt` and `newChaptersCount` are index seeks
+  and the page doesn't read every chapter of the platform for each novel.
 
 ### Chapter dates: when a chapter came out (#39)
 
