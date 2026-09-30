@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.EntityFrameworkCore;
 
 namespace Sareed_novels_backend.Tests.Integration;
 
@@ -10,6 +11,8 @@ namespace Sareed_novels_backend.Tests.Integration;
 /// </summary>
 public partial class BlockHttpTests
 {
+    private const string LikeRefused = "لا يمكنك التفاعل مع هذا المستخدم.";
+
     private static async Task AssertUnavailable(HttpResponseMessage response)
     {
         var error = await response.Error(HttpStatusCode.NotFound);
@@ -114,6 +117,100 @@ public partial class BlockHttpTests
         foreach (var url in reads)
         {
             await (await api.Get(url, blockedByAuthor)).OkJson();
+        }
+    }
+
+    /// <summary>Something to like: what it is, its id, and its like and unlike URLs.</summary>
+    private sealed record Likeable(string Kind, Guid Id, string Like, string Unlike);
+
+    /// <summary>A post, a comment and a review by <paramref name="owner"/> (a review on a novel of its own).</summary>
+    private async Task<Likeable[]> ContentBy(ApiUser owner, ApiUser novelist, string chapterComments)
+    {
+        var post = await api.Post(owner);
+        var comment = await api.Comment(owner, chapterComments);
+        var novel = await api.AddNovel(novelist);
+        var review = await api.Review(owner, novel.Id);
+        return
+        [
+            new("post", post, $"/api/posts/{post}/like", $"/api/posts/{post}/unlike"),
+            new("comment", comment, $"/api/comment/{comment}/like", $"/api/comment/{comment}/unlike"),
+            new("review", review, $"/api/{novel.Id}/reviews/{review}/like", $"/api/{novel.Id}/reviews/{review}/unlike")
+        ];
+    }
+
+    /// <summary>Whether <paramref name="user"/>'s like of the item is stored, and the item's like count.</summary>
+    private async Task<(bool Liked, int Count)> LikeOf(Likeable item, ApiUser user)
+    {
+        await using var db = api.Db();
+        return item.Kind switch
+        {
+            "post" => (await db.PostLikes.AnyAsync(l => l.PostId == item.Id && l.UserId == user.Id),
+                await db.Posts.Where(p => p.Id == item.Id).Select(p => p.LikesCount).SingleAsync()),
+            "comment" => (await db.CommentLikes.AnyAsync(l => l.CommentId == item.Id && l.UserId == user.Id),
+                await db.Comments.Where(c => c.Id == item.Id).Select(c => c.LikesCount).SingleAsync()),
+            _ => (await db.ReviewLikes.AnyAsync(l => l.ReviewId == item.Id && l.UserId == user.Id),
+                await db.Reviews.Where(r => r.Id == item.Id).Select(r => r.LikeCount).SingleAsync())
+        };
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_like_is_refused_whichever_of_the_two_blocked_the_other_and_an_earlier_one_can_be_taken_back(
+        bool ownerBlocked)
+    {
+        var (owner, liker, other) = (await api.SignUp(), await api.SignUp(), await api.SignUp());
+        var (chapter, _) = await api.AddChapter(await api.AddNovel(other), "<p>فقرة</p>");
+        var chapterComments = $"/api/comment/chapter/{chapter.Id}";
+        var likedBefore = await ContentBy(owner, other, chapterComments);
+        var notLiked = await ContentBy(owner, other, chapterComments);
+        foreach (var item in likedBefore)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Post, item.Like, liker)).StatusCode);
+        }
+        await api.WaitForNotificationsFrom(owner, liker, count: likedBefore.Length);
+
+        await (ownerBlocked ? api.Block(owner, liker) : api.Block(liker, owner));
+
+        foreach (var item in notLiked)
+        {
+            var refused = await (await api.Send(HttpMethod.Post, item.Like, liker)).Error(HttpStatusCode.Forbidden);
+            Assert.Equal("Blocked", refused.GetProperty("code").GetString());
+            Assert.Equal(LikeRefused, refused.GetProperty("message").GetString());
+            // Nothing was written: no like, no count.
+            Assert.Equal((false, 0), await LikeOf(item, liker));
+        }
+
+        // A like from before the block can still be taken back, and again (204).
+        foreach (var item in likedBefore)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Delete, item.Unlike, liker)).StatusCode);
+            Assert.Equal((false, 0), await LikeOf(item, liker));
+            Assert.Equal(HttpStatusCode.NoContent, (await api.Send(HttpMethod.Delete, item.Unlike, liker)).StatusCode);
+        }
+
+        // Anyone else still likes them, and is notified of (background work that is done once these show)...
+        foreach (var item in notLiked)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Post, item.Like, other)).StatusCode);
+        }
+        await api.WaitForNotificationsFrom(owner, other, count: notLiked.Length);
+        // ...while the refused likes notified nobody.
+        await Task.Delay(500);
+        var refusedIds = notLiked.Select(i => (Guid?)i.Id).ToList();
+        Assert.DoesNotContain(await api.NotificationsFrom(owner, liker), n => refusedIds.Contains(n.RelatedEntityId));
+
+        // Liking one's own content is as before: a post can be, a comment or review can't.
+        Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Post, notLiked[0].Like, owner)).StatusCode);
+        var own = await (await api.Send(HttpMethod.Post, notLiked[1].Like, owner)).Error(HttpStatusCode.BadRequest);
+        Assert.Equal("CannotLikeOwnContent", own.GetProperty("code").GetString());
+
+        // After an unblock, liking works again.
+        await (ownerBlocked ? api.Unblock(owner, liker) : api.Unblock(liker, owner));
+        foreach (var item in notLiked)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Post, item.Like, liker)).StatusCode);
+            Assert.True((await LikeOf(item, liker)).Liked);
         }
     }
 }

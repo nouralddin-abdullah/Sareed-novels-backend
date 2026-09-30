@@ -211,8 +211,11 @@ public partial class BlockHttpTests(SardApiFactory api)
         foreach (var actor in new[] { them, control })
         {
             await api.Comment(actor, chapterUrl, "تعليق على فصلي");
-            Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Post, $"/api/comment/{myComment}/like", actor)).StatusCode);
-            Assert.Equal(HttpStatusCode.OK, (await api.Send(HttpMethod.Post, $"/api/posts/{myPost}/like", actor)).StatusCode);
+            // Their likes are refused outright since #52 (403 Blocked), so there is nothing to notify.
+            Assert.Equal(actor == them ? HttpStatusCode.Forbidden : HttpStatusCode.OK,
+                (await api.Send(HttpMethod.Post, $"/api/comment/{myComment}/like", actor)).StatusCode);
+            Assert.Equal(actor == them ? HttpStatusCode.Forbidden : HttpStatusCode.OK,
+                (await api.Send(HttpMethod.Post, $"/api/posts/{myPost}/like", actor)).StatusCode);
             // My lists don't exist for them at all (#25), so they can't follow one.
             Assert.Equal(actor == them ? HttpStatusCode.NotFound : HttpStatusCode.OK,
                 (await api.Send(HttpMethod.Post, $"/api/readinglist/{myList}/follow", actor)).StatusCode);

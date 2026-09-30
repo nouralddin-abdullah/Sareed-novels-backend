@@ -13,6 +13,7 @@ public class LikePostCommandHandler(
     ILogger<LikePostCommandHandler> logger,
     IPostsRepository postsRepository,
     IPostLikesRepository postLikesRepository,
+    IUserBlocksRepository blocksRepository,
     IUserContext userContext,
     IServiceProvider serviceProvider) : IRequestHandler<LikePostCommand, OperationResult>
 {
@@ -30,6 +31,10 @@ public class LikePostCommandHandler(
                 Message = "هذا المنشور لم يعد موجودًا"
             };
         }
+
+        // Nothing is liked between two members who blocked each other, whichever did (403 Blocked, Blocks); unliking
+        // stays open, so a like from before the block can be taken back.
+        await Blocks.EnsureCanLikeAsync(blocksRepository, currentUser.Id, post.UserId, cancellationToken);
 
         // Inserts the like and bumps LikesCount in one transaction; a concurrent duplicate is a no-op here.
         if (!await postLikesRepository.LikePost(currentUser.Id, request.PostId))

@@ -14,6 +14,7 @@ internal class CreateLikeReviewCommandHandler(
     IUserContext userContext, 
     IReviewLikesRepository reviewLikesRepository, 
     IReviewsRepository reviewsRepository,
+    IUserBlocksRepository blocksRepository,
     IServiceProvider serviceProvider) : IRequestHandler<CreateLikeReviewCommand, OperationResult>
 {
     public async Task<OperationResult> Handle(CreateLikeReviewCommand request, CancellationToken cancellationToken)
@@ -30,6 +31,10 @@ internal class CreateLikeReviewCommandHandler(
                 Message = "لا يمكنك الإعجاب بمراجعتك"
             };
         }
+        // Nothing is liked between two members who blocked each other, whichever did (403 Blocked, Blocks); unliking
+        // stays open, so a like from before the block can be taken back.
+        await Blocks.EnsureCanLikeAsync(blocksRepository, currentUser.Id, review.ReviewerId, cancellationToken);
+
         // Inserts the like and bumps LikeCount in one transaction; a concurrent duplicate is a no-op here.
         if (!await reviewLikesRepository.LikeReview(currentUser.Id, request.ReviewId))
         {
