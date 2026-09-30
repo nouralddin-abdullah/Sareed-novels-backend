@@ -12,6 +12,12 @@ public class ChaptersDTO
     public int TotalCommentsCount { get; set; }
     public int ViewsCount { get; set; }
     public DateTime CreatedAt { get; set; } = default!;
+    /// <summary>
+    /// When the chapter came out (#39), UTC and sent with "Z": the first time it was published, kept if it is
+    /// unpublished and published again. Null while it has never been published (a draft). <see cref="CreatedAt"/> is
+    /// when it was written, which for a draft published later is earlier.
+    /// </summary>
+    public DateTime? PublishedAt { get; set; }
     
     // Privilege System
     public bool IsLocked { get; set; } = false; // Is this chapter locked by privilege?
@@ -26,6 +32,12 @@ public class ChapterSingleAuthorDTO
     public string Status { get; set; } = default!;
     public int ChapterIndex { get; set; }
     public DateTime CreatedAt { get; set; }
+    /// <summary>
+    /// When the chapter came out (#39), UTC and sent with "Z": the first time it was published, kept if it is
+    /// unpublished and published again. Null while it has never been published (a draft). <see cref="CreatedAt"/> is
+    /// when it was written, which for a draft published later is earlier.
+    /// </summary>
+    public DateTime? PublishedAt { get; set; }
     public List<ChapterParagraphDTO> Paragraphs { get; set; } = new();
 }
 
@@ -37,6 +49,13 @@ public class ChapterSingleReaderDTO
     public AuthorDTO Author { get; set; } = default!;
     public int CommentsCount { get; set; }
     public int TotalCommentsCount { get; set; }
+
+    /// <summary>
+    /// When the chapter came out (#39), UTC and sent with "Z": the first time it was published, kept if it is
+    /// unpublished and published again. Null while it has never been published (a draft, which only its author can
+    /// open).
+    /// </summary>
+    public DateTime? PublishedAt { get; set; }
     public string? NextChapterSlug { get; set; }
     public List<ChapterParagraphDTO> Paragraphs { get; set; } = new();
     
