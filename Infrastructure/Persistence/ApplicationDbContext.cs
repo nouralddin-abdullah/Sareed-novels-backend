@@ -416,8 +416,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(c => new { c.NovelId, c.Status, c.ChapterIndex })
                   .HasDatabaseName("IX_Chapters_Novel_Status_Index");
 
-            entity.HasIndex(c => new { c.NovelId, c.Status })
-                  .HasDatabaseName("IX_Chapters_Novel_Status");
+            // With PublishedAt (#45): the library's newest chapter and new chapters count of each novel,
+            // MAX(PublishedAt) of its published chapters and COUNT of those after the reader's last read, are seeks
+            // here instead of a scan of every chapter for each item of the page.
+            entity.HasIndex(c => new { c.NovelId, c.Status, c.PublishedAt })
+                  .HasDatabaseName("IX_Chapters_Novel_Status_PublishedAt");
 
             entity.HasIndex(c => c.CreatedAt)
                   .HasDatabaseName("IX_Chapters_CreatedAt");
