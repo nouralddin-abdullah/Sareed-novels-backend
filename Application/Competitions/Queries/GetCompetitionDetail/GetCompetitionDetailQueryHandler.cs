@@ -9,7 +9,8 @@ namespace Application.Competitions.Queries.GetCompetitionDetail;
 public class GetCompetitionDetailQueryHandler(
     ICompetitionRepository competitionRepository,
     ICompetitionParticipantRepository participantRepository,
-    IMapper mapper) : IRequestHandler<GetCompetitionDetailQuery, CompetitionDetailDto>
+    IMapper mapper,
+    TimeProvider time) : IRequestHandler<GetCompetitionDetailQuery, CompetitionDetailDto>
 {
     public async Task<CompetitionDetailDto> Handle(GetCompetitionDetailQuery request, CancellationToken cancellationToken)
     {
@@ -30,7 +31,7 @@ public class GetCompetitionDetailQueryHandler(
             competition = await competitionRepository.GetByIdWithParticipantsAsync(competition.Id);
         }
 
-        var dto = mapper.Map<CompetitionDetailDto>(competition);
+        var dto = mapper.MapAt<CompetitionDetailDto>(competition!, time.GetUtcNow().UtcDateTime);
         dto.ParticipantCount = await participantRepository.GetParticipantCountAsync(competition!.Id);
 
         return dto;

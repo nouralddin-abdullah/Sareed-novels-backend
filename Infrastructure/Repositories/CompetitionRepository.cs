@@ -1,4 +1,5 @@
-﻿using Domain.Entities;
+﻿using Domain.Competitions;
+using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -53,18 +54,19 @@ public class CompetitionRepository(ApplicationDbContext dbContext) : ICompetitio
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<Competition>> GetByStatusAsync(string status)
+    public async Task<IEnumerable<Competition>> GetByStatusAsync(string status, DateTime utcNow)
     {
         return await dbContext.Competitions
-            .Where(c => c.Status == status)
+            .Where(CompetitionSchedule.StatusIs(status, utcNow))
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<Competition>> GetActiveCompetitionsAsync()
+    public async Task<IEnumerable<Competition>> GetActiveCompetitionsAsync(DateTime utcNow)
     {
         return await dbContext.Competitions
-            .Where(c => c.IsActive && c.Status != CompetitionStatus.Completed)
+            .Where(c => c.IsActive)
+            .Where(CompetitionSchedule.StatusIsNot(CompetitionStatus.Completed, utcNow))
             .OrderByDescending(c => c.ParticipationStartDate)
             .ToListAsync();
     }

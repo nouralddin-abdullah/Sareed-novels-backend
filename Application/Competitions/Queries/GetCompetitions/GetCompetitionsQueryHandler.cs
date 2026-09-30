@@ -8,21 +8,23 @@ namespace Application.Competitions.Queries.GetCompetitions;
 public class GetCompetitionsQueryHandler(
     ICompetitionRepository competitionRepository,
     ICompetitionParticipantRepository participantRepository,
-    IMapper mapper) : IRequestHandler<GetCompetitionsQuery, List<CompetitionDto>>
+    IMapper mapper,
+    TimeProvider time) : IRequestHandler<GetCompetitionsQuery, List<CompetitionDto>>
 {
     public async Task<List<CompetitionDto>> Handle(GetCompetitionsQuery request, CancellationToken cancellationToken)
     {
-        var competitions = string.IsNullOrEmpty(request.Status)
+        // One time for the whole answer, so the filter and the statuses it returns agree.
+        var now = time.GetUtcNow().UtcDateTime;
+        var competitions = string.IsNullOrWhiteSpace(request.Status)
             ? await competitionRepository.GetAllAsync()
-            : await competitionRepository.GetByStatusAsync(request.Status);
+            : await competitionRepository.GetByStatusAsync(CompetitionRules.ParseStatus(request.Status), now);
 
         var result = new List<CompetitionDto>();
 
         foreach (var competition in competitions)
         {
-            var dto = mapper.Map<CompetitionDto>(competition);
+            var dto = mapper.MapAt<CompetitionDto>(competition, now);
             dto.ParticipantCount = await participantRepository.GetParticipantCountAsync(competition.Id);
-            dto.CanJoin = competition.CanJoin();
             result.Add(dto);
         }
 
