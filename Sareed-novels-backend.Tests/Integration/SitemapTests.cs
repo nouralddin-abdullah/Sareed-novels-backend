@@ -43,6 +43,38 @@ public class SitemapTests(SqlServerDatabase database) : IClassFixture<SqlServerD
     }
 
     [Fact]
+    public async Task A_chapters_lastmod_is_when_it_came_out_and_the_novels_is_its_newest()
+    {
+        // #39: a chapter's page came out when the chapter was published, not when it was written.
+        var written = new DateTime(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc);
+        var author = Seed.User();
+        var novel = Seed.Novel(author, "sitemap dates", createdAt: written.AddDays(-30));
+        var chapters = Seed.Chapters(novel, 4, written);
+        var (createdPublished, publishedLater, draft, undated) = (chapters[0], chapters[1], chapters[2], chapters[3]);
+        publishedLater.PublishedAt = written.AddDays(5); // a draft written on day 0, published on day 5
+        draft.Status = "Draft"; // written after the others, never published
+        draft.PublishedAt = null;
+        draft.CreatedAt = written.AddDays(7);
+        undated.PublishedAt = null; // only code from before PublishedAt could publish one without it
+        await using (var db = database.CreateContext())
+        {
+            db.Users.Add(author);
+            db.Novels.Add(novel);
+            db.Chapters.AddRange(chapters);
+            await db.SaveChangesAsync();
+        }
+
+        await using var read = database.CreateContext();
+        var entry = Assert.Single(await new NovelsRepository(read).GetSitemapEntriesAsync(), e => e.Id == novel.Id);
+
+        Assert.Equal(
+            [(createdPublished.Id, (DateTime?)createdPublished.CreatedAt), (publishedLater.Id, written.AddDays(5)), (undated.Id, null)],
+            entry.Chapters.Select(c => (c.Id, c.LastModified)));
+        // The newest chapter out, on day 5; the novel's LastUpdatedAt is older, and the draft doesn't count.
+        Assert.Equal(written.AddDays(5), entry.LastModified);
+    }
+
+    [Fact]
     public async Task Carries_the_author_the_genres_and_only_the_indexable_wiki_entries()
     {
         var created = DateTime.UtcNow.AddDays(-5);
