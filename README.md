@@ -584,7 +584,8 @@ rules answers its own code (`InvalidUserName`, `DuplicateUserName`...), not `Ope
 `field`: `ProfilePhoto` or `ProfileBanner`. Since #44 a success also answers with the saved profile (below).
 
 **My works.** `totalAverageScore` in `GET /api/myworks`, `/api/myworks/{id}` and `/api/myworks/user/{userId}` has its
-fraction (`3.75`), like the other novel lists; it was a whole number.
+fraction (`3.75`), like the other novel lists; it was a whole number. Since #46
+`/api/myworks/user/{userId}?withChapters=true` lists only novels with a published chapter (below).
 
 **Search.** `GET`/`POST /api/search/novels` with a genre (name or slug) that doesn't exist answers 404 `GenreNotFound`,
 as `GET /api/genre/{slug}/novels` does, instead of an empty list. Blank genre values are ignored.
@@ -716,3 +717,34 @@ answers a success with the profile as it is after the save, so the app doesn't h
   problem, with `errors`) for a field the validators refuse; 401 signed out.
 - An API from before #44 answers `{ success, message }` only; the app then reads `my-profile` as before. The web reads
   only the status and reloads the profile itself, so nothing changes for it.
+
+### An author's works for «أعمال أخرى للكاتب»: `withChapters=true` (#46)
+
+`GET /api/myworks/user/{userId}` (signed in or not; `pageNumber` from 1, `pageSize` 1 to 50, 10 by default) lists a
+member's public novels, latest update first. Since #46 it takes `withChapters`. The answer doesn't depend on who asks:
+the author gets what anyone gets.
+
+| Request | Listed, and counted in `totalItemsCount`, `totalPages` and `itemsTo` |
+|---|---|
+| `withChapters=true` | only the novels a reader can open: not a draft, with at least one published chapter |
+| without it, or `withChapters=false` | every public novel, with or without a published chapter, as before #46 |
+
+- **The app** sends `withChapters=true` for the «أعمال أخرى للكاتب» shelf on the novel page: ask for as many novels as
+  the shelf shows and use `totalItemsCount` for «more»; there is nothing left to filter out. An API from before #46
+  ignores the parameter and answers every public novel.
+- **The web doesn't send it.** Other members' profiles (and their `noindex` rule) and the SEO worker's profile pages
+  list every public novel, as before, like search and the genre pages, which list novels before their first chapter
+  on purpose. A member's own profile reads `GET /api/myworks`.
+- **A published chapter** is one whose status is `Published` now. With the flag, a novel is left out while it has no
+  chapter, only drafts (never published, or published and made a draft again), or none left after its published
+  chapters were deleted, and it is listed as soon as one of its chapters is published. This is the rule of new
+  arrivals, the rankings, recommendations and the sitemap, and of the reader, which opens only the published chapters
+  of a novel that isn't a draft.
+- **Drafts and deleted novels** are never listed, with or without the flag. The author's drafts are in
+  `GET /api/myworks`.
+- **Pages** never repeat or skip a novel: novels updated at the same moment go by id.
+- **A value other than `true` or `false`** (`withChapters=abc`, or `1`) is refused like any query value of the wrong
+  type: 400 `ValidationFailed`, the validation problem, with `errors.withChapters` «القيمة المرسلة غير صالحة» and
+  `message` «البيانات المرسلة غير صالحة.». It is never a 500.
+- **No token is needed.** A token that doesn't validate (expired, signed out everywhere, or the web's `Bearer undefined`
+  when signed out) is answered as signed out: 200, never 401.
