@@ -72,7 +72,10 @@ namespace Sareed_novels_backend.Controllers
 
         /// <summary>
         /// Blocks a user (idempotent): their comments, replies, reviews and posts leave the caller's lists, follows
-        /// between the two are removed, and they can't follow, answer, notify or open the caller.
+        /// between the two are removed, and they can't open the caller's profile, lists or posts. Neither of the two
+        /// can then follow the other, like the other's content, comment on the other's posts or reply to the other's
+        /// comments, and no notification passes between them but for a gift or a subscription from the caller (README,
+        /// #52).
         /// </summary>
         [HttpPost("block")]
         public async Task<IActionResult> BlockUser(BlockUserCommand command) => Ok(await mediator.Send(command));

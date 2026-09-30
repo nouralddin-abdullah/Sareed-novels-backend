@@ -1,4 +1,7 @@
 using System.Net;
+using System.Net.Http.Json;
+using Domain.Constants;
+using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Sareed_novels_backend.Tests.Integration;
@@ -269,5 +272,46 @@ public partial class BlockHttpTests
         await api.Unblock(me, them);
         await api.Comment(me, theirPostComments);
         await api.Comment(me, chapterComments, "رد", parentId: theirOnChapter);
+    }
+
+    // The rose of production's catalog (seeded by the migrations), 100 points.
+    private static readonly Guid Rose = Guid.Parse("ec16dfde-71b8-4e23-8ff5-d1846cdf2036");
+
+    [Fact]
+    public async Task What_the_blocker_may_still_do_to_the_blocked_member_notifies_them_no_more_except_a_payment()
+    {
+        var (me, them, other) = (await api.SignUp(), await api.SignUp(), await api.SignUp());
+        var theirNovel = await api.AddNovel(them);
+        var (chapter, _) = await api.AddChapter(theirNovel, "<p>فقرة</p>");
+        var theirList = await api.ReadingList(them);
+        await using (var db = api.Db())
+        {
+            db.UserWallets.Add(new UserWallet { Id = Guid.NewGuid(), UserId = me.Id, CurrentBalance = 1000 });
+            await db.SaveChangesAsync();
+        }
+
+        await api.Block(me, them);
+
+        // Still open to the blocker, as to anyone: a novel's discussion (a chapter comment, a review) and following a
+        // list.
+        foreach (var actor in new[] { me, other })
+        {
+            await api.Comment(actor, $"/api/comment/chapter/{chapter.Id}");
+            await api.Review(actor, theirNovel.Id);
+            var follow = await api.Send(HttpMethod.Post, $"/api/readinglist/{theirList}/follow", actor);
+            Assert.Equal(HttpStatusCode.OK, follow.StatusCode);
+        }
+        // A gift is a payment: its author learns of it, even from someone who blocked them.
+        var gift = await api.Send(HttpMethod.Post, "/api/gift/send", me,
+            JsonContent.Create(new { giftId = Rose, novelId = theirNovel.Id, count = 1 }));
+        Assert.True((await gift.OkJson()).GetProperty("success").GetBoolean());
+
+        var fromOther = await api.WaitForNotificationsFrom(them, other, count: 3);
+        Assert.Equal(
+            [NotificationType.CommentOnChapter, NotificationType.ReadingListFollowed, NotificationType.ReviewOnNovel],
+            fromOther.Select(n => n.Type).Order());
+        await api.WaitForNotificationsFrom(them, me);
+        await Task.Delay(500);
+        Assert.Equal([NotificationType.GiftReceived], (await api.NotificationsFrom(them, me)).Select(n => n.Type));
     }
 }
