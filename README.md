@@ -933,3 +933,83 @@ to every reader who keeps the novel in their library; its actor is the novel) an
 notifications (one, deduplicated, and the batched fan-out, still one block query per batch); `NotificationBlockingTests`
 fails when a type is added without deciding its rule. Blocking still deletes the notifications the blocked member had
 caused the blocker; those going the other way stay.
+
+### A member's reviews and comments, and the counts on their profile (#54)
+
+Two public lists (signed in or not) behind `reviewsCount` and `commentsCount` on the profile. Errors are
+`{ "code", "message" }` with an Arabic message.
+
+| Request | Lists |
+|---|---|
+| `GET /api/User/{userName}/reviews` | the member's reviews |
+| `GET /api/User/{userName}/comments` | the member's comments on chapters and paragraphs, replies included |
+
+- **Pages** as the other lists: `pageNumber` from 1, `pageSize` 1 to 50 (10 by default); the answer is
+  `{ items, totalPages, totalItemsCount, itemsFrom, itemsTo }`. Newest first; items written at the same moment go by
+  id, so pages never repeat or skip one.
+- **The member** is found as `GET /api/User/{userName}` finds them: the name they have now, in any letter case, or a
+  name they used before (an old link after a rename). A deleted account, by its old names or its `deleted-...` name,
+  and a name nobody has, are 404 `UserNotFound` «المستخدم غير موجود».
+- **Blocks.** When the signed-in viewer and the member blocked each other, either way, both lists are an empty page
+  (`totalItemsCount` 0), as the member's posts (`GET /api/posts/user/{userId}`) are; never a 403. Everyone else, signed
+  out included, and the member themselves, see the lists in full.
+- **Likes.** `isLikedByCurrentUser` is the signed-in viewer's like, false when signed out. Everything else in an item
+  is the same for everyone.
+
+**What is listed.** An item is listed only where a reader could open the place it was written:
+
+| List | Listed | Left out |
+|---|---|---|
+| reviews | reviews on a novel readers can open: not a draft, with at least one published chapter (the rule of #46) | reviews on a novel that is a draft, has no published chapter (none, only drafts, or its chapters unpublished or deleted), or is deleted: by its author, removed by a moderator, or hidden when its author deleted their account |
+| comments | top-level comments and replies on a published chapter, or on a paragraph of one, of a novel readers can open | comments on posts and the replies under them; deleted comments; replies whose parent comment was deleted (its thread is gone); comments on a chapter that isn't published (never, or not any more); comments on a novel that is a draft or deleted, as for reviews |
+
+A review or comment a moderator removes (a report resolved with `RemoveContent`) is deleted outright, with a comment's
+replies, and so is every comment on a chapter or paragraph that is deleted. A suspended member's content is not hidden
+anywhere, so it stays listed. A chapter locked for early access is still published: the comments on it are listed.
+
+**Review items** (`reviews`):
+
+| Field | |
+|---|---|
+| `id` | the review |
+| `writingQualityScore`, `updatingStabilityScore`, `characterDevelopmentScore`, `worldBuildingScore` | its four scores, 1 to 5 |
+| `totalAverageScore` | its rating: the average of the four |
+| `content` | its text, or null |
+| `isSpoiler` | the text gives the story away: hide it until the reader asks |
+| `likeCount`, `isLikedByCurrentUser` | as in the novel's review list |
+| `createdAt`, `updatedAt` | UTC with "Z"; `updatedAt` is null when it was never edited (#34) |
+| `novel` | `{ id, slug, title, coverImageUrl }` |
+
+**Comment items** (`comments`):
+
+| Field | |
+|---|---|
+| `id`, `content`, `attachedImageUrl` | the comment, its text and its picture (or null) |
+| `likesCount`, `isLikedByCurrentUser` | as in the comment lists |
+| `createdAt`, `updatedAt` | UTC with "Z"; `updatedAt` is null (comments can't be edited yet) |
+| `isReply`, `parentCommentId` | whether it answers another comment, and which: the thread it is in |
+| `novel` | `{ id, slug, title, coverImageUrl }` |
+| `chapter` | `{ id, title, number }`: the chapter it was written on, for a paragraph comment the paragraph's; `number` is the chapter's number as readers see it, its position among the novel's published chapters from 1 (as the library's `lastReadChapterNumber`), which changes when chapters before it are published, unpublished, deleted or reordered |
+| `paragraphId` | the paragraph it was written on, or null for a comment on the chapter itself |
+
+The website opens a chapter at `/novel/{novel.slug}/chapter/{chapter.id}`.
+
+**The counts.** `reviewsCount` and `commentsCount` on `GET /api/User/{userName}` and `GET /api/User/my-profile` (and so
+in update-me's `profile`) are the totals of these two lists as anyone signed out sees them, counted by the same
+queries on every request. They were the stored counters `User.ReviewsCount` and `User.CommentsCount`, which are still
+kept up to date but are no longer shown. So:
+
+- `commentsCount` no longer counts comments on posts, nor replies under them; it counts only what the comment list
+  shows. It also leaves out what the stored counter still counted: comments on unpublished chapters, on draft or
+  deleted novels, and replies in deleted threads. `reviewsCount` leaves out reviews on novels readers can't open.
+- A viewer who blocked the member still opens their profile (`isBlockedByMe`) and sees the counts anyone sees, while
+  both lists are empty for them.
+
+**Performance.** Each profile counts both lists: the reviews on the (ReviewerId, NovelId) index, and the comments on
+`IX_Comments_UserId_CreatedAt`, (UserId, CreatedAt descending) with every column the comment list filters on, which
+the migration `AddCreatedAtToCommentsUserIndex` puts in place of `IX_Comments_UserId`. Both read the member's own
+rows, and a page of comments reads them in order.
+
+**User names.** `followers-list` and `following-list` are reserved like `blocked` and `my-profile` (sign-up and
+update-me refuse them, in any letter case): `GET /api/User/followers-list/reviews` is the followers route, so a member
+with that name could never have their lists opened.
