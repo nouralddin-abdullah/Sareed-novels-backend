@@ -581,7 +581,7 @@ and `message` (the same as `result`'s) and `errors`: every problem as `[{ "code"
 **update-me.** `PATCH /api/User/update-me`: a user name that differs from one's own only in letter case is accepted (it
 was refused as `UserNameTaken`); another member's name in any case is still `UserNameTaken`. A refusal by the identity
 rules answers its own code (`InvalidUserName`, `DuplicateUserName`...), not `OperationFailed`. `UploadFailed` adds
-`field`: `ProfilePhoto` or `ProfileBanner`.
+`field`: `ProfilePhoto` or `ProfileBanner`. Since #44 a success also answers with the saved profile (below).
 
 **My works.** `totalAverageScore` in `GET /api/myworks`, `/api/myworks/{id}` and `/api/myworks/user/{userId}` has its
 fraction (`3.75`), like the other novel lists; it was a whole number.
@@ -695,3 +695,24 @@ too), falling back to `createdAt` against an API without it.
   that could publish one without it after the migration ran (during a deploy or after a rollback): the rankings then
   place the novel by its other chapters (or leave it out while none has a date) and log an error naming it, and the
   sitemap gives that chapter no `lastModified`.
+
+### Editing the profile: update-me answers with the saved profile (#44)
+
+`PATCH /api/User/update-me` (signed in; the text fields in the query string or the form, the pictures in the form)
+answers a success with the profile as it is after the save, so the app doesn't have to read `my-profile` again:
+
+```json
+{ "success": true, "message": "تم تحديث الملف الشخصي", "profile": { "id": "...", "userName": "...", ... } }
+```
+
+- **`profile`** is exactly what `GET /api/User/my-profile` returns, the same fields with the same values (`userName`,
+  `displayName`, `userBio`, `profilePhoto`, `profileBanner`, `facebookUrl`, `twitterUrl`, `discordUrl`, the counts,
+  `hasPassword`...): the handler reads it after the save through the query behind `my-profile`, so the two can't
+  differ. A new user name (a change of letter case too), a new photo or banner URL, and a bio or link cleared with
+  `""` (then `null`) are all in it.
+- **Refusals are unchanged** and have no `profile`: 400 `{ "success": false, "code", "message" }` with `UserNameTaken`,
+  `ReservedUserName` (a `deleted-` name), the identity rules' code (`InvalidUserName`, `DuplicateUserName`...) or
+  `UploadFailed` (which adds `field`: `ProfilePhoto` or `ProfileBanner`); 400 `ValidationFailed` (the validation
+  problem, with `errors`) for a field the validators refuse; 401 signed out.
+- An API from before #44 answers `{ success, message }` only; the app then reads `my-profile` as before. The web reads
+  only the status and reloads the profile itself, so nothing changes for it.
