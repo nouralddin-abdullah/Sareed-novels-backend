@@ -51,11 +51,11 @@ public class CreateCommentCommandHandler(
             var post = await postsRepository.GetPostById(request.PostId.Value) ?? throw new NotFoundException("هذا المنشور لم يعد موجودًا", "PostNotFound");
             postId = post.Id;
 
-            // A post's author who blocked someone gets no comments (or replies) from them on it.
-            if (post.UserId != currentUser.Id && await blocksRepository.IsBlockedAsync(post.UserId, currentUser.Id, cancellationToken))
-            {
-                throw new ForbidException("لا يمكنك التعليق على منشورات هذا المستخدم", "Blocked");
-            }
+            // No comments (or replies) on a post between its author and a member either of them blocked (#52, Blocks).
+            await Blocks.EnsureNotBlockedAsync(blocksRepository, currentUser.Id, post.UserId,
+                theyBlockedYou: "لا يمكنك التعليق على منشورات هذا المستخدم",
+                youBlockedThem: "ألغِ حظر هذا المستخدم أولاً لتتمكن من التعليق على منشوراته",
+                cancellationToken);
         }
         else
         {
@@ -71,11 +71,12 @@ public class CreateCommentCommandHandler(
         {
             var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId.Value) ?? throw new NotFoundException("التعليق الذي تردّ عليه لم يعد موجودًا", "ParentCommentNotFound");
 
-            // Nor replies to their comments.
-            if (parentComment.UserId != currentUser.Id && await blocksRepository.IsBlockedAsync(parentComment.UserId, currentUser.Id, cancellationToken))
-            {
-                throw new ForbidException("لا يمكنك الرد على تعليقات هذا المستخدم", "Blocked");
-            }
+            // Nor replies to a comment, wherever it is, between its author and a member either of them blocked.
+            // Top-level comments on a chapter or a paragraph stay open to all: they are the novel's public discussion.
+            await Blocks.EnsureNotBlockedAsync(blocksRepository, currentUser.Id, parentComment.UserId,
+                theyBlockedYou: "لا يمكنك الرد على تعليقات هذا المستخدم",
+                youBlockedThem: "ألغِ حظر هذا المستخدم أولاً لتتمكن من الرد على تعليقاته",
+                cancellationToken);
 
             // Threads are one level deep (the web app only shows replies under top-level comments), and a reply lives
             // where its parent does.

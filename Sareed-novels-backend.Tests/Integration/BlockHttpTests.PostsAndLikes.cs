@@ -213,4 +213,61 @@ public partial class BlockHttpTests
             Assert.True((await LikeOf(item, liker)).Liked);
         }
     }
+
+    [Fact]
+    public async Task The_blocker_can_neither_comment_on_the_blocked_members_posts_nor_reply_to_their_comments()
+    {
+        var (me, them, other) = (await api.SignUp(), await api.SignUp(), await api.SignUp());
+        var (chapter, paragraphs) = await api.AddChapter(await api.AddNovel(other), "<p>فقرة</p>");
+        var chapterComments = $"/api/comment/chapter/{chapter.Id}";
+        var paragraphComments = $"/api/comment/paragraph/{paragraphs[0].Id}";
+        var theirPostComments = $"/api/comment/post/{await api.Post(them)}";
+        var otherPostComments = $"/api/comment/post/{await api.Post(other)}";
+        var otherOnTheirPost = await api.Comment(other, theirPostComments);
+        var theirOnChapter = await api.Comment(them, chapterComments);
+        var theirOnParagraph = await api.Comment(them, paragraphComments);
+        var theirOnOtherPost = await api.Comment(them, otherPostComments);
+        var otherOnChapter = await api.Comment(other, chapterComments);
+
+        await api.Block(me, them);
+
+        const string commentOnPost = "ألغِ حظر هذا المستخدم أولاً لتتمكن من التعليق على منشوراته";
+        const string replyToComment = "ألغِ حظر هذا المستخدم أولاً لتتمكن من الرد على تعليقاته";
+        var refused = new (string Url, Guid? Parent, string Message)[]
+        {
+            (theirPostComments, null, commentOnPost),
+            (theirPostComments, otherOnTheirPost, commentOnPost), // a reply under their post, to someone else
+            (chapterComments, theirOnChapter, replyToComment),
+            (paragraphComments, theirOnParagraph, replyToComment),
+            (otherPostComments, theirOnOtherPost, replyToComment) // their comment on someone else's post
+        };
+        foreach (var (url, parent, message) in refused)
+        {
+            var fields = parent is { } id
+                ? new[] { ("Content", "تعليق"), ("ParentCommentId", id.ToString()) }
+                : [("Content", "تعليق")];
+            var response = await api.Send(HttpMethod.Post, url, me, ReaderApi.Form(fields));
+            var error = await response.Error(HttpStatusCode.Forbidden);
+            Assert.Equal("Blocked", error.GetProperty("code").GetString());
+            Assert.Equal(message, error.GetProperty("message").GetString());
+        }
+        await using (var db = api.Db())
+        {
+            Assert.False(await db.Comments.IgnoreQueryFilters().AnyAsync(c => c.UserId == me.Id));
+        }
+
+        // A novel's discussion stays open to both: top-level comments on a chapter or a paragraph, and replies to
+        // others.
+        foreach (var url in new[] { chapterComments, paragraphComments })
+        {
+            await api.Comment(me, url);
+            await api.Comment(them, url);
+        }
+        await api.Comment(me, chapterComments, "رد", parentId: otherOnChapter);
+
+        // After unblocking, both work again.
+        await api.Unblock(me, them);
+        await api.Comment(me, theirPostComments);
+        await api.Comment(me, chapterComments, "رد", parentId: theirOnChapter);
+    }
 }
