@@ -45,7 +45,8 @@ public class GetNovelProgressQueryHandler(
             LastReadChapterNumber = resume.ChapterNumber,
             ProgressPercentage = resume.ProgressPercentage,
             LastReadAt = entry.LastReadAt,
-            NotifyNewChapters = entry.NotifyNewChapters
+            NotifyNewChapters = entry.NotifyNewChapters,
+            NewChaptersCount = entry.NewChaptersCount
         };
     }
 }

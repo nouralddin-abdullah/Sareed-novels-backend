@@ -10,6 +10,12 @@ public sealed record ChapterOutline(Guid Id, string Title, int ChapterIndex);
 /// When the newest of the published chapters came out (UTC): the latest <see cref="Domain.Entities.Chapter.PublishedAt"/>
 /// among them, read from the chapters, not stored; null when none is published.
 /// </param>
+/// <param name="NewChaptersCount">
+/// How many of the published chapters came out after <see cref="LastReadAt"/> (#45): those whose
+/// <see cref="Domain.Entities.Chapter.PublishedAt"/> is later than it, one out at that very instant not included.
+/// Counted over the same chapters as <see cref="LastChapterPublishedAt"/>, so it is above 0 exactly when that is later
+/// than <see cref="LastReadAt"/>.
+/// </param>
 public sealed record LibraryEntry(
     Guid NovelId,
     string Title,
@@ -24,7 +30,8 @@ public sealed record LibraryEntry(
     DateTime LastReadAt,
     IReadOnlyList<ChapterOutline> PublishedChapters,
     bool NotifyNewChapters,
-    DateTime? LastChapterPublishedAt);
+    DateTime? LastChapterPublishedAt,
+    int NewChaptersCount);
 
 /// <summary>Where a reader resumes a novel: chapter <see cref="ChapterNumber"/> of the published chapters.</summary>
 public sealed record ResumePoint(Guid ChapterId, string ChapterTitle, int ChapterNumber, int PublishedChapters, decimal ProgressPercentage);

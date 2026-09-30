@@ -1,10 +1,7 @@
-using System.Collections.Concurrent;
-using System.Data.Common;
 using Domain.Entities;
 using Domain.ReadingLists;
 using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Sareed_novels_backend.Tests.Integration;
 
@@ -278,32 +275,5 @@ public class ReadingListRepositoryTests(SqlServerDatabase database) : IClassFixt
         var order = await check.ReadingListNovels.Where(r => r.ReadingListId == list.Id)
             .OrderBy(r => r.OrderIndex).Select(r => new { r.NovelId, r.OrderIndex }).ToListAsync();
         Assert.Equal([(c, 0), (a, 2), (added, 3)], order.Select(r => (r.NovelId, r.OrderIndex)));
-    }
-
-    /// <summary>The SQL of every command a context sends.</summary>
-    private sealed class CommandLog : DbCommandInterceptor
-    {
-        public ConcurrentQueue<string> Commands { get; } = new();
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
-            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
-        {
-            Commands.Enqueue(command.CommandText);
-            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
-        }
-
-        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command, CommandEventData eventData,
-            InterceptionResult<object> result, CancellationToken cancellationToken = default)
-        {
-            Commands.Enqueue(command.CommandText);
-            return base.ScalarExecutingAsync(command, eventData, result, cancellationToken);
-        }
-
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
-            InterceptionResult<int> result, CancellationToken cancellationToken = default)
-        {
-            Commands.Enqueue(command.CommandText);
-            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
-        }
     }
 }
