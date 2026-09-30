@@ -673,7 +673,8 @@ New field (additive; nothing is renamed or removed, and `createdAt` stays as it 
 
 `publishedAt` is UTC with `Z` (e.g. `"2026-09-29T21:57:47.1234567Z"`, like `lastChapterPublishedAt` in the library), and
 `null` while the chapter has never been published. It is the date to show for a chapter: the web shows it in the
-chapter list and in the reader page's published-time tags, falling back to `createdAt` against an API without it.
+novel's and the author's chapter lists and in the reader page's published-time tags (the SEO worker's chapter pages
+too), falling back to `createdAt` against an API without it.
 
 - **New-chapter notification and push**: sent once per chapter, when it comes out (created published, or a draft
   published for the first time). Unpublishing a chapter and publishing it again tells no one again, as the library's
