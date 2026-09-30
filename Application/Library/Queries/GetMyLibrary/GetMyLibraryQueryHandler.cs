@@ -54,6 +54,7 @@ public class GetMyLibraryQueryHandler(
                 LastChapterPublishedAt = entry.LastChapterPublishedAt is { } publishedAt
                     ? DateTime.SpecifyKind(publishedAt, DateTimeKind.Utc)
                     : null,
+                NewChaptersCount = entry.NewChaptersCount,
                 Author = new NovelAuthorDTO
                 {
                     UserName = entry.AuthorUserName,

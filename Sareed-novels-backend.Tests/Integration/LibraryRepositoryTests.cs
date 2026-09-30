@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Domain.Entities;
 using Domain.Library;
 using Infrastructure.Persistence;
@@ -341,5 +342,51 @@ public class LibraryRepositoryTests(SqlServerDatabase database) : IClassFixture<
         Assert.Empty(withoutChapters.PublishedChapters);
         Assert.Equal(newest, (await WithRepository(r => r.GetLibraryEntryAsync(reader.Id, novel.Id)))!.LastChapterPublishedAt);
         Assert.Null((await WithRepository(r => r.GetLibraryEntryAsync(reader.Id, emptied.Id)))!.LastChapterPublishedAt);
+    }
+
+    [Fact]
+    public async Task New_chapters_are_counted_in_the_pages_own_query_however_many_novels_it_has()
+    {
+        var (author, reader) = await SeedUsers();
+        var readerOfOne = await SeedUser();
+        var novels = new List<(Novel Novel, List<Chapter> Chapters)>();
+        for (var i = 0; i < 4; i++)
+        {
+            novels.Add(await SeedNovel(author, chapters: 3));
+        }
+        // Chapters 1-3 of each novel came out a minute apart. She read novel n when all but its n newest were out
+        // (novel 0: the instant its newest came out, so none is new; novel 3: a minute before its first).
+        for (var n = 0; n < novels.Count; n++)
+        {
+            var chapters = novels[n].Chapters;
+            await AddProgress(reader, chapters[0], 1, n < 3 ? chapters[2 - n].PublishedAt!.Value : chapters[0].PublishedAt!.Value.AddMinutes(-1));
+        }
+        await AddProgress(readerOfOne, novels[1].Chapters[0], 1, novels[1].Chapters[1].PublishedAt!.Value);
+
+        async Task<(IReadOnlyList<LibraryEntry> Entries, CommandLog Log)> Page(User user)
+        {
+            var log = new CommandLog();
+            await using var db = database.CreateContext(log);
+            var (entries, _) = await new LibraryRepository(db).GetUserLibraryAsync(user.Id, 1, 20);
+            return (entries, log);
+        }
+
+        var (four, fourLog) = await Page(reader);
+        var (one, oneLog) = await Page(readerOfOne);
+
+        Assert.Equal(novels.Select((n, i) => (n.Novel.Id, i)).Order(), four.Select(e => (e.NovelId, e.NewChaptersCount)).Order());
+        Assert.Equal(1, Assert.Single(one).NewChaptersCount);
+        Assert.All(four, e => Assert.Equal(e.LastChapterPublishedAt > e.LastReadAt, e.NewChaptersCount > 0));
+        // The total, the page and the chapters' outlines, as before newChaptersCount and whatever the page's size: the
+        // count is in the page's own query, next to when the newest chapter came out, not a query per novel.
+        Assert.Equal(3, fourLog.Commands.Count);
+        Assert.Equal(3, oneLog.Commands.Count);
+        Assert.Single(fourLog.Commands, sql => sql.Contains("MAX(") && Regex.IsMatch(sql, @"\[PublishedAt\] > \[\w+\]\.\[LastReadAt\]"));
+
+        // One novel's entry: its row and its outlines.
+        var entryLog = new CommandLog();
+        await using var entryDb = database.CreateContext(entryLog);
+        Assert.Equal(2, (await new LibraryRepository(entryDb).GetLibraryEntryAsync(reader.Id, novels[2].Novel.Id))!.NewChaptersCount);
+        Assert.Equal(2, entryLog.Commands.Count);
     }
 }

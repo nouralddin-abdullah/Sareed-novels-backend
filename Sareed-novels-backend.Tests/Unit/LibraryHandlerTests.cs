@@ -46,7 +46,7 @@ public class LibraryHandlerTests
         var published = new[] { Outline(1), Outline(2) };
         var unpublished = Outline(3);
         var entry = new LibraryEntry(Guid.NewGuid(), "t", "s", "c", 4.5m, 10, "author", "Author", null,
-            unpublished, DateTime.UtcNow, published, NotifyNewChapters: true, LastChapterPublishedAt: null);
+            unpublished, DateTime.UtcNow, published, NotifyNewChapters: true, LastChapterPublishedAt: null, NewChaptersCount: 0);
         library.GetUserLibraryAsync("reader-1", 1, 20).Returns((new[] { entry }, 1));
         var handler = new GetMyLibraryQueryHandler(NullLogger<GetMyLibraryQueryHandler>.Instance, library, userContext);
 
@@ -61,13 +61,17 @@ public class LibraryHandlerTests
     }
 
     [Fact]
-    public async Task The_library_says_whether_new_chapters_notify_and_when_the_newest_came_out_in_utc()
+    public async Task The_library_says_whether_new_chapters_notify_when_the_newest_came_out_in_utc_and_how_many_are_new()
     {
         // As SQL Server gives it back: no kind.
         var publishedAt = new DateTime(2026, 9, 29, 21, 57, 47, DateTimeKind.Unspecified);
         var muted = new LibraryEntry(Guid.NewGuid(), "t", "s", "c", 4.5m, 10, "author", "Author", null,
-            Outline(1), DateTime.UtcNow, [Outline(1)], NotifyNewChapters: false, LastChapterPublishedAt: publishedAt);
-        var nothingPublished = muted with { NovelId = Guid.NewGuid(), PublishedChapters = [], NotifyNewChapters = true, LastChapterPublishedAt = null };
+            Outline(1), publishedAt.AddDays(-1), [Outline(1)], NotifyNewChapters: false, LastChapterPublishedAt: publishedAt,
+            NewChaptersCount: 1);
+        var nothingPublished = muted with
+        {
+            NovelId = Guid.NewGuid(), PublishedChapters = [], NotifyNewChapters = true, LastChapterPublishedAt = null, NewChaptersCount = 0
+        };
         library.GetUserLibraryAsync("reader-1", 1, 20).Returns((new[] { muted, nothingPublished }, 2));
         var handler = new GetMyLibraryQueryHandler(NullLogger<GetMyLibraryQueryHandler>.Instance, library, userContext);
 
@@ -76,8 +80,10 @@ public class LibraryHandlerTests
         Assert.False(items[0].NotifyNewChapters);
         Assert.Equal(publishedAt, items[0].LastChapterPublishedAt);
         Assert.Equal(DateTimeKind.Utc, items[0].LastChapterPublishedAt!.Value.Kind); // serialized with "Z"
+        Assert.Equal(1, items[0].NewChaptersCount);
         Assert.True(items[1].NotifyNewChapters);
         Assert.Null(items[1].LastChapterPublishedAt);
+        Assert.Equal(0, items[1].NewChaptersCount);
     }
 
     private TrackReadingProgressCommandHandler TrackHandler() =>

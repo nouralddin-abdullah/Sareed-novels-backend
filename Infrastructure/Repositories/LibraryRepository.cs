@@ -114,7 +114,11 @@ public class LibraryRepository(ApplicationDbContext dbContext) : ILibraryReposit
         dbContext.UserNovelProgress.Where(p => p.UserId == userId && !p.Novel.IsDraft && !p.Novel.IsDeleted);
 
     private static IQueryable<ProgressRow> ToRows(IQueryable<UserNovelProgress> query) =>
-        query.Select(p => new ProgressRow(
+        from p in query
+        // Joined, not stored (#33): the novel's published chapters as they are now, each dated by when it first came
+        // out, so a draft published later counts from when it was published.
+        let published = p.Novel.Chapters.Where(c => c.Status == PublishedStatus)
+        select new ProgressRow(
             p.NovelId,
             p.Novel.Title,
             p.Novel.Slug,
@@ -129,9 +133,11 @@ public class LibraryRepository(ApplicationDbContext dbContext) : ILibraryReposit
             p.LastReadChapter.ChapterIndex,
             p.LastReadAt,
             p.NotifyNewChapters,
-            // Joined, not stored (#33): when the newest of the published chapters first came out, a draft published
-            // later counting from when it was published.
-            p.Novel.Chapters.Where(c => c.Status == PublishedStatus).Max(c => c.PublishedAt)));
+            // When the newest of them came out.
+            published.Max(c => c.PublishedAt),
+            // #45: how many of the same chapters came out after her last read, in this same query. Strictly after, as
+            // the newest is compared with her last read, so this is above 0 exactly when the newest came out after it.
+            published.Count(c => c.PublishedAt > p.LastReadAt));
 
     /// <summary>Loads the published chapter outlines (no content) for all rows' novels in one query.</summary>
     private async Task<IReadOnlyList<LibraryEntry>> WithPublishedChapters(List<ProgressRow> rows)
@@ -166,7 +172,8 @@ public class LibraryRepository(ApplicationDbContext dbContext) : ILibraryReposit
             r.LastReadAt,
             byNovel.TryGetValue(r.NovelId, out var published) ? published : [],
             r.NotifyNewChapters,
-            r.LastChapterPublishedAt)).ToList();
+            r.LastChapterPublishedAt,
+            r.NewChaptersCount)).ToList();
     }
 
     private sealed record ProgressRow(
@@ -184,5 +191,6 @@ public class LibraryRepository(ApplicationDbContext dbContext) : ILibraryReposit
         int LastReadChapterIndex,
         DateTime LastReadAt,
         bool NotifyNewChapters,
-        DateTime? LastChapterPublishedAt);
+        DateTime? LastChapterPublishedAt,
+        int NewChaptersCount);
 }

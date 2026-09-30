@@ -24,6 +24,12 @@ public class ReadingProgressDTO
     /// </summary>
     public DateTime? LastChapterPublishedAt { get; set; }
 
+    /// <summary>
+    /// How many published chapters came out after <see cref="LastReadAt"/> (#45), for «N فصول جديدة»: above 0 exactly
+    /// when <see cref="LastChapterPublishedAt"/> is later than <see cref="LastReadAt"/>.
+    /// </summary>
+    public int NewChaptersCount { get; set; }
+
     public NovelAuthorDTO Author { get; set; } = default!;
 }
 
@@ -44,4 +50,7 @@ public class NovelProgressDTO
 
     /// <summary>Whether the novel's new chapters notify the reader (#33).</summary>
     public bool NotifyNewChapters { get; set; }
+
+    /// <summary>How many published chapters came out after <see cref="LastReadAt"/>, as in the library (#45).</summary>
+    public int NewChaptersCount { get; set; }
 }
