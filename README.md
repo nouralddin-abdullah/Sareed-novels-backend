@@ -331,7 +331,7 @@ Both refusals are checked before any payment, so **nothing is charged**:
 | HTTP | `code` | When | `message` |
 |---|---|---|---|
 | 400 | `GiftMessageTooLong` | over the limit | «الرسالة طويلة: الحد الأقصى 200 حرف.» (the configured number) |
-| 403 | `Blocked` | a message, and the novel's author blocked the sender (`IsBlockedAsync(authorId, senderId)`, as comments) | «لا يمكنك إرسال رسالة إلى هذا الكاتب.» |
+| 403 | `Blocked` | a message, and the novel's author blocked the sender (`IsBlockedAsync(authorId, senderId)`; only that way, while comments on posts are refused either way since #52) | «لا يمكنك إرسال رسالة إلى هذا الكاتب.» |
 
 The 400 has the endpoint's other refusals' shape, `{ "success": false, "code", "message" }`; the 403 is `{ "code",
 "message" }`. A gift without a message is sent as before, blocked or not. A suspended member can't send anything (their

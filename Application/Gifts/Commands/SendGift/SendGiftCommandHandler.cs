@@ -87,8 +87,8 @@ public class SendGiftCommandHandler(
             };
         }
 
-        // An author who blocked someone gets no messages from them, as with comments on their posts; their gifts
-        // without a message still go.
+        // An author who blocked someone gets no messages from them; their gifts without a message still go. Only that
+        // way: a sender who blocked the author may still write (comments on posts are refused either way since #52).
         if (message is not null && await blocksRepository.IsBlockedAsync(novel.AuthorId, currentUser.Id, cancellationToken))
         {
             throw new ForbidException(GiftMessageRules.BlockedMessage, GiftMessageRules.BlockedCode);
