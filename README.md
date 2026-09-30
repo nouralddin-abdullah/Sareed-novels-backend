@@ -695,3 +695,44 @@ too), falling back to `createdAt` against an API without it.
   that could publish one without it after the migration ran (during a deploy or after a rollback): the rankings then
   place the novel by its other chapters (or leave it out while none has a date) and log an error naming it, and the
   sitemap gives that chapter no `lastModified`.
+
+### Competitions: the status follows the schedule (#42)
+
+A competition's `status` used to be whatever an admin last stored, so a contest whose dates had long passed still said
+`Upcoming` (production's «انا مميز», months after its results date). It now follows the dates, wherever it is read and
+when a novel joins or leaves. The field keeps its name and its four values; what it says is the status in effect now.
+
+| `status` | From | Until | `canJoin` | `POST .../join` | `DELETE .../leave/{novelId}` |
+|---|---|---|---|---|---|
+| `Upcoming` | creation | `participationStartDate` | `false` | 403 `CompetitionClosed` | allowed |
+| `Participation` | `participationStartDate` | `participationEndDate` | `true` (when `isActive`) | allowed (when `isActive`) | allowed |
+| `Judging` | `participationEndDate` | finalized | `false` | 403 `CompetitionClosed` | 403 `ParticipationEnded` |
+| `Completed` | finalized, or an admin | | `false` | 403 `CompetitionClosed` | 403 `ParticipationEnded` |
+
+- **Boundaries.** A date is the first instant of the phase it opens: at exactly `participationStartDate` the
+  competition is open, at exactly `participationEndDate` it is closed. `judgmentStartDate`, `judgmentEndDate` and
+  `resultsDate` are for showing: the competition stays `Judging` through them and after, until an admin finalizes it.
+  The dates are UTC, sent without the `Z` as before (`"2025-12-25T14:45:38.138"`): read them as UTC.
+- **Where.** The list `GET /api/competition`, the page `GET /api/competition/{idOrSlug}`, what creating and updating
+  answer, and `competitionStatus` in `GET /api/competition/my-participations`; joining and leaving decide by the same
+  status. One request reads the clock once, so a list and its filter agree.
+- **`?status=`** (`GET /api/competition?status=Judging`): the competitions whose status is that now, decided in the
+  database by the same rule. One of the four names in any letter case; blank lists them all; anything else is 400
+  `InvalidStatus` (it used to answer an empty list).
+- **Admin override** (`PUT /api/competition/{id}` with `status`, admin). The stored status counts only where it is
+  further along than the dates, in the order `Upcoming` < `Participation` < `Judging` < `Completed`: an admin can open
+  a competition early (`Participation` before its start date), close it early (`Judging`) or complete it early
+  (`Completed`), and the dates take over again once they pass the override. A stored status behind the dates changes
+  nothing (storing `Upcoming` in the participation window doesn't close it). To postpone, move the dates and store
+  `Upcoming`, which is no override. The answer's `status` is the one in effect. `status` must be one of the four names
+  (any letter case, stored as written above), else 400 `InvalidStatus`. Creating a competition, or moving a
+  participation date, so that participation doesn't end after it starts is 400 `InvalidSchedule`.
+- **Finalizing** (`POST /api/competition/{id}/finalize`, admin): the top three participants win, as before. A
+  competition nobody joined is completed with no winners (200, `[]`); it used to fail with 500. Finalizing again
+  keeps the winners and answers the same, and always leaves the competition `Completed`. A competition past its
+  results date stays `Judging` until an admin finalizes it, also when nobody joined, so finalize each one that ends.
+- **Existing data.** The migration `CompleteEndedCompetitionsWithoutParticipants` completed every competition whose
+  participation had ended and whose results date had passed, with nobody in it: in production, «انا مميز». One with
+  participants is left in `Judging` for an admin to finalize (that chooses its winners). Its down leaves them completed.
+- **Nothing else moves with a status.** Changing a status never sent a notification, an email or points, and a status
+  reached by the dates alone doesn't either.
