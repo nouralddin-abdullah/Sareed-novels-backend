@@ -629,8 +629,8 @@ New fields (additive):
 
 | Where | Field |
 |---|---|
-| `GET /api/library/reading-progress`, each item | `notifyNewChapters` (bool); `lastChapterPublishedAt` (UTC with `Z`, e.g. `"2026-09-29T21:57:47.1234567Z"`, or `null` when the novel has no published chapter) |
-| `GET /api/library/novel/{novelId}/progress`, in `progress` | `notifyNewChapters` (bool) |
+| `GET /api/library/reading-progress`, each item | `notifyNewChapters` (bool); `lastChapterPublishedAt` (UTC with `Z`, e.g. `"2026-09-29T21:57:47.1234567Z"`, or `null` when the novel has no published chapter); `newChaptersCount` (int, #45) |
+| `GET /api/library/novel/{novelId}/progress`, in `progress` | `notifyNewChapters` (bool); `newChaptersCount` (int, #45) |
 
 - **Muted** (`notifyNewChapters: false`): a chapter published in that novel, new or a draft published later, creates
   no `NewChapterInLibrary` notification for her, so no push either. The novel stays in her library with its progress;
@@ -648,6 +648,18 @@ New fields (additive):
   published after it shows as new. A chapter unpublished and published again keeps the time it first came out, so it
   isn't new a second time, and since #39 its new-chapter notification and push aren't sent again either. The field's
   name, type and format are unchanged.
+- **`newChaptersCount`** (#45): how many of the novel's published chapters came out after `lastReadAt`, for «N فصول
+  جديدة». Each chapter counts from when it came out, as for `lastChapterPublishedAt` (a draft published later, from
+  when it was published; a chapter unpublished and published again, from the first time), and only if that is strictly
+  later than `lastReadAt`: one out at the very instant of her last read (both are stored to 100 ns) isn't new. Drafts
+  aren't counted, nor chapters unpublished or deleted since they came out. It is counted in the page's own query, over
+  the same chapters as `lastChapterPublishedAt`, so the page costs no extra query and the two agree:
+  `newChaptersCount > 0` exactly when `lastChapterPublishedAt` is later than `lastReadAt`. It counts what came out
+  since her last read, not what she has left to read: halfway through a novel where nothing new came out, it is 0.
+  Reading any chapter of the novel (track-progress, an earlier chapter too) sets `lastReadAt` to now, so it goes back
+  to 0. An entry exists only once she has read a chapter and always has a `lastReadAt`, so there is no "never read"
+  case: the field is always a number, 0 or more, never null. An API from before #45 doesn't send it; the app then keeps
+  its approximation.
 - **Schema**: `UserNovelProgress.NotifyNewChapters bit NOT NULL DEFAULT 1`, migration `AddLibraryNotifyNewChapters`:
   every existing entry keeps its notifications. `Chapters.PublishedAt datetime2 NULL` (UTC, null while the chapter has
   never been published), migration `AddChapterPublishedAt`, which fills it in for the chapters that came out before
