@@ -12,6 +12,7 @@ public class GetPostQueryHandler(
     ILogger<GetPostQueryHandler> logger,
     IPostsRepository postsRepository,
     IPostLikesRepository postLikesRepository,
+    IUserBlocksRepository blocksRepository,
     IUserContext userContext,
     IMapper mapper) : IRequestHandler<GetPostQuery, PostDTO>
 {
@@ -24,6 +25,18 @@ public class GetPostQueryHandler(
         var currentUser = userContext.GetCurrentUser();
         if (currentUser != null)
         {
+            // To someone its author blocked (both blocking each other included), the post is unavailable; someone who
+            // blocked its author still sees it, flagged, so they can unblock (PostBlocks). One query for both.
+            if (currentUser.Id != post.UserId)
+            {
+                var relation = await blocksRepository.GetRelationAsync(currentUser.Id, post.UserId, cancellationToken);
+                if (relation.OtherBlockedViewer)
+                {
+                    throw PostBlocks.Unavailable();
+                }
+                postDto.AuthorBlockedByMe = relation.ViewerBlockedOther;
+            }
+
             postDto.IsLikedByCurrentUser = await postLikesRepository.HasUserLikedPost(currentUser.Id, post.Id);
         }
         

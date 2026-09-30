@@ -1,3 +1,4 @@
+using Domain.Constants;
 using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Persistence;
@@ -9,7 +10,9 @@ namespace Infrastructure.Repositories;
 /// <summary>
 /// Every notification is created here, and each one also queues a push to each of its recipient's devices
 /// (<see cref="PushOutboxMessage"/>), saved in the same transaction; recipients without the app get none. This is also
-/// where blocks apply to notifications: none is created for a recipient who blocked its actor, so no push either.
+/// where blocks apply to notifications (<see cref="NotificationBlocking"/>): none is created, so no push either, when
+/// its recipient blocked its actor, or, for a notification from one member to another, when its actor blocked its
+/// recipient.
 /// </summary>
 public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxSignal? pushSignal = null) : INotificationsRepository
 {
@@ -18,7 +21,7 @@ public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxS
 
     public async Task<bool> CreateNotification(Notification notification)
     {
-        if (await dbContext.UserBlocks.AnyAsync(b => b.BlockerId == notification.UserId && b.BlockedId == notification.ActorId))
+        if (await IsStoppedByABlock(notification))
         {
             return false;
         }
@@ -36,7 +39,7 @@ public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxS
         var queued = 0;
         foreach (var chunk in notifications.Chunk(FanOutBatchSize))
         {
-            var batch = await WithoutBlockedActors(chunk);
+            var batch = await NotStoppedByABlock(chunk);
             if (batch.Count == 0)
             {
                 continue;
@@ -60,6 +63,7 @@ public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxS
     public async Task<bool> CreateUnlessUnreadExists(Notification notification)
     {
         var n = notification;
+        var eitherWay = NotificationBlocking.EitherWay(n.Type);
         var pushes = await PushesFor([n]);
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
         var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
@@ -71,7 +75,10 @@ public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxS
                 SELECT 1 FROM Notifications WITH (UPDLOCK, HOLDLOCK)
                 WHERE UserId = {n.UserId} AND IsRead = 0 AND Type = {n.Type} AND ActorId = {n.ActorId}
                   AND (RelatedEntityId = {n.RelatedEntityId} OR (RelatedEntityId IS NULL AND {n.RelatedEntityId} IS NULL)))
-              AND NOT EXISTS (SELECT 1 FROM UserBlocks WHERE BlockerId = {n.UserId} AND BlockedId = {n.ActorId})
+              AND NOT EXISTS (
+                SELECT 1 FROM UserBlocks
+                WHERE (BlockerId = {n.UserId} AND BlockedId = {n.ActorId})
+                   OR ({eitherWay} = 1 AND BlockerId = {n.ActorId} AND BlockedId = {n.UserId}))
             """);
         if (inserted == 1 && pushes.Count > 0)
         {
@@ -86,14 +93,27 @@ public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxS
         return inserted == 1;
     }
 
-    /// <summary>The notifications whose recipient hasn't blocked their actor, in one query for the batch.</summary>
-    private async Task<List<Notification>> WithoutBlockedActors(IReadOnlyCollection<Notification> notifications)
+    /// <summary>
+    /// Whether a block stops the notification (<see cref="NotificationBlocking"/>): its recipient blocked its actor,
+    /// or, for the types a block either way stops, its actor blocked its recipient.
+    /// </summary>
+    private Task<bool> IsStoppedByABlock(Notification n) => NotificationBlocking.EitherWay(n.Type)
+        ? dbContext.UserBlocks.AnyAsync(b => (b.BlockerId == n.UserId && b.BlockedId == n.ActorId)
+                                             || (b.BlockerId == n.ActorId && b.BlockedId == n.UserId))
+        : dbContext.UserBlocks.AnyAsync(b => b.BlockerId == n.UserId && b.BlockedId == n.ActorId);
+
+    /// <summary>
+    /// The notifications no block stops (<see cref="IsStoppedByABlock"/>), with one query for the batch: the blocks
+    /// between its recipients and its actors, either way.
+    /// </summary>
+    private async Task<List<Notification>> NotStoppedByABlock(IReadOnlyCollection<Notification> notifications)
     {
         var recipientIds = notifications.Select(n => n.UserId).Distinct().ToList();
         var actorIds = notifications.Select(n => n.ActorId).Distinct().ToList();
         var blocks = await dbContext.UserBlocks
             .AsNoTracking()
-            .Where(b => recipientIds.Contains(b.BlockerId) && actorIds.Contains(b.BlockedId))
+            .Where(b => (recipientIds.Contains(b.BlockerId) && actorIds.Contains(b.BlockedId))
+                        || (actorIds.Contains(b.BlockerId) && recipientIds.Contains(b.BlockedId)))
             .Select(b => new { b.BlockerId, b.BlockedId })
             .ToListAsync();
         if (blocks.Count == 0)
@@ -102,7 +122,10 @@ public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxS
         }
 
         var blocked = blocks.Select(b => (b.BlockerId, b.BlockedId)).ToHashSet();
-        return notifications.Where(n => !blocked.Contains((n.UserId, n.ActorId))).ToList();
+        return notifications
+            .Where(n => !blocked.Contains((n.UserId, n.ActorId))
+                        && !(NotificationBlocking.EitherWay(n.Type) && blocked.Contains((n.ActorId, n.UserId))))
+            .ToList();
     }
 
     /// <summary>One outbox row per device of each notification's recipient (not yet added to the context).</summary>

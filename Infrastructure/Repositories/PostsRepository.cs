@@ -31,6 +31,12 @@ public class PostsRepository(ApplicationDbContext dbContext) : IPostsRepository
             .FirstOrDefaultAsync(p => p.Id == postId);
     }
 
+    public Task<string?> GetAuthorIdAsync(Guid postId, CancellationToken cancellationToken = default) =>
+        dbContext.Posts
+            .Where(p => p.Id == postId)
+            .Select(p => p.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public async Task<(IEnumerable<Post>, int)> GetUserPosts(string userId, int pageNumber, int pageSize)
     {
         var query = dbContext.Posts
