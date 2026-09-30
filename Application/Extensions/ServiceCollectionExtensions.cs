@@ -23,5 +23,8 @@ public static class ServiceCollectionExtensions
 
         // The per-account limit on deleting one's account (counts live for the whole process).
         services.AddSingleton<AccountDeletionAttempts>();
+
+        // Proving it's them again: deleting the account, setting its first password.
+        services.AddScoped<Reauthentication>();
     }
 }

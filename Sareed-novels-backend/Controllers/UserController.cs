@@ -2,6 +2,7 @@
 using Application.Users.Commands.ChangePassword;
 using Application.Users.Commands.DeleteAccount;
 using Application.Users.Commands.FollowUser;
+using Application.Users.Commands.SetPassword;
 using Application.Users.Commands.UnblockUser;
 using Application.Users.Commands.UnFollowUser;
 using Application.Users.Commands.UpdateMe;
@@ -14,6 +15,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.RateLimiting;
+using Sareed_novels_backend.Extensions;
 
 namespace Sareed_novels_backend.Controllers
 {
@@ -60,6 +63,27 @@ namespace Sareed_novels_backend.Controllers
                 return BadRequest(IdentityErrors.Body(result));
             }
             return Ok(result);
+        }
+
+        /// <summary>
+        /// Gives an account without a password (made with Google) its first one (#53), from
+        /// {newPassword, googleIdToken?}: 204, and every session stays signed in. Refusals in the order they are
+        /// checked: 400 PasswordAlreadySet (update-password changes it); 400 for a password the rules refuse, with
+        /// update-password's code and message (ValidationFailed, or Identity's code in IdentityErrors.Body); 403
+        /// ReauthenticationRequired or ReauthenticationFailed, the proof DELETE me takes from an account without a
+        /// password (a Google ID token of its Google sign-in, or a sign-in in the last 10 minutes). 10 requests a
+        /// minute per address, like sign-in.
+        /// </summary>
+        [HttpPost("set-password")]
+        [EnableRateLimiting(RateLimitPolicies.Auth)]
+        public async Task<IActionResult> SetPassword(SetPasswordRequest request)
+        {
+            var result = await mediator.Send(new SetPasswordCommand(request.NewPassword, request.GoogleIdToken));
+            if (!result.Succeeded)
+            {
+                return BadRequest(IdentityErrors.Body(result));
+            }
+            return NoContent();
         }
 
         /// <summary>Follows a user; 204 when the caller already does (it was 400 AlreadyFollowing); 400 CannotFollowSelf.</summary>

@@ -35,4 +35,11 @@ public interface IUsersRepository
 
     /// <summary>These users (untracked) by id, in one query; ids without a user are left out.</summary>
     Task<Dictionary<string, User>> GetByIdsAsync(IReadOnlyCollection<string> userIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gives an account without a password its first one (POST /api/User/set-password), in one statement: only while it
+    /// still has no password and isn't deleted, and writing only the password hash, a new security stamp and a new
+    /// concurrency stamp. False when that no longer holds (a password was set meanwhile) or there is no such account.
+    /// </summary>
+    Task<bool> SetFirstPasswordAsync(string userId, string passwordHash, CancellationToken cancellationToken = default);
 }
