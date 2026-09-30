@@ -98,7 +98,10 @@ public class ModerationRulesTests
     [InlineData("blocked", false)]
     [InlineData("Blocked", false)]
     [InlineData("MY-PROFILE", false)]
+    [InlineData("followers-list", false)]
+    [InlineData("Following-List", false)]
     [InlineData("blocked1", true)]
+    [InlineData("followers", true)]
     [InlineData("reader", true)]
     [InlineData(null, true)]
     public void User_names_that_are_routes_are_reserved(string? userName, bool allowed)
