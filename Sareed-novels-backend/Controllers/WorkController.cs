@@ -133,11 +133,15 @@ namespace Sareed_novels_backend.Controllers
             return Ok(result);
         }
 
+        /// <summary>
+        /// A member's public works, the same for every caller. With withChapters=true only the novels a reader can open
+        /// (#46, the app's «أعمال أخرى للكاتب» shelf); a value other than true or false is 400 ValidationFailed.
+        /// </summary>
         [AllowAnonymous]
         [HttpGet("user/{userId}")]
-        public async Task<IActionResult> GetUserWorks([FromRoute] string userId, [FromQuery] int? pageSize, [FromQuery] int? pageNumber)
+        public async Task<IActionResult> GetUserWorks([FromRoute] string userId, [FromQuery] int? pageSize, [FromQuery] int? pageNumber, [FromQuery] bool? withChapters)
         {
-            var query = new GetUserWorksQuery(userId, pageNumber ?? 1, pageSize ?? 10);
+            var query = new GetUserWorksQuery(userId, pageNumber ?? 1, pageSize ?? 10, withChapters ?? false);
             var result = await mediator.Send(query);
             return Ok(result);
         }
