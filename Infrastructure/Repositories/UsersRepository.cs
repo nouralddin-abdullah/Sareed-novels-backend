@@ -1,4 +1,5 @@
-﻿using Domain.Entities;
+﻿using System.Security.Cryptography;
+using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -186,6 +187,28 @@ namespace Infrastructure.Repositories
                 .AsNoTracking()
                 .Where(u => ids.Contains(u.Id))
                 .ToDictionaryAsync(u => u.Id, StringComparer.OrdinalIgnoreCase, cancellationToken);
+        }
+
+        public async Task<bool> SetFirstPasswordAsync(
+            string userId, string passwordHash, CancellationToken cancellationToken = default)
+        {
+            // UserManager.AddPasswordAsync would save the whole row from the copy read at the start of the request,
+            // writing back counters, a suspension or a sign-out-everywhere that changed meanwhile. This writes three
+            // columns:
+            // - the hash, only if there is still none: of two requests at once, one sets it and the other gets false;
+            // - a new security stamp, as UserManager gives every password change: reset and confirmation links sent
+            //   before stop working. Access tokens don't carry the stamp, so every session stays signed in;
+            // - a new concurrency stamp, so an update through UserManager that read the account before this
+            //   (update-me) fails on it instead of writing back the row without a password.
+            var securityStamp = Convert.ToHexString(RandomNumberGenerator.GetBytes(20));
+            var concurrencyStamp = Guid.NewGuid().ToString();
+            var updated = await dbContext.Users
+                .Where(u => u.Id == userId && u.PasswordHash == null && u.DeletedAt == null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(u => u.PasswordHash, passwordHash)
+                    .SetProperty(u => u.SecurityStamp, securityStamp)
+                    .SetProperty(u => u.ConcurrencyStamp, concurrencyStamp), cancellationToken);
+            return updated == 1;
         }
     }
 }

@@ -6,11 +6,7 @@ public class ResetPasswordCommandValidator : AbstractValidator<ResetPasswordComm
 {
     public ResetPasswordCommandValidator()
     {
-        RuleFor(d => d.NewPassword)
-            .NotNull()
-            .WithMessage("اكتب كلمة المرور الجديدة")
-            .MinimumLength(8)
-            .WithMessage("يجب أن تحتوي كلمة المرور الجديدة على 8 أحرف على الأقل");
+        RuleFor(d => d.NewPassword).NewPassword();
 
         // Both come from the link in the email.
         RuleFor(d => d.UserId)

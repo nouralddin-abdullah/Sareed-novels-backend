@@ -482,6 +482,66 @@ account. The API also logs `Admin {AdminId} deleted the account of user {UserId}
 There is no endpoint to read the table yet (query it in the database); it is meant for later admin actions too. The
 reports the deletion closes show no admin in `resolvedById`, as after a member's own deletion; the audit row says who.
 
+### Setting a password for an account made with Google: `POST /api/User/set-password` (#53)
+
+An account made with Google has no password (`GET /api/User/my-profile` says `"hasPassword": false`). This sets its
+first one from the app; before, the reset-password email was the only way.
+
+```bash
+curl -X POST https://api-sareed.runasp.net/api/User/set-password \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{ "newPassword": "...", "googleIdToken": "optional" }'
+```
+
+- `newPassword`: the rules of update-password and reset-password (`PasswordRules`): required, at least 8 characters;
+  then ASP.NET Identity's password options, as those endpoints apply them (today at least 6 characters and nothing
+  else, so they refuse nothing more).
+- `googleIdToken`, optional: an ID token from signing in with Google just now, whose subject is the account's Google
+  sign-in, as for `DELETE /api/User/me`. Without it, the access token must come from a sign-in in the last 10 minutes.
+  When it is sent it must hold, even within those 10 minutes.
+- **204**, no body: done. `hasPassword` is `true` from then on, and the member signs in with their email address (or
+  user name) and this password, or with Google as before. Every session stays signed in, with its push devices.
+
+Checked in this order; the first refusal is the answer, `{ "code", "message" }` with an Arabic message:
+
+| Order | HTTP | `code` | When | `message` |
+|---|---|---|---|---|
+| 1 | 429 | `TooManyRequests` | over 10 requests a minute from one address (the sign-in limit), signed in or not | «طلبات كثيرة خلال وقت قصير. حاول مرة أخرى بعد بضع دقائق.» |
+| 2 | 401 | | not signed in, or the token is refused; no body | |
+| 3 | 400 | `PasswordAlreadySet` | the account has a password: update-password changes it | «لحسابك كلمة مرور بالفعل، غيّرها من «تغيير كلمة المرور».» |
+| 4 | 400 | `ValidationFailed` | `newPassword` left out or null | «اكتب كلمة المرور الجديدة» |
+| 4 | 400 | `ValidationFailed` | under 8 characters, empty included | «يجب أن تحتوي كلمة المرور الجديدة على 8 أحرف على الأقل» |
+| 4 | 400 | Identity's (`PasswordRequiresDigit`...) | Identity's password options refuse it (none do today) | Identity's Arabic description; the body adds `succeeded: false` and every problem in `errors: [{ "code", "description" }]`, as update-password's does |
+| 5 | 403 | `ReauthenticationRequired` | no `googleIdToken`, and the sign-in behind the token is over 10 minutes old | «لتعيين كلمة مرور لحسابك سجّل الدخول بحساب Google مرة أخرى، ثم عيّنها خلال 10 دقائق» |
+| 5 | 403 | `ReauthenticationFailed` | `googleIdToken` isn't a valid Google ID token for Sard | «تعذّر التحقق من حساب Google، سجّل الدخول به مرة أخرى» |
+| 5 | 403 | `ReauthenticationFailed` | `googleIdToken` belongs to another Google account | «حساب Google هذا غير مرتبط بحسابك في سرد» |
+
+A body that isn't JSON, or has a value of the wrong type, is refused by ASP.NET before step 3, as everywhere: 400
+`ValidationFailed`.
+
+- **Why this order.** An account that has a password is told so whatever it sent. The rules come before the proof, so
+  nobody signs in with Google again only to learn the password is too short.
+- **The same rules and messages as update-password.** For a password the rules refuse, `code` and `message` are
+  exactly what update-password answers for the same new password. Only the body around them differs for the
+  8-character rule: update-password's is ASP.NET's validation problem (its `errors` list the problems by field),
+  set-password's is `{ code, message }`, because the handler checks that rule itself, after `PasswordAlreadySet`.
+- **403, not 401,** for a proof that fails or is missing, as for `DELETE /api/User/me`: a 401 to a request that carried
+  a token tells the app its session ended, and it signs out.
+- **The app.** Offer the form when `hasPassword` is false. Right after a Google sign-in, send `{ newPassword }`;
+  otherwise sign in with Google again and send its ID token with it (or do that on `ReauthenticationRequired` and send
+  again). On `PasswordAlreadySet`, read my-profile again and offer change password instead.
+- **Two requests at once** (a double tap): one gets 204, the other `PasswordAlreadySet`.
+- **What is saved.** One SQL statement, only while the account has no password and isn't deleted: the password hash, a
+  new security stamp and a new concurrency stamp, nothing else of the account (UserManager's `AddPasswordAsync` would
+  write every column from the copy it read, undoing a counter or a suspension changed meanwhile). The new concurrency
+  stamp makes an update-me saving at that moment fail instead of writing the account back without its password.
+- **The security stamp** isn't checked on API requests: access tokens don't carry it, and there are no refresh tokens
+  (an access token lives 60 days and is checked against the sign-out-everywhere cut-off, suspension and deletion,
+  none of which this changes). It only makes Identity's emailed links valid, so a reset-password or email
+  confirmation link sent before the password was set stops working (`InvalidToken`), as after any password change.
+- **The web** doesn't use it yet: its settings page always offers «تغيير كلمة المرور», which asks for the current
+  password, so an account without one still sets it through the reset-password email.
+
 ### Reading lists: editing, «أضف إلى قائمة» and order (#35)
 
 For the app's list forms and its «أضف إلى قائمة» sheet. Every call needs the member's token (401 without); errors have
