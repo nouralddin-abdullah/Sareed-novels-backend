@@ -42,17 +42,25 @@ public class LibraryHttpTests(SardApiFactory api)
             JsonContent.Create(new { status, title = "فصل", content = "<p>نص</p>" }))).EnsureSuccessStatusCode();
 
     private async Task DeleteChapter(ApiUser author, Novel novel, Guid chapterId) =>
-        (await api.Send(HttpMethod.Delete, $"/api/novel/{novel.Id}/chapter/{chapterId}", author)).EnsureSuccessStatusCode();
+        (await api.Send(HttpMethod.Delete, $"/api/novel/{novel.Id}/chapter/{chapterId}", author))
+        .EnsureSuccessStatusCode();
 
-    /// <summary>When track-progress stored her last read of the novel, as the database has it (100 ns precision).</summary>
+    /// <summary>When track-progress stored her last read of the novel, as the database has it (to 100 ns).</summary>
     private async Task<DateTime> StoredLastReadAt(ApiUser reader, Novel novel)
     {
         await using var db = api.Db();
-        return await db.UserNovelProgress.Where(p => p.UserId == reader.Id && p.NovelId == novel.Id).Select(p => p.LastReadAt).SingleAsync();
+        return await db.UserNovelProgress
+            .Where(p => p.UserId == reader.Id && p.NovelId == novel.Id)
+            .Select(p => p.LastReadAt)
+            .SingleAsync();
     }
 
-    /// <summary>Chapter <paramref name="index"/> of the novel, saved directly: published at <paramref name="publishedAt"/>.</summary>
-    private async Task<Chapter> AddChapterPublishedAt(Novel novel, int index, DateTime? publishedAt, string status = ChapterStatuses.Published)
+    /// <summary>
+    /// Chapter <paramref name="index"/> of the novel, saved directly with this status and the time it came out
+    /// (<see cref="Chapter.PublishedAt"/>; a draft with one was unpublished since).
+    /// </summary>
+    private async Task<Chapter> AddChapterPublishedAt(
+        Novel novel, int index, DateTime? publishedAt, string status = ChapterStatuses.Published)
     {
         var chapter = Seed.Chapters(novel, 1, DateTime.UtcNow.AddDays(-30), status, startIndex: index).Single();
         chapter.PublishedAt = publishedAt;
@@ -105,15 +113,16 @@ public class LibraryHttpTests(SardApiFactory api)
     }
 
     /// <summary>
-    /// The item's newChaptersCount agrees with its lastChapterPublishedAt, both dates read as UTC as the app reads them:
-    /// above 0 exactly when the newest chapter came out after her last read (#45).
+    /// The item's newChaptersCount agrees with its lastChapterPublishedAt, both dates read as UTC as the app reads
+    /// them: above 0 exactly when the newest chapter came out after her last read (#45).
     /// </summary>
     private static void AssertAgreesWithNewestChapter(JsonElement item)
     {
-        var newestIsNew = item.GetProperty("lastChapterPublishedAt").ValueKind != JsonValueKind.Null
+        var (newest, lastReadAt) = (item.GetProperty("lastChapterPublishedAt"), item.GetProperty("lastReadAt"));
+        var newestIsNew = newest.ValueKind != JsonValueKind.Null
             && Utc(item, "lastChapterPublishedAt") > Utc(item, "lastReadAt");
         Assert.True(newestIsNew == (NewChapters(item) > 0),
-            $"newChaptersCount {NewChapters(item)}, lastChapterPublishedAt {item.GetProperty("lastChapterPublishedAt")}, lastReadAt {item.GetProperty("lastReadAt")}");
+            $"newChaptersCount {NewChapters(item)}, lastChapterPublishedAt {newest}, lastReadAt {lastReadAt}");
     }
 
     [Fact]
@@ -395,7 +404,8 @@ public class LibraryHttpTests(SardApiFactory api)
         var item = (await Library(reader))[novel.Id];
 
         Assert.Equal(0, NewChapters(item));
-        Assert.Equal((1, 3), (item.GetProperty("lastReadChapterNumber").GetInt32(), item.GetProperty("totalChapters").GetInt32()));
+        Assert.Equal(1, item.GetProperty("lastReadChapterNumber").GetInt32());
+        Assert.Equal(3, item.GetProperty("totalChapters").GetInt32());
         AssertAgreesWithNewestChapter(item);
         Assert.Equal(0, NewChapters((await Progress(reader, novel.Id))!.Value));
     }
@@ -551,7 +561,8 @@ public class LibraryHttpTests(SardApiFactory api)
         Assert.Equal(JsonValueKind.Null, library[nothingPublished.Id].GetProperty("lastChapterPublishedAt").ValueKind);
         foreach (var (novelId, newChapters) in expected)
         {
-            Assert.Equal(newChapters, NewChapters((await Progress(reader, novelId))!.Value)); // the same on the novel page
+            // The same in the novel's progress.
+            Assert.Equal(newChapters, NewChapters((await Progress(reader, novelId))!.Value));
         }
     }
 }

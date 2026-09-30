@@ -12,9 +12,9 @@ public sealed record ChapterOutline(Guid Id, string Title, int ChapterIndex);
 /// </param>
 /// <param name="NewChaptersCount">
 /// How many of the published chapters came out after <see cref="LastReadAt"/> (#45): those whose
-/// <see cref="Domain.Entities.Chapter.PublishedAt"/> is later than it, one out at that very instant not included. Counted
-/// over the same chapters as <see cref="LastChapterPublishedAt"/>, so it is above 0 exactly when that is later than
-/// <see cref="LastReadAt"/>.
+/// <see cref="Domain.Entities.Chapter.PublishedAt"/> is later than it, one out at that very instant not included.
+/// Counted over the same chapters as <see cref="LastChapterPublishedAt"/>, so it is above 0 exactly when that is later
+/// than <see cref="LastReadAt"/>.
 /// </param>
 public sealed record LibraryEntry(
     Guid NovelId,
