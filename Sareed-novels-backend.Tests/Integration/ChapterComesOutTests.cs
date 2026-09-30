@@ -8,9 +8,9 @@ namespace Sareed_novels_backend.Tests.Integration;
 
 /// <summary>
 /// #39: a chapter comes out when it is first published, created published or a draft published later. Only then is it
-/// news: the novel's LastUpdatedAt moves to that time (the "last updated" sort, the novel page, my works and the sitemap)
-/// and the novel's readers are told, a notification and a push each. Writing a draft, saving or editing a chapter that
-/// is out, unpublishing it and publishing it again change neither. Through the real handlers, on a clock.
+/// news: the novel's LastUpdatedAt moves to that time (the "last updated" sort, the novel page, my works and the
+/// sitemap) and the novel's readers are told, a notification and a push each. Writing a draft, saving or editing a
+/// chapter that is out, unpublishing it and publishing it again change neither. Through the real handlers, on a clock.
 /// </summary>
 public class ChapterComesOutTests(SqlServerDatabase database) : IClassFixture<SqlServerDatabase>
 {
@@ -90,7 +90,8 @@ public class ChapterComesOutTests(SqlServerDatabase database) : IClassFixture<Sq
         var chapter = await desk.Create(author, novel, ChapterStatuses.Published);
 
         desk.Clock.Advance(TimeSpan.FromDays(3));
-        await desk.Save(author, novel, chapter, ChapterStatuses.Published, "<p>نص معدل</p><p>وفقرة جديدة</p>");
+        const string rewritten = "<p>نص معدل</p><p>وفقرة جديدة</p>";
+        await desk.Save(author, novel, chapter, ChapterStatuses.Published, rewritten);
 
         Assert.Equal(Start, await LastUpdated(novel));
         Assert.Equal(1, desk.TimesAnnounced(chapter));
@@ -118,7 +119,7 @@ public class ChapterComesOutTests(SqlServerDatabase database) : IClassFixture<Sq
     }
 
     [Fact]
-    public async Task Of_two_saves_that_publish_a_draft_at_once_only_one_brings_it_out_and_an_older_copy_keeps_its_date()
+    public async Task Of_two_saves_publishing_a_draft_at_once_one_brings_it_out_and_an_older_copy_keeps_its_date()
     {
         var (author, novel) = await desk.SeedNovel();
         var draftId = await desk.Create(author, novel, ChapterStatuses.Draft);
