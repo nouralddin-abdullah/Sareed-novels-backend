@@ -7,6 +7,7 @@ using Domain.Constants;
 using Domain.Entities;
 using Infrastructure.Authorization;
 using Infrastructure.Persistence;
+using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -128,7 +129,8 @@ public class DeletedUserNameTests
         var userContext = Substitute.For<IUserContext>();
         userContext.GetCurrentUser().Returns(new CurrentUser(user.Id, "noor@example.test", user.UserName!, user.DisplayName));
         var uploads = Substitute.For<IFileUploadService>();
-        var handler = new UpdateMeCommandHandler(NullLogger<UpdateMeCommandHandler>.Instance, uploads, userContext, users, Substitute.For<IMapper>());
+        var handler = new UpdateMeCommandHandler(NullLogger<UpdateMeCommandHandler>.Instance, uploads, userContext, users, Substitute.For<IMapper>(),
+            Substitute.For<ISender>());
 
         var result = await handler.Handle(new UpdateMeCommand { UserName = userName, UserBio = "نبذة" }, CancellationToken.None);
 

@@ -3,6 +3,7 @@ using Application.Users;
 using Application.Users.Commands.UpdateMe;
 using AutoMapper;
 using Domain.Entities;
+using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,11 +25,12 @@ public class UpdateMeHandlerTests
         users.FindByIdAsync(user.Id).Returns(user);
     }
 
-    private Task<Application.Users.Commands.FollowUser.OperationResult> Update(UpdateMeCommand command)
+    private Task<UpdateMeResult> Update(UpdateMeCommand command)
     {
         var userContext = Substitute.For<IUserContext>();
         userContext.GetCurrentUser().Returns(new CurrentUser(user.Id, "noor@example.test", user.UserName!, user.DisplayName));
-        return new UpdateMeCommandHandler(NullLogger<UpdateMeCommandHandler>.Instance, uploads, userContext, users, Substitute.For<IMapper>())
+        return new UpdateMeCommandHandler(NullLogger<UpdateMeCommandHandler>.Instance, uploads, userContext, users, Substitute.For<IMapper>(),
+                Substitute.For<ISender>())
             .Handle(command, CancellationToken.None);
     }
 

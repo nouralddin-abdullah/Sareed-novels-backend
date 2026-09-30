@@ -1,5 +1,4 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using Application.Users.Commands.FollowUser;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 
@@ -9,7 +8,7 @@ namespace Application.Users.Commands.UpdateMe;
 /// A field left out (null) stays as it is. A field sent empty is bound as "" (not turned into null, as model binding
 /// otherwise does): it clears the bio and the links, and the validator rejects it for the user name and display name.
 /// </summary>
-public class UpdateMeCommand : IRequest<OperationResult>
+public class UpdateMeCommand : IRequest<UpdateMeResult>
 {
     [DisplayFormat(ConvertEmptyStringToNull = false)]
     public string? UserName { get; set; }

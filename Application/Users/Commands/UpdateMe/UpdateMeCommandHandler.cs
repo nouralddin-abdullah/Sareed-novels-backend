@@ -1,6 +1,6 @@
 ﻿using Application.Services;
 using Application.Common;
-using Application.Users.Commands.FollowUser;
+using Application.Users.Queries.GetMyProfile;
 using AutoMapper;
 using Domain.Entities;
 using Domain.Exceptions;
@@ -15,9 +15,10 @@ public class UpdateMeCommandHandler(
     IFileUploadService fileUploadService, 
     IUserContext userContext, 
     UserManager<User> userManager, 
-    IMapper mapper) : IRequestHandler<UpdateMeCommand, OperationResult>
+    IMapper mapper,
+    ISender sender) : IRequestHandler<UpdateMeCommand, UpdateMeResult>
 {
-    public async Task<OperationResult> Handle(UpdateMeCommand request, CancellationToken cancellationToken)
+    public async Task<UpdateMeResult> Handle(UpdateMeCommand request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         logger.LogInformation("Updating data for user {username}", currentUser.UserName);
@@ -26,7 +27,7 @@ public class UpdateMeCommandHandler(
         // "deleted-..." names are deleted accounts' (the Identity validator refuses them too; this says so with its code).
         if (UserNameRules.LooksDeleted(request.UserName) && !string.Equals(request.UserName, user.UserName, StringComparison.OrdinalIgnoreCase))
         {
-            return new OperationResult
+            return new UpdateMeResult
             {
                 Success = false,
                 Code = UserNameRules.DeletedPrefixCode,
@@ -41,7 +42,7 @@ public class UpdateMeCommandHandler(
             var existingUser = await userManager.FindByNameAsync(request.UserName);
             if (existingUser != null && existingUser.Id != user.Id)
             {
-                return new OperationResult
+                return new UpdateMeResult
                 {
                     Success = false,
                     Code = "UserNameTaken",
@@ -67,7 +68,7 @@ public class UpdateMeCommandHandler(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to upload profile photo for user {UserId}", user.Id);
-                return new OperationResult
+                return new UpdateMeResult
                 {
                     Success = false,
                     Code = "UploadFailed",
@@ -92,7 +93,7 @@ public class UpdateMeCommandHandler(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to upload profile banner for user {UserId}", user.Id);
-                return new OperationResult
+                return new UpdateMeResult
                 {
                     Success = false,
                     Code = "UploadFailed",
@@ -123,7 +124,7 @@ public class UpdateMeCommandHandler(
             var errors = string.Join(", ", updatedResult.Errors.Select(e => e.Description));
             logger.LogWarning("Failed to update user {UserId}: {errors}", user.Id, errors);
 
-            return new OperationResult
+            return new UpdateMeResult
             {
                 Success = false,
                 // Identity's code for the first problem (InvalidUserName, DuplicateUserName...), as register answers it.
@@ -132,10 +133,13 @@ public class UpdateMeCommandHandler(
             };
         }
 
-        return new OperationResult
+        return new UpdateMeResult
         {
             Success = true,
-            Message = "تم تحديث الملف الشخصي"
+            Message = "تم تحديث الملف الشخصي",
+            // Through GET /api/User/my-profile itself, after the save, so the app gets the profile exactly as my-profile
+            // returns it and needn't read it again (#44).
+            Profile = await sender.Send(new GetMyProfileQuery(), cancellationToken)
         };
     }
 

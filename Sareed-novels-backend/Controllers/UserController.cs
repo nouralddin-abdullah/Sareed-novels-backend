@@ -29,6 +29,12 @@ namespace Sareed_novels_backend.Controllers
             return Ok(result);
         }
 
+        /// <summary>
+        /// Edits the caller's profile (the text fields in the query string or the form, the pictures in the form). 200
+        /// {success, message, profile}: profile is exactly what GET my-profile returns, read after the save (#44). A
+        /// refusal answers as before, without profile: 400 {success: false, code, message} (UploadFailed adds field), or
+        /// the validation problem (ValidationFailed).
+        /// </summary>
         [HttpPatch("update-me")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> UpdateMe(UpdateMeCommand command)
