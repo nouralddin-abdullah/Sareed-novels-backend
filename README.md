@@ -13,14 +13,19 @@ from the `appsettings*.json` files. An environment variable `Section__Key` sets 
 The mobile apps read this at startup: to force an update when an API change breaks older builds, to suggest one
 when a newer build is out, and to show a maintenance message. Each app reads its own section (`android`, `ios`). It is
 anonymous and cacheable for five minutes (`Cache-Control: public, max-age=300`). `gifts` says what gifts accept (#31):
-clients show the gift message box only when `gifts.messageMaxLength` is there (an older server has no `gifts`).
+clients show the gift message box only when `gifts.messageMaxLength` is there (an older server has no `gifts`). `posts`
+says what a new post accepts (#43, [Posts](#posts-writing-one-43)): the longest text in user-perceived characters, the
+largest picture in bytes and the picture types. Those are the rules in the code (`Application/Posts/PostRules.cs`), not
+settings: an `AppConfig:Posts` section changes nothing. A server from before #43 has no `posts`; the apps then use the
+same numbers as their fallback.
 
 ```json
 {
   "android": { "minVersion": "1.0.0", "latestVersion": "1.0.0" },
   "ios": { "minVersion": "1.0.0", "latestVersion": "1.0.0" },
   "maintenance": { "enabled": false, "messageAr": null },
-  "gifts": { "messageMaxLength": 200 }
+  "gifts": { "messageMaxLength": 200 },
+  "posts": { "contentMaxLength": 5000, "imageMaxBytes": 5242880, "imageTypes": ["image/jpeg", "image/png", "image/webp"] }
 }
 ```
 
@@ -695,3 +700,70 @@ too), falling back to `createdAt` against an API without it.
   that could publish one without it after the migration ran (during a deploy or after a rollback): the rankings then
   place the novel by its other chapters (or leave it out while none has a date) and log an error naming it, and the
   sitemap gives that chapter no `lastModified`.
+
+### Posts: writing one (#43)
+
+`POST /api/posts`, signed in, multipart form-data with three fields, each optional but **not all**: `Content` (the
+text), `Image` (a picture file) and `NovelId` (a novel to attach). Field names are case-insensitive, as the web sends
+them (`content`, `image`, `novelId`). This is the only way posts are created; they can't be edited (only deleted,
+liked and unliked), so these rules are all there is.
+
+**Rules**
+
+- **Text, a picture or a novel.** `Content` is trimmed, and stored trimmed; left out, empty or only whitespace is no
+  text. Text is required only when neither a picture nor a novel is attached. A post without text is stored, and read
+  everywhere, with `content: ""` (not `null`).
+- **At most 5000 characters**, counted after trimming in user-perceived characters, as gift messages are (#31): .NET's
+  `new StringInfo(text).LengthInTextElements` (`Application/Common/TextElements.cs`), which Flutter's `characters.length`
+  and the web's `Intl.Segmenter` match. An emoji, a flag or a letter with its tashkeel is one character, whatever its
+  UTF-16 length. Text within 5000 characters but over 100,000 UTF-16 units is refused as too long as well: that is
+  only a letter under thousands of combining marks; real text never gets near it (5000 of the longest emoji take
+  75,000).
+- **A picture: JPEG, PNG or WebP, at most 5 MB (5,242,880 bytes)**, like every picture members upload. The type is the
+  `Content-Type` the client declares for the file part, exactly `image/jpeg`, `image/png` or `image/webp` (`image/jpg`
+  is accepted as an alias); the server doesn't look at the bytes. So the apps must send the right type, and convert
+  what isn't one of these (HEIC from an iPhone camera, GIF) before sending. An empty file is refused as not a picture.
+
+**Refusals** are 400 with the endpoint's usual shape, `{ "success": false, "code", "message", "post": null }` (as
+`NovelNotFound` always was), with an Arabic `message`. An answer carries one code: the first rule broken, in this
+order. The first four are checked before anything is looked up or stored.
+
+| Order | HTTP | `code` | When | `message` |
+|---|---|---|---|---|
+| 1 | 400 | `PostContentRequired` | no text, and no picture or novel | «المنشور فارغ: اكتب نصًا أو أرفق صورة أو رواية.» |
+| 2 | 400 | `PostContentTooLong` | over 5000 characters (or 100,000 UTF-16 units) | «المنشور طويل: الحد الأقصى 5000 حرف.» |
+| 3 | 400 | `PostImageType` | a picture that isn't JPEG, PNG or WebP, or an empty file | «صيغة الصورة غير مدعومة: اختر صورة JPEG أو PNG أو WebP.» |
+| 4 | 400 | `PostImageTooLarge` | a picture over 5,242,880 bytes | «الصورة كبيرة: الحد الأقصى 5 ميغابايت.» |
+| 5 | 400 | `NovelNotFound` | `NovelId` is no novel, or a deleted one (unchanged) | «الرواية غير موجودة» |
+| 6 | 400 | `UploadFailed` | the picture couldn't be stored (below) | «تعذّر رفع الصورة، حاول مرة أخرى.» |
+| | 401 | | not signed in, before any rule | |
+
+So a picture makes text optional even when that picture is then refused (no text with a GIF is `PostImageType`), and
+a picture's type comes before its size (a 6 MB GIF is `PostImageType`). A `NovelId` that isn't a GUID is refused by
+ASP.NET as before (400 `ValidationFailed`). The rules are `Application/Posts/PostRules.cs`, checked by
+`CreatePostCommandValidator`, which the handler runs itself so each refusal keeps its code.
+
+**A picture that can't be stored.** The picture is stored (Cloudflare R2) before the post is saved, so **no post goes
+out without its picture**: when storing it fails, the answer is 400 `UploadFailed`, nothing is created, and the failure
+is logged at Error with its exception (it was a 500 without a code). The same request can simply be sent again. A
+request cancelled by the client isn't counted as a failed upload. If saving the post fails after its picture was
+stored, the picture is deleted (as far as the storage allows) and the answer stays 500 `ServerError`.
+
+**Request size.** The API keeps ASP.NET Core's default limit on a request body, **30,000,000 bytes** (about 28.6 MB),
+which is also IIS's default (`maxAllowedContentLength`, unless the host changed it); nothing in the code changes
+either, and ASP.NET's multipart form limit is higher (128 MB). So a picture far over 5 MB, up to about 28 MB, still gets
+`PostImageTooLarge`, and text of any length within the request gets `PostContentTooLong`. A bigger request is refused
+by the server before the post rules run, without a post code: it closes the connection, so a client still sending
+sees a network error (one that waits for `100 Continue` reads 400 `ValidationFailed`; IIS's own filter answers
+404.13). Checking the 5 MB limit before uploading keeps the apps far from it.
+
+**Mirroring the limits.** `GET /api/app/config` serves them as `posts`, the very values the server checks, from the
+code (they aren't settings); without it (a server from before #43), use the same numbers:
+
+```json
+"posts": { "contentMaxLength": 5000, "imageMaxBytes": 5242880, "imageTypes": ["image/jpeg", "image/png", "image/webp"] }
+```
+
+A client that mirrors them counts characters as above (after trimming), offers or converts to JPEG, PNG or WebP,
+compresses or refuses a picture over `imageMaxBytes` before uploading, lets a post go with only a picture or a novel,
+and shows the server's Arabic `message` for any refusal, branching on `code`.
