@@ -509,8 +509,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(c => c.ParentCommentId)
                 .HasDatabaseName("IX_Comments_ParentCommentId");
             
-            entity.HasIndex(c => c.UserId)
-                .HasDatabaseName("IX_Comments_UserId");
+            // A member's comments on their profile (#54), newest first: their count (on every profile) and each page are
+            // a seek on the member's own rows, with every column the list filters on, in the list's order (CreatedAt
+            // descending, then Id, the clustered key). Seeks on UserId alone use it too.
+            entity.HasIndex(c => new { c.UserId, c.CreatedAt })
+                .IsDescending(false, true)
+                .IncludeProperties(c => new { c.IsDeleted, c.PostId, c.ParentCommentId, c.ChapterId, c.ParagraphId })
+                .HasDatabaseName("IX_Comments_UserId_CreatedAt");
             
             entity.HasIndex(c => c.CreatedAt)
                 .HasDatabaseName("IX_Comments_CreatedAt");

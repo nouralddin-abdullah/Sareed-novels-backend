@@ -10,7 +10,9 @@ using Application.Users.Queries.GetBlockedUsers;
 using Application.Users.Queries.GetFollowersList;
 using Application.Users.Queries.GetFollowingList;
 using Application.Users.Queries.GetMyProfile;
+using Application.Users.Queries.GetUserComments;
 using Application.Users.Queries.GetUserProfile;
+using Application.Users.Queries.GetUserReviews;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -158,5 +160,28 @@ namespace Sareed_novels_backend.Controllers
             var userDto = await mediator.Send(query);
             return Ok(userDto);
         }
+
+        /// <summary>
+        /// The member's reviews on novels readers can open, newest first (#54, README): pageNumber from 1, pageSize 1
+        /// to 50 (10 by default). Its total is reviewsCount on the profile. 404 UserNotFound as GET {userName} (an old
+        /// user name finds the member too); an empty page when the signed-in viewer and the member blocked each other,
+        /// either way.
+        /// </summary>
+        [HttpGet("{userName}/reviews")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetUserReviews([FromRoute] string userName, [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize, CancellationToken cancellationToken) =>
+            Ok(await mediator.Send(new GetUserReviewsQuery(userName, pageNumber ?? 1, pageSize ?? 10), cancellationToken));
+
+        /// <summary>
+        /// The member's comments and replies on chapters and paragraphs readers can open, newest first (#54, README),
+        /// paged and answered like GET {userName}/reviews. Its total is commentsCount on the profile. Comments on posts
+        /// aren't listed.
+        /// </summary>
+        [HttpGet("{userName}/comments")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetUserComments([FromRoute] string userName, [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize, CancellationToken cancellationToken) =>
+            Ok(await mediator.Send(new GetUserCommentsQuery(userName, pageNumber ?? 1, pageSize ?? 10), cancellationToken));
     }
 }

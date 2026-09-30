@@ -23,9 +23,8 @@ public class GetUserPostsQueryHandler(
 
         // Posts of a user the viewer blocked are left out, and so, for someone they blocked, are the posts of a user
         // whose profile they can't open: an empty page, as for a user who doesn't exist. So every post listed has
-        // authorBlockedByMe false, rightly.
-        if (currentUser != null && currentUser.Id != request.UserId
-            && (await blocksRepository.GetRelationAsync(currentUser.Id, request.UserId, cancellationToken)).Either)
+        // authorBlockedByMe false, rightly. The member's reviews and comments go the same way (#54).
+        if (await Blocks.EitherWayAsync(blocksRepository, currentUser?.Id, request.UserId, cancellationToken))
         {
             return new PagedResult<PostDTO>([], 0, pageSize, pageNumber);
         }
