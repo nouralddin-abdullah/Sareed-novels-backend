@@ -2,6 +2,7 @@ using Application.Novels.DTOS;
 using Application.Services;
 using Domain.Exceptions;
 using Infrastructure.Persistence;
+using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -93,8 +94,8 @@ public class NovelRecommendationService(ApplicationDbContext dbContext, IMemoryC
 
         var genreIds = source.GenreIds;
         var candidates = await dbContext.Novels.AsNoTracking()
-            .Where(n => n.Id != novelId && !n.IsDraft && n.IsEligibleForRanking
-                        && n.Chapters.Any(c => c.Status == Published))
+            .Where(n => n.Id != novelId && n.IsEligibleForRanking)
+            .Readable()
             .Select(n => new
             {
                 n.Id,

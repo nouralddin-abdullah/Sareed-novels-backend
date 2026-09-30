@@ -105,7 +105,8 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         // Only published novels a reader can actually open: not a draft and at least one published chapter.
         var query = dbContext.Novels
         .AsNoTracking()
-        .Where(n => n.IsEligibleForRanking && !n.IsDraft && n.Chapters.Any(c => c.Status == "Published"))
+        .Where(n => n.IsEligibleForRanking)
+        .Readable()
         .Include(n => n.NovelGenres)
             .ThenInclude(ng => ng.Genre)
         .Include(n => n.Owner)
@@ -183,19 +184,26 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         return (userWorkList, totalCount);
     }
 
-    public async Task<(IEnumerable<Novel>, int)> GetUserPublishedWorks(string userId, int pageNumber, int pageSize)
+    public async Task<(IEnumerable<Novel>, int)> GetUserPublishedWorks(string userId, int pageNumber, int pageSize, bool readableOnly)
     {
         var query = dbContext.Novels
             .AsNoTracking()
-            .Where(n => n.AuthorId == userId && !n.IsDraft && !n.IsDeleted)
-            .Include(n => n.NovelGenres)
-                .ThenInclude(ng => ng.Genre)
-            .Include(n => n.Owner);
+            .Where(n => n.AuthorId == userId && !n.IsDraft && !n.IsDeleted);
+        if (readableOnly)
+        {
+            query = query.Readable();
+        }
 
+        // Counted with the same filter as the page, so the total is of what the pages list.
         var totalCount = await query.CountAsync();
 
+        // Ties go by id, so pages never repeat or skip a novel.
         var novels = await query
+            .Include(n => n.NovelGenres)
+                .ThenInclude(ng => ng.Genre)
+            .Include(n => n.Owner)
             .OrderByDescending(n => n.LastUpdatedAt)
+            .ThenBy(n => n.Id)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
