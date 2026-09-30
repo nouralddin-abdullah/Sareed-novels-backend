@@ -15,6 +15,7 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
     private readonly IUserContext _userContext;
     private readonly ICommentLikesRepository _commentLikesRepository;
     private readonly ICommentsRepository _commentsRepository;
+    private readonly IUserBlocksRepository _blocksRepository;
     private readonly IServiceProvider _serviceProvider;
 
     public LikeCommentCommandHandler(
@@ -22,12 +23,14 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
         IUserContext userContext,
         ICommentLikesRepository commentLikesRepository,
         ICommentsRepository commentsRepository,
+        IUserBlocksRepository blocksRepository,
         IServiceProvider serviceProvider)
     {
         _logger = logger;
         _userContext = userContext;
         _commentLikesRepository = commentLikesRepository;
         _commentsRepository = commentsRepository;
+        _blocksRepository = blocksRepository;
         _serviceProvider = serviceProvider;
     }
 
@@ -50,6 +53,10 @@ public class LikeCommentCommandHandler : IRequestHandler<LikeCommentCommand, Ope
                 Message = "لا يمكنك الإعجاب بتعليقك"
             };
         }
+
+        // Nothing is liked between two members who blocked each other, whichever did (403 Blocked, Blocks); unliking
+        // stays open, so a like from before the block can be taken back.
+        await Blocks.EnsureCanLikeAsync(_blocksRepository, currentUser.Id, comment.UserId, cancellationToken);
 
         // Inserts the like and bumps LikesCount in one transaction; a concurrent duplicate is a no-op here.
         if (!await _commentLikesRepository.LikeComment(currentUser.Id, request.CommentId))

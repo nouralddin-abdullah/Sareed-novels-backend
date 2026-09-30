@@ -11,6 +11,13 @@ public class PostDTO
     public int LikesCount { get; set; }
     public int CommentsCount { get; set; }
     public bool IsLikedByCurrentUser { get; set; }
+
+    /// <summary>
+    /// Whether the signed-in viewer blocked the post's author (#52): the post still opens for them, flagged, so they
+    /// can unblock. False for an anonymous viewer and for the author. (A viewer the author blocked gets no post at all:
+    /// 404 PostUnavailable, <see cref="PostBlocks"/>.)
+    /// </summary>
+    public bool AuthorBlockedByMe { get; set; }
 }
 
 public class PostUserDTO

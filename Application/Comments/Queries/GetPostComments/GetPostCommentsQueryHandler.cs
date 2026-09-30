@@ -1,5 +1,6 @@
 using Application.Comments.DTOS;
 using Application.Common;
+using Application.Posts;
 using Application.Users;
 using AutoMapper;
 using Domain.Repositories;
@@ -12,6 +13,8 @@ public class GetPostCommentsQueryHandler(
     ILogger<GetPostCommentsQueryHandler> logger,
     ICommentsRepository commentsRepository,
     ICommentLikesRepository commentLikesRepository,
+    IPostsRepository postsRepository,
+    IUserBlocksRepository blocksRepository,
     IUserContext userContext,
     IMapper mapper) : IRequestHandler<GetPostCommentsQuery, PagedResult<CommentsDTO>>
 {
@@ -21,8 +24,12 @@ public class GetPostCommentsQueryHandler(
             request.PostId, request.PageNumber, request.Sorting);
 
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
-        // Comments by users the viewer blocked are left out.
         var currentUser = userContext.GetCurrentUser();
+        // To someone the post's author blocked, the post is unavailable, and so are its comments (PostBlocks).
+        await PostBlocks.EnsureNotBlockedByAuthorAsync(postsRepository, blocksRepository, request.PostId,
+            currentUser?.Id, cancellationToken);
+
+        // Comments by users the viewer blocked are left out.
         var (comments, totalCount) = await commentsRepository.GetPostComments(
             request.PostId,
             pageNumber,

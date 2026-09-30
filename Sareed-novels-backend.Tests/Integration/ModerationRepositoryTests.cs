@@ -1,3 +1,4 @@
+using System.Reflection;
 using Domain.Constants;
 using Domain.Entities;
 using Domain.Moderation;
@@ -87,6 +88,103 @@ public class ModerationRepositoryTests(SqlServerDatabase database) : IClassFixtu
         var skippedIds = skipped.Select(n => n.Id).ToList();
         Assert.False(await check.PushOutbox.AnyAsync(o => skippedIds.Contains(o.NotificationId)));
         Assert.Equal(2, await check.PushOutbox.CountAsync(o => o.NotificationId == created[0].Id || o.NotificationId == created[2].Id));
+    }
+
+    /// <summary>Every <see cref="NotificationType"/> constant, so a type added later is tested here too.</summary>
+    private static List<string> EveryNotificationType() =>
+        typeof(NotificationType).GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .ToList();
+
+    /// <summary>
+    /// The types only the recipient's block stops (#52): a new chapter of a novel in the reader's library, and the
+    /// payments an author should learn of. Every other type, one added later included, is stopped by a block either
+    /// way.
+    /// </summary>
+    private static readonly string[] StoppedOnlyByTheRecipient =
+        [NotificationType.NewChapterInLibrary, NotificationType.GiftReceived, NotificationType.PrivilegeSubscribed];
+
+    private static Notification OfType(string type, User recipient, User actor) => new()
+    {
+        Id = Guid.NewGuid(),
+        UserId = recipient.Id,
+        Type = type,
+        ActorId = actor.Id,
+        ActorDisplayName = actor.DisplayName,
+        Message = $"{actor.DisplayName}: {type}",
+        ActionUrl = "/notifications",
+        RelatedEntityId = Guid.NewGuid(),
+        RelatedEntityType = "Test",
+        CreatedAt = DateTime.UtcNow
+    };
+
+    [Fact]
+    public async Task A_block_either_way_stops_notifications_between_two_members_on_every_path()
+    {
+        var users = await SeedUsers(6);
+        var (blocker, blocked, blockedRecipient, blockingActor) = (users[0], users[1], users[2], users[3]);
+        var (recipient, actor) = (users[4], users[5]);
+        foreach (var user in new[] { blocker, blockedRecipient, recipient })
+        {
+            await AddDevice(user);
+        }
+        await using (var db = database.CreateContext())
+        {
+            var blocks = new UserBlocksRepository(db, TimeProvider.System);
+            Assert.True(await blocks.BlockAsync(blocker.Id, blocked.Id));
+            Assert.True(await blocks.BlockAsync(blockingActor.Id, blockedRecipient.Id));
+        }
+
+        // Of each type: to a recipient who blocked its actor (never created), from an actor who blocked its recipient
+        // (created only for the types the recipient's block alone stops), and between members who didn't (created).
+        List<(Notification Notification, bool Created)> Cases() => EveryNotificationType().SelectMany(type => new[]
+        {
+            (OfType(type, blocker, blocked), false),
+            (OfType(type, blockedRecipient, blockingActor), StoppedOnlyByTheRecipient.Contains(type)),
+            (OfType(type, recipient, actor), true)
+        }).ToList();
+        var (single, deduplicated, fanOut) = (Cases(), Cases(), Cases());
+
+        await using (var db = database.CreateContext())
+        {
+            var notifications = new NotificationsRepository(db, new PushOutboxSignal());
+            foreach (var (notification, created) in single)
+            {
+                Assert.True(created == await notifications.CreateNotification(notification),
+                    $"CreateNotification: {Describe(notification)}");
+            }
+            foreach (var (notification, created) in deduplicated)
+            {
+                Assert.True(created == await notifications.CreateUnlessUnreadExists(notification),
+                    $"CreateUnlessUnreadExists: {Describe(notification)}");
+            }
+        }
+        // The fan-out, every type in one batch: still one query for the blocks.
+        var log = new CommandLog();
+        await using (var db = database.CreateContext(log))
+        {
+            await new NotificationsRepository(db, new PushOutboxSignal())
+                .CreateNotifications(fanOut.Select(c => c.Notification).ToList());
+        }
+        Assert.Single(log.Commands, command => command.Contains("UserBlocks"));
+
+        await using var check = database.CreateContext();
+        var all = single.Concat(deduplicated).Concat(fanOut).ToList();
+        var ids = all.Select(c => c.Notification.Id).ToList();
+        var saved = (await check.Notifications.Where(n => ids.Contains(n.Id)).Select(n => n.Id).ToListAsync())
+            .ToHashSet();
+        var pushed = (await check.PushOutbox.Where(o => ids.Contains(o.NotificationId)).Select(o => o.NotificationId)
+            .ToListAsync()).ToHashSet();
+        foreach (var (notification, created) in all)
+        {
+            Assert.True(created == saved.Contains(notification.Id), $"saved: {Describe(notification)}");
+            Assert.True(created == pushed.Contains(notification.Id), $"pushed: {Describe(notification)}");
+        }
+
+        string Describe(Notification n) => $"{n.Type} to " + (n.UserId == blocker.Id
+            ? "a recipient who blocked the actor"
+            : n.UserId == blockedRecipient.Id ? "a recipient the actor blocked" : "a recipient without blocks");
     }
 
     [Fact]

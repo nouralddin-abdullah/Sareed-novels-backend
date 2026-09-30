@@ -331,7 +331,7 @@ Both refusals are checked before any payment, so **nothing is charged**:
 | HTTP | `code` | When | `message` |
 |---|---|---|---|
 | 400 | `GiftMessageTooLong` | over the limit | «الرسالة طويلة: الحد الأقصى 200 حرف.» (the configured number) |
-| 403 | `Blocked` | a message, and the novel's author blocked the sender (`IsBlockedAsync(authorId, senderId)`, as comments) | «لا يمكنك إرسال رسالة إلى هذا الكاتب.» |
+| 403 | `Blocked` | a message, and the novel's author blocked the sender (`IsBlockedAsync(authorId, senderId)`; only that way, while comments on posts are refused either way since #52) | «لا يمكنك إرسال رسالة إلى هذا الكاتب.» |
 
 The 400 has the endpoint's other refusals' shape, `{ "success": false, "code", "message" }`; the 403 is `{ "code",
 "message" }`. A gift without a message is sent as before, blocked or not. A suspended member can't send anything (their
@@ -609,7 +609,8 @@ as `GET /api/genre/{slug}/novels` does, instead of an empty list. Blank genre va
 | `DELETE /api/novel/{novelId}/privilege/subscription` | not subscribed (a subscriber is still refused: 400 `SubscriptionCannotBeCancelled`) |
 
 A request that changes the state answers 200 with its result as before, and a refusal 400 with its code
-(`CannotFollowSelf`, `PostNotFound`...). Adding a novel a list already has stays 400 `AlreadyInList`. Concurrent
+(`CannotFollowSelf`, `PostNotFound`...); since #52 a like between two members who blocked each other is 403 `Blocked`
+(below). Adding a novel a list already has stays 400 `AlreadyInList`. Concurrent
 requests (a double tap, a retry) change the state once: the others get the 204, never a 500.
 
 **Counts include blocked members' comments** (a decision, not a bug). A paragraph's `commentsCount` (the reader's
@@ -878,3 +879,57 @@ the author gets what anyone gets.
   `message` «البيانات المرسلة غير صالحة.». It is never a 500.
 - **No token is needed.** A token that doesn't validate (expired, signed out everywhere, or the web's `Bearer undefined`
   when signed out) is answered as signed out: 200, never 401.
+
+### Blocks: a single post, its discussion, likes, comments and notifications (#52)
+
+A block now reaches a single post and its discussion, likes, comments on posts, replies and notifications, as it
+already reached a member's profile, post list and reading lists (#10, #25). Errors are `{ "code", "message" }` with an
+Arabic message: branch on `code`.
+
+**A single post: `GET /api/posts/{postId}`** (signed in or not).
+
+| Viewer | Answer |
+|---|---|
+| the post's author blocked them (both blocking each other included) | 404 `PostUnavailable` «هذا المنشور غير متاح» |
+| they blocked the author, and the author didn't block them | 200, the post with `authorBlockedByMe: true` (so the app can offer to unblock) |
+| the author, anyone else, anonymous | 200, `authorBlockedByMe: false`, as before |
+| anyone, for a deleted post | 404 `PostNotFound` «هذا المنشور لم يعد موجودًا», as before (checked first) |
+
+`authorBlockedByMe` is on every post the API answers: the single post, each item of `GET /api/posts/user/{userId}`
+(always false there: the page is empty, as before, when either of the two blocked the other) and the `post` of
+`POST /api/posts` (false: its author). An API from before #52 leaves it out: read a missing field as false.
+
+**The post's discussion** answers the same 404 `PostUnavailable` to a member the post's author blocked, and only to
+them: `GET /api/comment/post/{postId}`, the replies `GET /api/comment/chapter/comments/{commentId}` of a comment on the
+post, and `GET /api/notifications/comment/{commentId}` for a comment or reply on it. A member who blocked the author
+reads them as before (their lists leave out the author's comments).
+
+**Likes.** `POST /api/posts/{postId}/like`, `POST /api/comment/{commentId}/like` and
+`POST /api/{novelId}/reviews/{reviewId}/like` answer 403 `Blocked` «لا يمكنك التفاعل مع هذا المستخدم.» when the liker
+and the author of the post, comment or review blocked each other, either way, and write nothing: no like, no count, no
+notification. It comes after the not-found answers and `CannotLikeOwnContent`, and before the 204 of a repeated like.
+Taking a like back (`DELETE .../unlike`) is never refused, so a like from before the block can be removed. One's own
+content is as before: an author may like their post, not their comment or review.
+
+**Comments on posts, and replies** (beyond the issue's text, for consistency with the notifications below): refused
+either way, 403 `Blocked`, with a message for each direction.
+
+| Request | The other member blocked you | You blocked them |
+|---|---|---|
+| `POST /api/comment/post/{postId}`: a comment on the post, or a reply under it | «لا يمكنك التعليق على منشورات هذا المستخدم» (as before) | «ألغِ حظر هذا المستخدم أولاً لتتمكن من التعليق على منشوراته» |
+| a reply (`ParentCommentId`) to their comment, on a chapter, a paragraph or a post | «لا يمكنك الرد على تعليقات هذا المستخدم» (as before) | «ألغِ حظر هذا المستخدم أولاً لتتمكن من الرد على تعليقاته» |
+
+Nothing is created. Under a post, the post's author is checked first, then the author of the comment answered. A
+top-level comment on a chapter or a paragraph stays open to everyone, blocked or not: it is the novel's public
+discussion (it just notifies nobody across a block).
+
+**Notifications.** A notification from one member to another isn't created, so not pushed either, when either of them
+blocked the other: `NewFollower`, `CommentOnChapter`, `CommentOnPost`, `ReplyToComment`, `ReviewOnNovel`,
+`LikeOnReview`, `LikeOnComment`, `LikeOnPost`, `ReadingListFollowed`, and any type added later. Three are still
+stopped only when the recipient blocked the actor, as every type was before #52: `NewChapterInLibrary` (a new chapter,
+to every reader who keeps the novel in their library; its actor is the novel) and the payments `GiftReceived` and
+`PrivilegeSubscribed`, which an author learns of even from a member who blocked them. The rule is
+`Domain/Constants/NotificationBlocking.cs`, applied by `NotificationsRepository` on each of its three ways to create
+notifications (one, deduplicated, and the batched fan-out, still one block query per batch); `NotificationBlockingTests`
+fails when a type is added without deciding its rule. Blocking still deletes the notifications the blocked member had
+caused the blocker; those going the other way stay.

@@ -1,5 +1,6 @@
 ﻿using Application.Comments.DTOS;
 using Application.Common;
+using Application.Posts;
 using Application.Users;
 using AutoMapper;
 using Domain.Exceptions;
@@ -9,15 +10,29 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Comments.Queries.GetCommentReplies;
 
-public class GetCommentRepliesQueryHandler(ILogger<GetCommentRepliesQueryHandler> logger, ICommentsRepository commentsRepository, ICommentLikesRepository commentLikesRepository, IUserContext userContext, IMapper mapper) : IRequestHandler<GetCommentRepliesQuery, PagedResult<CommentReplyDTO>>
+public class GetCommentRepliesQueryHandler(
+    ILogger<GetCommentRepliesQueryHandler> logger,
+    ICommentsRepository commentsRepository,
+    ICommentLikesRepository commentLikesRepository,
+    IPostsRepository postsRepository,
+    IUserBlocksRepository blocksRepository,
+    IUserContext userContext,
+    IMapper mapper) : IRequestHandler<GetCommentRepliesQuery, PagedResult<CommentReplyDTO>>
 {
     public async Task<PagedResult<CommentReplyDTO>> Handle(GetCommentRepliesQuery request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Getting replies for comment {ParentCommentId}", request.ParentCommentId);
         var parentComment = await commentsRepository.GetCommentById(request.ParentCommentId) ?? throw new NotFoundException("هذا التعليق لم يعد موجودًا", "ParentCommentNotFound");
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
-        // Replies by users the viewer blocked are left out.
         var currentUser = userContext.GetCurrentUser();
+        // Under a post, the thread is unavailable with the post to someone its author blocked (PostBlocks).
+        if (parentComment.PostId is { } postId)
+        {
+            await PostBlocks.EnsureNotBlockedByAuthorAsync(postsRepository, blocksRepository, postId, currentUser?.Id,
+                cancellationToken);
+        }
+
+        // Replies by users the viewer blocked are left out.
         var (replies, totalCount) = await commentsRepository.GetCommentReplies(request.ParentCommentId, pageNumber, pageSize, request.Sorting, currentUser?.Id);
         var replyDtos = mapper.Map<List<CommentReplyDTO>>(replies);
         if (currentUser != null && replyDtos.Any())
