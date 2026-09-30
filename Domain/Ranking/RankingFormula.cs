@@ -5,7 +5,17 @@ public sealed class NovelSignals
 {
     public required Guid NovelId { get; init; }
     public required int PublishedChapters { get; init; }
+
+    /// <summary>
+    /// When the first of the published chapters came out (<see cref="Domain.Entities.Chapter.PublishedAt"/>, UTC):
+    /// the New lists' window and head start count from it.
+    /// </summary>
     public required DateTime FirstChapterAt { get; init; }
+
+    /// <summary>
+    /// When the newest of the published chapters came out (<see cref="Domain.Entities.Chapter.PublishedAt"/>, UTC):
+    /// Trending's fresh-chapter boost and the tie-break.
+    /// </summary>
     public required DateTime LastChapterAt { get; init; }
 
     /// <summary>Most recent activity time of each distinct reader (signed-in progress or tracked chapter reads).</summary>
