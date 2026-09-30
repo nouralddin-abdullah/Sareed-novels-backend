@@ -83,18 +83,35 @@ public class RankingService(ApplicationDbContext dbContext, TimeProvider timePro
     {
         var since = now.AddDays(-SignalWindowDays);
 
-        var novels = await dbContext.Novels.AsNoTracking()
+        // A novel's first and last chapter times are when its published chapters came out (PublishedAt, #39), not when
+        // they were written: a draft published later counts from its publish date, a chapter published again keeps
+        // its first one, and drafts and unpublished chapters don't count.
+        var candidates = await dbContext.Novels.AsNoTracking()
             .Where(n => !n.IsDraft && n.IsEligibleForRanking)
             .Select(n => new
             {
                 n.Id,
                 n.AuthorId,
                 PublishedChapters = n.Chapters.Count(c => c.Status == Published),
-                FirstChapterAt = n.Chapters.Where(c => c.Status == Published).Min(c => (DateTime?)c.CreatedAt),
-                LastChapterAt = n.Chapters.Where(c => c.Status == Published).Max(c => (DateTime?)c.CreatedAt)
+                UndatedChapters = n.Chapters.Count(c => c.Status == Published && c.PublishedAt == null),
+                FirstChapterAt = n.Chapters.Where(c => c.Status == Published).Min(c => c.PublishedAt),
+                LastChapterAt = n.Chapters.Where(c => c.Status == Published).Max(c => c.PublishedAt)
             })
             .Where(n => n.PublishedChapters > 0)
             .ToListAsync();
+
+        // Every published chapter has a publish date: Chapter.SetStatus stamps it and AddChapterPublishedAt filled in
+        // the older ones. One without can only come from code older than PublishedAt publishing it after that
+        // migration ran (a deploy overlap or a rollback). Its date is unknown, so it isn't guessed: the novel is placed
+        // by its other chapters, or left out while none has a date, and the log says which novels.
+        var undated = candidates.Where(n => n.UndatedChapters > 0).Select(n => n.Id).ToList();
+        if (undated.Count > 0)
+        {
+            logger.LogError(
+                "Novels {NovelIds} have published chapters without a publish date (Chapters.PublishedAt): ranked by their " +
+                "other chapters, or left out when none has one", undated);
+        }
+        var novels = candidates.Where(n => n.FirstChapterAt != null).ToList();
 
         var progress = (await dbContext.UserNovelProgress.AsNoTracking()
                 .Select(p => new { p.NovelId, p.UserId, p.LastReadAt, p.LastReadChapterNumber })

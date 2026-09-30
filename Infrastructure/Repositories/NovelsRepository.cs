@@ -21,10 +21,12 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
                 n.LastUpdatedAt,
                 AuthorUserName = n.Owner.UserName,
                 Genres = n.NovelGenres.OrderBy(ng => ng.GenreId).Select(ng => ng.Genre.Slug).ToList(),
+                // A chapter's page came out when the chapter did (#39): a draft published later, when it was
+                // published, not written; published again, when it first came out.
                 Chapters = n.Chapters
-                    .Where(c => c.Status == "Published")
+                    .Where(c => c.Status == ChapterStatuses.Published)
                     .OrderBy(c => c.ChapterIndex)
-                    .Select(c => new { c.Id, c.CreatedAt })
+                    .Select(c => new { c.Id, c.PublishedAt })
                     .ToList()
             })
             .ToListAsync(cancellationToken);
@@ -35,8 +37,8 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
             .Where(n => n.Chapters.Count > 0)
             .Select(n => new NovelSitemapEntry(
                 n.Slug,
-                new[] { n.LastUpdatedAt, n.Chapters.Max(c => c.CreatedAt) }.Max(),
-                n.Chapters.Select(c => new ChapterSitemapEntry(c.Id, c.CreatedAt)).ToList(),
+                LastModified(n.LastUpdatedAt, n.Chapters.Max(c => c.PublishedAt)),
+                n.Chapters.Select(c => new ChapterSitemapEntry(c.Id, c.PublishedAt)).ToList(),
                 n.Id,
                 n.AuthorUserName,
                 n.Genres,
@@ -44,6 +46,13 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
             .OrderByDescending(n => n.LastModified)
             .ToList();
     }
+
+    /// <summary>
+    /// A novel page's last change: the later of its <see cref="Novel.LastUpdatedAt"/> (a chapter came out) and when its
+    /// newest published chapter came out.
+    /// </summary>
+    private static DateTime LastModified(DateTime lastUpdatedAt, DateTime? newestChapterOut) =>
+        newestChapterOut > lastUpdatedAt ? newestChapterOut.Value : lastUpdatedAt;
 
     /// <summary>
     /// The wiki entries of public novels that are worth indexing (<see cref="WikiPages"/>), by novel. Deleted entries,
@@ -128,9 +137,10 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         var novel = dbContext.Novels.Where(n => n.Id == novelId);
         if (lastUpdatedAt is { } updatedAt)
         {
+            // Forward only, in the same statement: of two chapters coming out at once, the later one stays (#39).
             await novel.ExecuteUpdateAsync(s => s
                 .SetProperty(n => n.ChapterCount, n => n.Chapters.Count(c => c.Status == ChapterStatuses.Published))
-                .SetProperty(n => n.LastUpdatedAt, updatedAt));
+                .SetProperty(n => n.LastUpdatedAt, n => n.LastUpdatedAt > updatedAt ? n.LastUpdatedAt : updatedAt));
         }
         else
         {

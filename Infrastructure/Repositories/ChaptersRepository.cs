@@ -1,4 +1,5 @@
-﻿using Domain.Entities;
+﻿using Domain.Constants;
+using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -149,7 +150,7 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         }
     }
 
-    public async Task<bool> UpdateChapter(Chapter chapter)
+    public async Task<ChapterSave> UpdateChapter(Chapter chapter)
     {
         var entry = dbContext.Chapters.Update(chapter);
         // Comment and view counters move with atomic SQL (comments, a chapter edit's removed paragraphs, view
@@ -158,7 +159,28 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         entry.Property(c => c.CommentsCount).IsModified = false;
         entry.Property(c => c.TotalCommentsCount).IsModified = false;
         entry.Property(c => c.ViewsCount).IsModified = false;
-        var result = await dbContext.SaveChangesAsync();
-        return result > 0;
+        // When the chapter came out is stored below, only while it has none (#39): the copy loaded for this save may
+        // be older than another save that published it, whose date must stay, and only one save can be its first.
+        // (Not modified puts the loaded value back, so the date SetStatus gave it is taken first.)
+        var publishedAt = entry.Property(c => c.PublishedAt);
+        var cameOutAt = chapter.Status == ChapterStatuses.Published ? publishedAt.CurrentValue : null;
+        publishedAt.IsModified = false;
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        var saved = await dbContext.SaveChangesAsync() > 0;
+        var cameOut = saved
+            && cameOutAt is { } at
+            && await dbContext.Chapters
+                .Where(c => c.Id == chapter.Id && c.PublishedAt == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.PublishedAt, at)) > 0;
+        await transaction.CommitAsync();
+
+        if (cameOut)
+        {
+            // Stored: the tracked chapter has it too, as saved.
+            publishedAt.OriginalValue = cameOutAt;
+            publishedAt.CurrentValue = cameOutAt;
+        }
+        return new ChapterSave(saved, cameOut);
     }
 }
