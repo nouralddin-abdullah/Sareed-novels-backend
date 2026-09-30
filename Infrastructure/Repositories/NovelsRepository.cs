@@ -137,9 +137,10 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         var novel = dbContext.Novels.Where(n => n.Id == novelId);
         if (lastUpdatedAt is { } updatedAt)
         {
+            // Forward only, in the same statement: of two chapters coming out at once, the later one stays (#39).
             await novel.ExecuteUpdateAsync(s => s
                 .SetProperty(n => n.ChapterCount, n => n.Chapters.Count(c => c.Status == ChapterStatuses.Published))
-                .SetProperty(n => n.LastUpdatedAt, updatedAt));
+                .SetProperty(n => n.LastUpdatedAt, n => n.LastUpdatedAt > updatedAt ? n.LastUpdatedAt : updatedAt));
         }
         else
         {

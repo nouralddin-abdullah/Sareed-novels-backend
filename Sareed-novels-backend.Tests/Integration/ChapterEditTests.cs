@@ -413,7 +413,7 @@ public class ChapterEditTests(SqlServerDatabase database) : IClassFixture<SqlSer
         }
 
         loaded!.Title = "عنوان جديد";
-        Assert.True(await chapters.UpdateChapter(loaded));
+        Assert.True((await chapters.UpdateChapter(loaded)).Saved);
 
         await using var db = database.CreateContext();
         var chapter = await Chapter(db, world);
@@ -482,7 +482,7 @@ public class ChapterEditTests(SqlServerDatabase database) : IClassFixture<SqlSer
         db.Chapters.Add(new Chapter
         {
             Id = chapterId, NovelId = novel.Id, Title = title, Slug = Slugs.For(chapterId, title), Status = "Published",
-            ChapterIndex = 5, ParagraphsCount = paragraphs.Length, CreatedAt = createdAt
+            ChapterIndex = 5, ParagraphsCount = paragraphs.Length, CreatedAt = createdAt, PublishedAt = createdAt
         });
         var saved = paragraphs.Select((content, i) => new ChapterParagraph
         {

@@ -3,6 +3,7 @@ using Application.Services;
 using Application.Users;
 using Application.Users.Commands.FollowUser;
 using AutoMapper;
+using Domain.Constants;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
@@ -68,10 +69,12 @@ public class CreateChapterCommandHandler(
             throw new InvalidOperationException("Failed to create the chapter");
         }
 
-        await novelsRepository.RefreshChapterCountAsync(novel.Id, lastUpdatedAt: now);
-        
-        // If chapter is Published, recalculate sequences
-        if (chapter.Status == "Published")
+        // Created published, the chapter comes out now: the novel's last update moves to it and readers are told (#39).
+        // A draft doesn't come out, and changes neither, until it is first published (UpdateChapterCommandHandler).
+        var cameOut = chapter.Status == ChapterStatuses.Published;
+        await novelsRepository.RefreshChapterCountAsync(novel.Id, lastUpdatedAt: cameOut ? chapter.PublishedAt : null);
+
+        if (cameOut)
         {
             logger.LogInformation(
                 "New Published chapter {ChapterId} created for novel {NovelId}, triggering sequence recalculation", 
