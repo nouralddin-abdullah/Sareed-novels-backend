@@ -8,15 +8,17 @@ public class CompetitionProfile : Profile
 {
     public CompetitionProfile()
     {
-        // Competition -> CompetitionDto (list view)
+        // Competition -> CompetitionDto (list view). Status and CanJoin are as of the time the map was given (MapAt).
         CreateMap<Competition, CompetitionDto>()
+            .ForMember(dest => dest.Status, opt => opt.MapFrom((src, _, _, context) => src.EffectiveStatus(CompetitionMapping.UtcNow(context))))
             .ForMember(dest => dest.ParticipantCount, opt => opt.MapFrom(src => src.Participants.Count))
-            .ForMember(dest => dest.CanJoin, opt => opt.MapFrom(src => src.CanJoin()));
+            .ForMember(dest => dest.CanJoin, opt => opt.MapFrom((src, _, _, context) => src.CanJoin(CompetitionMapping.UtcNow(context))));
 
         // Competition -> CompetitionDetailDto
         CreateMap<Competition, CompetitionDetailDto>()
+            .ForMember(dest => dest.Status, opt => opt.MapFrom((src, _, _, context) => src.EffectiveStatus(CompetitionMapping.UtcNow(context))))
             .ForMember(dest => dest.ParticipantCount, opt => opt.MapFrom(src => src.Participants.Count))
-            .ForMember(dest => dest.CanJoin, opt => opt.MapFrom(src => src.CanJoin()))
+            .ForMember(dest => dest.CanJoin, opt => opt.MapFrom((src, _, _, context) => src.CanJoin(CompetitionMapping.UtcNow(context))))
             .ForMember(dest => dest.Winners, opt => opt.MapFrom(src => src.Winners));
 
         // CompetitionParticipant -> CompetitionParticipantDto
@@ -50,7 +52,7 @@ public class CompetitionProfile : Profile
         CreateMap<CompetitionParticipant, MyCompetitionParticipationDto>()
             .ForMember(dest => dest.CompetitionName, opt => opt.MapFrom(src => src.Competition.Name))
             .ForMember(dest => dest.CompetitionSlug, opt => opt.MapFrom(src => src.Competition.Slug))
-            .ForMember(dest => dest.CompetitionStatus, opt => opt.MapFrom(src => src.Competition.Status))
+            .ForMember(dest => dest.CompetitionStatus, opt => opt.MapFrom((src, _, _, context) => src.Competition.EffectiveStatus(CompetitionMapping.UtcNow(context))))
             .ForMember(dest => dest.NovelTitle, opt => opt.MapFrom(src => src.Novel.Title))
             .ForMember(dest => dest.NovelSlug, opt => opt.MapFrom(src => src.Novel.Slug))
             .ForMember(dest => dest.NovelCoverImageUrl, opt => opt.MapFrom(src => src.Novel.CoverImageUrl))
@@ -63,4 +65,25 @@ public class CompetitionProfile : Profile
         // User -> AuthorDTO (if not already mapped elsewhere)
         CreateMap<User, AuthorDTO>();
     }
+}
+
+/// <summary>
+/// A competition's status depends on the time (<see cref="Competition.EffectiveStatus"/>), so every map to a DTO that
+/// carries one (a competition, or a participation with its competition) is given that time: one for the whole answer,
+/// the same the handler's query used.
+/// </summary>
+public static class CompetitionMapping
+{
+    /// <summary>Maps <paramref name="source"/> with every competition status and canJoin as at <paramref name="utcNow"/>.</summary>
+    public static TDestination MapAt<TDestination>(this IMapper mapper, object source, DateTime utcNow) =>
+        mapper.Map<TDestination>(source, options => options.State = new StatusTime(utcNow));
+
+    /// <summary>The time the map was given; a map without one is a bug, so it fails instead of guessing.</summary>
+    internal static DateTime UtcNow(ResolutionContext context) =>
+        context.State is StatusTime time
+            ? time.UtcNow
+            : throw new InvalidOperationException(
+                "A competition's status depends on the time: map it with CompetitionMapping.MapAt(source, utcNow).");
+
+    private sealed record StatusTime(DateTime UtcNow);
 }

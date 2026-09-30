@@ -9,10 +9,14 @@ namespace Application.Competitions.Commands.CreateCompetition;
 
 public class CreateCompetitionCommandHandler(
     ICompetitionRepository competitionRepository,
-    IMapper mapper) : IRequestHandler<CreateCompetitionCommand, CompetitionDetailDto>
+    IMapper mapper,
+    TimeProvider time) : IRequestHandler<CreateCompetitionCommand, CompetitionDetailDto>
 {
     public async Task<CompetitionDetailDto> Handle(CreateCompetitionCommand request, CancellationToken cancellationToken)
     {
+        CompetitionRules.EnsureParticipationWindow(request.ParticipationStartDate, request.ParticipationEndDate);
+        var now = time.GetUtcNow().UtcDateTime;
+
         var slug = GenerateSlug(request.Name);
         
         // Ensure unique slug
@@ -41,14 +45,15 @@ public class CreateCompetitionCommandHandler(
             ResultsDate = request.ResultsDate,
             MaxNovelAgeDays = request.MaxNovelAgeDays,
             MinChapters = request.MinChapters,
+            // No override: the dates decide the status (CompetitionSchedule).
             Status = CompetitionStatus.Upcoming,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = now
         };
 
         await competitionRepository.CreateAsync(competition);
 
-        return mapper.Map<CompetitionDetailDto>(competition);
+        return mapper.MapAt<CompetitionDetailDto>(competition, now);
     }
 
     private static string GenerateSlug(string name)

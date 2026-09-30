@@ -10,7 +10,8 @@ namespace Application.Competitions.Queries.GetMyParticipations;
 public class GetMyParticipationsQueryHandler(
     ICompetitionParticipantRepository participantRepository,
     IUserContext userContext,
-    IMapper mapper) : IRequestHandler<GetMyParticipationsQuery, List<MyCompetitionParticipationDto>>
+    IMapper mapper,
+    TimeProvider time) : IRequestHandler<GetMyParticipationsQuery, List<MyCompetitionParticipationDto>>
 {
     public async Task<List<MyCompetitionParticipationDto>> Handle(GetMyParticipationsQuery request, CancellationToken cancellationToken)
     {
@@ -19,6 +20,6 @@ public class GetMyParticipationsQueryHandler(
 
         var participations = await participantRepository.GetByAuthorIdAsync(currentUser.Id);
 
-        return mapper.Map<List<MyCompetitionParticipationDto>>(participations);
+        return mapper.MapAt<List<MyCompetitionParticipationDto>>(participations, time.GetUtcNow().UtcDateTime);
     }
 }

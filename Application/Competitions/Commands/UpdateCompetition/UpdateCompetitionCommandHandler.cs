@@ -8,12 +8,23 @@ namespace Application.Competitions.Commands.UpdateCompetition;
 
 public class UpdateCompetitionCommandHandler(
     ICompetitionRepository competitionRepository,
-    IMapper mapper) : IRequestHandler<UpdateCompetitionCommand, CompetitionDetailDto>
+    IMapper mapper,
+    TimeProvider time) : IRequestHandler<UpdateCompetitionCommand, CompetitionDetailDto>
 {
     public async Task<CompetitionDetailDto> Handle(UpdateCompetitionCommand request, CancellationToken cancellationToken)
     {
+        // Checked before anything is loaded or changed: only the four names are ever stored.
+        var status = request.Status is null ? null : CompetitionRules.ParseStatus(request.Status);
+
         var competition = await competitionRepository.GetByIdWithParticipantsAsync(request.Id)
             ?? throw new NotFoundException("المسابقة غير موجودة", "CompetitionNotFound");
+
+        if (request.ParticipationStartDate.HasValue || request.ParticipationEndDate.HasValue)
+        {
+            CompetitionRules.EnsureParticipationWindow(
+                request.ParticipationStartDate ?? competition.ParticipationStartDate,
+                request.ParticipationEndDate ?? competition.ParticipationEndDate);
+        }
 
         // Update only provided fields
         if (request.Name != null) competition.Name = request.Name;
@@ -29,11 +40,14 @@ public class UpdateCompetitionCommandHandler(
         if (request.ResultsDate.HasValue) competition.ResultsDate = request.ResultsDate.Value;
         if (request.MaxNovelAgeDays.HasValue) competition.MaxNovelAgeDays = request.MaxNovelAgeDays.Value;
         if (request.MinChapters.HasValue) competition.MinChapters = request.MinChapters.Value;
-        if (request.Status != null) competition.Status = request.Status;
+        // The admin's override, one of the four names. It counts only where it is further along than the dates
+        // (CompetitionSchedule); Upcoming overrides nothing.
+        if (status != null) competition.Status = status;
         if (request.IsActive.HasValue) competition.IsActive = request.IsActive.Value;
 
         await competitionRepository.UpdateAsync(competition);
 
-        return mapper.Map<CompetitionDetailDto>(competition);
+        // The status the competition has now, which is what the admin's change amounts to.
+        return mapper.MapAt<CompetitionDetailDto>(competition, time.GetUtcNow().UtcDateTime);
     }
 }

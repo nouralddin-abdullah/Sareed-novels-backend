@@ -15,7 +15,8 @@ public class JoinCompetitionCommandHandler(
     INovelsRepository novelsRepository,
     IChaptersRepository chaptersRepository,
     IUserContext userContext,
-    IMapper mapper) : IRequestHandler<JoinCompetitionCommand, CompetitionParticipantDto>
+    IMapper mapper,
+    TimeProvider time) : IRequestHandler<JoinCompetitionCommand, CompetitionParticipantDto>
 {
     public async Task<CompetitionParticipantDto> Handle(JoinCompetitionCommand request, CancellationToken cancellationToken)
     {
@@ -25,8 +26,9 @@ public class JoinCompetitionCommandHandler(
         var competition = await competitionRepository.GetByIdAsync(request.CompetitionId)
             ?? throw new NotFoundException("المسابقة غير موجودة", "CompetitionNotFound");
 
-        // Check if competition is open for participation
-        if (!competition.CanJoin())
+        // Open for participation now: the dates, or an admin's earlier opening or closing (CompetitionSchedule).
+        var now = time.GetUtcNow().UtcDateTime;
+        if (!competition.CanJoin(now))
         {
             throw new ForbidException("المشاركة في هذه المسابقة غير مفتوحة الآن", "CompetitionClosed");
         }
@@ -51,7 +53,7 @@ public class JoinCompetitionCommandHandler(
         if (competition.MaxNovelAgeDays.HasValue)
         {
             var maxAge = TimeSpan.FromDays(competition.MaxNovelAgeDays.Value);
-            var novelAge = DateTime.UtcNow - novel.CreatedAt;
+            var novelAge = now - novel.CreatedAt;
             if (novelAge > maxAge)
             {
                 throw new ForbidException($"يُشترط للمشاركة ألا يتجاوز عمر الرواية {ArabicCount.DaysObject(competition.MaxNovelAgeDays.Value)}", "NovelTooOld");
@@ -78,7 +80,7 @@ public class JoinCompetitionCommandHandler(
             Id = Guid.NewGuid(),
             CompetitionId = request.CompetitionId,
             NovelId = request.NovelId,
-            JoinedAt = DateTime.UtcNow,
+            JoinedAt = now,
             ViewsAtJoin = novel.TotalViews,
             CurrentPoints = 0,
             ExtraPoints = 0,
