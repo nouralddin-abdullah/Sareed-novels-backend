@@ -13,7 +13,15 @@ public class UserIsProfile
     public string? ProfileBanner { get; set; }
     
     // Counters
+    /// <summary>
+    /// The total of GET /api/User/{userName}/reviews as anyone signed out sees it (#54): the member's reviews on novels
+    /// readers can open.
+    /// </summary>
     public int ReviewsCount { get; set; }
+    /// <summary>
+    /// The total of GET /api/User/{userName}/comments as anyone signed out sees it (#54): the member's comments and
+    /// replies on chapters and paragraphs readers can open. Comments on posts aren't counted (they were before #54).
+    /// </summary>
     public int CommentsCount { get; set; }
     public int LibraryNovelsCount { get; set; }
     

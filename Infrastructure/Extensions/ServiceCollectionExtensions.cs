@@ -81,6 +81,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IReadingListNovelsRepository, ReadingListNovelsRepository>();
         services.AddScoped<IReadingListFollowersRepository, ReadingListFollowersRepository>();
         services.AddScoped<ILibraryRepository, LibraryRepository>();
+        // A member's reviews and comments, and their counts, on their profile (#54).
+        services.AddScoped<IProfileListsRepository, ProfileListsRepository>();
         services.AddScoped<IChapterSequenceService, ChapterSequenceService>();
         services.AddScoped<IPostsRepository, PostsRepository>();
         services.AddScoped<IPostLikesRepository, PostLikesRepository>();

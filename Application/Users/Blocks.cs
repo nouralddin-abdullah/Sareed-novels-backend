@@ -8,7 +8,8 @@ namespace Application.Users;
 /// follow (FollowUserCommandHandler), comment on the other's posts or reply to the other's comments
 /// (CreateCommentCommandHandler), or like the other's posts, comments and reviews. Each is refused with 403
 /// <c>{ "code": "Blocked", "message" }</c> and changes nothing. Taking a like back is never refused, so a like from
-/// before the block can be removed.
+/// before the block can be removed. Neither sees the other's posts, reviews or comments on their profile
+/// (<see cref="EitherWayAsync"/>).
 /// </summary>
 internal static class Blocks
 {
@@ -47,4 +48,14 @@ internal static class Blocks
     public static Task EnsureCanLikeAsync(IUserBlocksRepository blocks, string likerId, string authorId,
         CancellationToken cancellationToken) =>
         EnsureNotBlockedAsync(blocks, likerId, authorId, LikeRefusedMessage, LikeRefusedMessage, cancellationToken);
+
+    /// <summary>
+    /// Whether the signed-in <paramref name="viewerId"/> and <paramref name="memberId"/> blocked each other, either
+    /// way; never for an anonymous viewer (null) or the member themselves. A member's posts, reviews and comments are
+    /// then an empty list for the viewer, not a refusal (GetUserPostsQueryHandler, #54). One query.
+    /// </summary>
+    public static async Task<bool> EitherWayAsync(IUserBlocksRepository blocks, string? viewerId, string memberId,
+        CancellationToken cancellationToken) =>
+        viewerId != null && viewerId != memberId
+        && (await blocks.GetRelationAsync(viewerId, memberId, cancellationToken)).Either;
 }

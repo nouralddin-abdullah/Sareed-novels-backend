@@ -8,13 +8,14 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Users.Queries.GetUserProfile;
 
-public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logger, UserManager<User> userManager, IUserContext userContext,IMapper mapper, IUsersRepository usersRepository, IUserBlocksRepository blocksRepository) : IRequestHandler<GetUserProfileQuery, UserProfile>
+public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logger, UserManager<User> userManager, IUserContext userContext,IMapper mapper, IUsersRepository usersRepository, IUserBlocksRepository blocksRepository, IProfileListsRepository profileLists) : IRequestHandler<GetUserProfileQuery, UserProfile>
 {
     public async Task<UserProfile> Handle(GetUserProfileQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? null;
         // A name the member used before still finds them (old links); the profile carries the current userName, so
-        // clients can move to it. A live user with that name always wins. A deleted account has no profile.
+        // clients can move to it. A live user with that name always wins. A deleted account has no profile. The lists
+        // on the profile find the member the same way (#54).
         var user = await ProfileLookup.FindMemberAsync(userManager, usersRepository, request.UserName, cancellationToken);
         logger.LogInformation("Getting profile for {UserId}", user.Id);
 
@@ -45,12 +46,17 @@ public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logg
             isFollowing = false;
         }
 
+        // What the member's review and comment lists hold as anyone sees them, counted by the lists' own queries (#54).
+        var counts = await profileLists.CountAsync(user.Id, cancellationToken);
+
         // Map to DTO
         var profile = mapper.Map<UserProfile>(user);
         profile.TotalFollowers = totalFollowers;
         profile.TotalFollowing = totalFollowing;
         profile.IsFollowing = isFollowing;
         profile.IsBlockedByMe = blockedByMe;
+        profile.ReviewsCount = counts.Reviews;
+        profile.CommentsCount = counts.Comments;
 
         return profile;
     }

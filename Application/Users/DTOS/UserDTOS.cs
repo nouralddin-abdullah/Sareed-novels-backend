@@ -13,14 +13,20 @@ public class UserDTOS : Profile
         CreateMap<CreateUserCommand, User>();
 
         //Get User Query
+        // reviewsCount and commentsCount are the totals of the member's lists, counted by the profile handlers (#54),
+        // not the stored User.ReviewsCount and User.CommentsCount.
         CreateMap<User, UserIsProfile>()
             .ForMember(dest => dest.TotalFollowers, opt => opt.Ignore())
             .ForMember(dest => dest.TotalFollowing, opt => opt.Ignore())
+            .ForMember(dest => dest.ReviewsCount, opt => opt.Ignore())
+            .ForMember(dest => dest.CommentsCount, opt => opt.Ignore())
             .ForMember(dest => dest.HasPassword, opt => opt.MapFrom(src => src.PasswordHash != null));
 
         CreateMap<User, UserProfile>()
             .ForMember(dest => dest.TotalFollowers, opt => opt.Ignore())
             .ForMember(dest => dest.TotalFollowing, opt => opt.Ignore())
+            .ForMember(dest => dest.ReviewsCount, opt => opt.Ignore())
+            .ForMember(dest => dest.CommentsCount, opt => opt.Ignore())
             .ForMember(dest => dest.IsFollowing, opt => opt.Ignore())
             .ForMember(dest => dest.IsBlockedByMe, opt => opt.Ignore());
 
