@@ -15,12 +15,17 @@ namespace Sareed_novels_backend.Controllers;
 [Authorize]
 public class PostController(IMediator mediator) : ControllerBase
 {
+    /// <summary>
+    /// A new post: Content, Image and NovelId, each optional but not all (#43, README "Posts"). 200 with the post; 400
+    /// <c>{ success: false, code, message }</c> when refused: PostContentRequired, PostContentTooLong, PostImageType,
+    /// PostImageTooLarge (checked in that order), NovelNotFound, UploadFailed.
+    /// </summary>
     [HttpPost]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> CreatePost([FromForm] CreatePostRequest request)
+    public async Task<IActionResult> CreatePost([FromForm] CreatePostRequest request, CancellationToken cancellationToken)
     {
         var command = new CreatePostCommand(request.Content, request.Image, request.NovelId);
-        var result = await mediator.Send(command);
+        var result = await mediator.Send(command, cancellationToken);
         if (!result.Success)
         {
             return BadRequest(result);
