@@ -34,4 +34,16 @@ public class UserProfile
     public bool IsFollowing { get; set; }
     /// <summary>Whether the signed-in viewer blocked this user (so the app can offer to unblock); false when anonymous.</summary>
     public bool IsBlockedByMe { get; set; }
+
+    /// <summary>
+    /// Whether the member hid their review list from this viewer (#61): GET {userName}/reviews refuses it with 403
+    /// ListHidden. Never for the member themselves. <see cref="ReviewsCount"/> still shows the real count.
+    /// </summary>
+    public bool ReviewsHidden { get; set; }
+
+    /// <summary>
+    /// Whether the member hid their comment list from this viewer (#61): GET {userName}/comments refuses it with 403
+    /// ListHidden. Never for the member themselves. <see cref="CommentsCount"/> still shows the real count.
+    /// </summary>
+    public bool CommentsHidden { get; set; }
 }

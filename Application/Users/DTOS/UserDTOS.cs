@@ -20,7 +20,9 @@ public class UserDTOS : Profile
             .ForMember(dest => dest.TotalFollowing, opt => opt.Ignore())
             .ForMember(dest => dest.ReviewsCount, opt => opt.Ignore())
             .ForMember(dest => dest.CommentsCount, opt => opt.Ignore())
-            .ForMember(dest => dest.HasPassword, opt => opt.MapFrom(src => src.PasswordHash != null));
+            .ForMember(dest => dest.HasPassword, opt => opt.MapFrom(src => src.PasswordHash != null))
+            .ForMember(dest => dest.ReviewsVisibility, opt => opt.MapFrom(src => src.ReviewsVisibility.ToString()))
+            .ForMember(dest => dest.CommentsVisibility, opt => opt.MapFrom(src => src.CommentsVisibility.ToString()));
 
         CreateMap<User, UserProfile>()
             .ForMember(dest => dest.TotalFollowers, opt => opt.Ignore())
@@ -28,7 +30,10 @@ public class UserDTOS : Profile
             .ForMember(dest => dest.ReviewsCount, opt => opt.Ignore())
             .ForMember(dest => dest.CommentsCount, opt => opt.Ignore())
             .ForMember(dest => dest.IsFollowing, opt => opt.Ignore())
-            .ForMember(dest => dest.IsBlockedByMe, opt => opt.Ignore());
+            .ForMember(dest => dest.IsBlockedByMe, opt => opt.Ignore())
+            // Hidden from the viewer (#61), set by the profile handler.
+            .ForMember(dest => dest.ReviewsHidden, opt => opt.Ignore())
+            .ForMember(dest => dest.CommentsHidden, opt => opt.Ignore());
 
         CreateMap<Follow, FollowerDto>()
             .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.Follower.Id))

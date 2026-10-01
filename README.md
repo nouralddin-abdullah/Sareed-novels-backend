@@ -1070,8 +1070,9 @@ Two public lists (signed in or not) behind `reviewsCount` and `commentsCount` on
   name they used before (an old link after a rename). A deleted account, by its old names or its `deleted-...` name,
   and a name nobody has, are 404 `UserNotFound` «المستخدم غير موجود».
 - **Blocks.** When the signed-in viewer and the member blocked each other, either way, both lists are an empty page
-  (`totalItemsCount` 0), as the member's posts (`GET /api/posts/user/{userId}`) are; never a 403. Everyone else, signed
-  out included, and the member themselves, see the lists in full.
+  (`totalItemsCount` 0), as the member's posts (`GET /api/posts/user/{userId}`) are; never a 403 for the block itself.
+  Everyone else, signed out included, and the member themselves, see the lists in full, unless the member hid one
+  (#61, below: 403 `ListHidden`, which comes before the block rule).
 - **Likes.** `isLikedByCurrentUser` is the signed-in viewer's like, false when signed out. Everything else in an item
   is the same for everyone.
 
@@ -1148,3 +1149,56 @@ once per comment.
 **User names.** `followers-list` and `following-list` are reserved like `blocked` and `my-profile` (sign-up and
 update-me refuse them, in any letter case): `GET /api/User/followers-list/reviews` is the followers route, so a member
 with that name could never have their lists opened.
+
+### Privacy: hiding a member's reviews or comments list (#61)
+
+Each member chooses, for each of their two lists (#54), who may browse it: `Everyone` (the default, and how the lists
+were before) or `OnlyMe`. There is no "followers only", on purpose: anyone can follow anyone without approval, so it
+would protect nothing. The setting hides the lists on the profile, not the content: each review stays under its novel
+and each comment under its chapter or paragraph, as before, for everyone.
+
+**Reading and changing the settings** (signed in; 401 otherwise), as `GET/PATCH /api/notifications/preferences` work:
+
+| Request | Answer |
+|---|---|
+| `GET /api/User/me/privacy` | `{ "reviews": "Everyone", "comments": "OnlyMe" }` |
+| `PATCH /api/User/me/privacy` with `{ "reviews"?, "comments"? }` | the settings after the change, as `GET` answers them |
+
+- A value is `Everyone` or `OnlyMe` in any letter case (`"onlyme"` works); it is stored and answered as `Everyone` or
+  `OnlyMe`. A field left out, or `null`, keeps its setting; `{}` or an empty body changes nothing and answers the
+  settings.
+- Any other value is 400 `ValidationFailed`, and nothing is saved, not even a valid value sent with it: another text
+  (an unknown name, `""`, `"1"`) has its Arabic message under `errors.Reviews` or `errors.Comments` and in `message`;
+  a value that isn't text (a number, a boolean) is refused while the body is read, under `errors["$.reviews"]` (or
+  `$.comments`).
+- `GET /api/User/my-profile` (and so update-me's `profile`) carries the same values as `reviewsVisibility` and
+  `commentsVisibility`.
+
+**What everyone else gets** (anyone but the member: signed in or not, admins included, on these public routes;
+moderation and admin tools are unchanged):
+
+- **The lists.** A hidden `GET /api/User/{userName}/reviews` (or `/comments`) is 403
+  `{ "code": "ListHidden", "message": "اختار صاحب الحساب إخفاء مراجعاته" }` (for comments
+  «اختار صاحب الحساب إخفاء تعليقاته»). The answers come in this order: 404 `UserNotFound` (a name nobody has, or a
+  deleted account), then 403 `ListHidden`, then the block rule (#54: an empty page). So someone in a block with the
+  member, either way, gets the 403 for a hidden list and the empty page for the other one. An old user name finds the
+  member as before, and the list is hidden all the same.
+- **The profile.** `GET /api/User/{userName}` carries `reviewsHidden` and `commentsHidden`: whether that list is hidden
+  from this viewer, so the app can show the list as hidden instead of opening it. Always false for the member
+  themselves. A client that doesn't read them gets the 403 when it opens the list; missing fields read as "not
+  hidden".
+- **The counts stay** (the owner's decision, 2026-10-01): `reviewsCount` and `commentsCount` keep their real values for
+  everyone, as social sites show a friend count while the list itself is private. They are still the lists' totals as
+  the lists would be shown to anyone (#54).
+- The member always sees their own lists in full.
+
+**Storage.** Two columns on the user, `ReviewsVisibility` and `CommentsVisibility` (text, `Everyone` by default; the
+migration `AddProfileListVisibility` gives every existing member `Everyone`). A change is one UPDATE of those two
+columns and a new concurrency stamp, never a save of the whole user row, so a change made at the same moment elsewhere
+(a counter, a suspension) is kept, and an update-me that read the account before the change fails (400
+`ConcurrencyFailure`, try again) instead of writing the old settings back. The lists and the profile read the setting
+with the member they already load, so they cost no extra query.
+
+**Routes.** No user name had to be reserved for `me/privacy`: it matches no path of the `{userName}` routes (their
+second segment is `reviews` or `comments`, and `GET /api/User/{userName}` has one segment), and `me` is shorter than
+the 3 characters a user name needs anyway.

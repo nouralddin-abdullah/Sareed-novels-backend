@@ -1,4 +1,5 @@
 ﻿using Domain.Entities;
+using Domain.Profiles;
 using Domain.Search;
 using Infrastructure.Push;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -141,6 +142,18 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                   .HasMaxLength(SearchText.TitleMaxLength)
                   .HasDefaultValue(string.Empty);
             entity.HasIndex(u => u.SearchName);
+
+            // Who may browse the member's lists (#61), by name like the moderation enums. Everyone by default: the
+            // accounts from before the columns, and inserts that leave them to the database (EF does for Everyone,
+            // the CLR default and so the sentinel), get it.
+            entity.Property(u => u.ReviewsVisibility)
+                  .HasConversion<string>()
+                  .HasMaxLength(20)
+                  .HasDefaultValue(ListVisibility.Everyone);
+            entity.Property(u => u.CommentsVisibility)
+                  .HasConversion<string>()
+                  .HasMaxLength(20)
+                  .HasDefaultValue(ListVisibility.Everyone);
         });
 
         modelBuilder.Entity<UserNameChange>(entity =>
