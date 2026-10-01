@@ -1,3 +1,5 @@
+using Application.Comments;
+using Application.Comments.DTOS;
 using Application.Reports;
 using Application.Users.DTOS;
 using Domain.Profiles;
@@ -24,7 +26,11 @@ internal static class ProfileListMapping
         Novel = review.Novel.ToDto()
     };
 
-    public static ProfileCommentDTO ToDto(this ProfileComment comment, bool isLikedByViewer) => new()
+    /// <summary>
+    /// The comment as listed. Its paragraph is quoted only when <paramref name="viewerReadsChapter"/>: the reader would
+    /// show its chapter's text to the viewer (Chapters.ChapterAccess).
+    /// </summary>
+    public static ProfileCommentDTO ToDto(this ProfileComment comment, bool isLikedByViewer, bool viewerReadsChapter) => new()
     {
         Id = comment.Id,
         Content = comment.Content,
@@ -35,9 +41,24 @@ internal static class ProfileListMapping
         UpdatedAt = Utc.Of(comment.UpdatedAt),
         IsReply = comment.ParentCommentId != null,
         ParentCommentId = comment.ParentCommentId,
+        ParentComment = comment.ParentComment?.ToDto(),
         Novel = comment.Novel.ToDto(),
         Chapter = new ProfileChapterDTO { Id = comment.Chapter.Id, Title = comment.Chapter.Title, Number = comment.Chapter.Number },
-        ParagraphId = comment.ParagraphId
+        ParagraphId = comment.Paragraph?.Id,
+        ParagraphExcerpt = comment.Paragraph is { } paragraph && viewerReadsChapter ? ParagraphExcerpt.Of(paragraph.Content) : null
+    };
+
+    private static ProfileParentCommentDTO ToDto(this ProfileParentComment parent) => new()
+    {
+        Id = parent.Id,
+        Content = parent.Content,
+        User = new CommentUserDTO
+        {
+            Id = parent.User.Id,
+            UserName = parent.User.UserName,
+            DisplayName = parent.User.DisplayName,
+            ProfilePhoto = parent.User.ProfilePhoto
+        }
     };
 
     private static ProfileNovelDTO ToDto(this ProfileNovel novel) => new()
