@@ -1,3 +1,4 @@
+using Application.Chapters;
 using Application.Comments;
 using Application.Common;
 using Application.Notifications.DTOs;
@@ -64,9 +65,9 @@ public class GetCommentQueryHandler(
             context.ParagraphId = paragraph.Id;
             context.ParagraphOrderIndex = paragraph.OrderIndex;
             // The excerpt is chapter text, so only for someone the reader would show this chapter to.
-            if (await CanReadChapter(novel, chapter, currentUser))
+            if (await ChapterAccess.ShowsTextAsync(privilegeService, novel, chapter, currentUser?.Id))
             {
-                context.ParagraphExcerpt = PlainText.Excerpt(paragraph.Content, ParagraphExcerptLength);
+                context.ParagraphExcerpt = ParagraphExcerpt.Of(paragraph.Content);
             }
         }
         else if (comment.ChapterId.HasValue)
@@ -127,8 +128,6 @@ public class GetCommentQueryHandler(
         };
     }
 
-    private const int ParagraphExcerptLength = 140;
-
     private async Task<(Chapter Chapter, Novel Novel)> SetChapter(CommentLocationDto context, Guid chapterId)
     {
         var chapter = await chaptersRepository.GetChapterById(chapterId)
@@ -145,21 +144,5 @@ public class GetCommentQueryHandler(
         context.NovelTitle = novel.Title;
         context.TotalComments = chapter.TotalCommentsCount;
         return (chapter, novel);
-    }
-
-    /// <summary>
-    /// Whether the chapter reader (GetChapterReaderHandler) would show this chapter's text to the caller: its author
-    /// always; anyone else only a published chapter of a published novel that the privilege system doesn't lock for them.
-    /// </summary>
-    private async Task<bool> CanReadChapter(Novel novel, Chapter chapter, CurrentUser? currentUser)
-    {
-        if (currentUser != null && novel.AuthorId == currentUser.Id)
-        {
-            return true;
-        }
-
-        return !novel.IsDraft
-            && chapter.Status == "Published"
-            && !await privilegeService.IsChapterLockedAsync(chapter.Id, currentUser?.Id);
     }
 }

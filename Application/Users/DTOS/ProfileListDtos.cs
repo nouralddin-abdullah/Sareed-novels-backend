@@ -1,3 +1,5 @@
+using Application.Comments.DTOS;
+
 namespace Application.Users.DTOS;
 
 // The items of a member's review and comment lists (GET /api/User/{userName}/reviews and /comments, #54). Field names
@@ -43,11 +45,35 @@ public class ProfileCommentDTO
     /// <summary>Whether it answers another comment: <see cref="ParentCommentId"/>, in whose thread it is.</summary>
     public bool IsReply { get; set; }
     public Guid? ParentCommentId { get; set; }
+    /// <summary>
+    /// For a reply, the comment it answers (#60); null for a top-level comment, and for a reply to someone the
+    /// signed-in viewer blocked (the comment lists leave that comment out for them; <see cref="ParentCommentId"/>
+    /// stays).
+    /// </summary>
+    public ProfileParentCommentDTO? ParentComment { get; set; }
     public ProfileNovelDTO Novel { get; set; } = default!;
     /// <summary>The chapter it was written on; for a paragraph comment, the paragraph's chapter.</summary>
     public ProfileChapterDTO Chapter { get; set; } = default!;
     /// <summary>The paragraph it was written on; null for a comment on the chapter itself.</summary>
     public Guid? ParagraphId { get; set; }
+    /// <summary>
+    /// The start of that paragraph as plain text, at most 140 characters, as the comment context gives it (#60); null
+    /// without a paragraph, for a paragraph without text, and when the viewer may not read the chapter (early access
+    /// locks it for them).
+    /// </summary>
+    public string? ParagraphExcerpt { get; set; }
+}
+
+/// <summary>The comment a listed reply answers (#60).</summary>
+public class ProfileParentCommentDTO
+{
+    public Guid Id { get; set; }
+    /// <summary>Its full text (the apps shorten it).</summary>
+    public string Content { get; set; } = default!;
+    /// <summary>
+    /// Its author, as the comment lists show a comment's (their names now; a deleted account as «مستخدم محذوف»).
+    /// </summary>
+    public CommentUserDTO User { get; set; } = default!;
 }
 
 /// <summary>The novel a listed review or comment is on.</summary>

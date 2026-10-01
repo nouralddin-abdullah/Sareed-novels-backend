@@ -15,7 +15,7 @@ namespace Sareed_novels_backend.Tests.Integration;
 /// my-profile), which are these lists' totals as anyone signed out sees them.
 /// </summary>
 [Collection(ReaderApiCollection.Name)]
-public class ProfileListsHttpTests(SardApiFactory api)
+public partial class ProfileListsHttpTests(SardApiFactory api)
 {
     private static string ReviewsOf(string userName, string query = "") => $"/api/User/{Uri.EscapeDataString(userName)}/reviews{query}";
 
@@ -390,7 +390,7 @@ public class ProfileListsHttpTests(SardApiFactory api)
         Assert.Equal([reply, onParagraph, onChapter], comments.Ids());
         var answer = Item(comments, reply);
         Assert.Equal(["id", "content", "attachedImageUrl", "likesCount", "isLikedByCurrentUser", "createdAt", "updatedAt",
-            "isReply", "parentCommentId", "novel", "chapter", "paragraphId"], Names(answer));
+            "isReply", "parentCommentId", "parentComment", "novel", "chapter", "paragraphId", "paragraphExcerpt"], Names(answer));
         Assert.Equal("رد على الرأي", answer.GetProperty("content").GetString());
         Assert.Equal(JsonValueKind.Null, answer.GetProperty("attachedImageUrl").ValueKind);
         Assert.Equal(1, answer.GetProperty("likesCount").GetInt32());
@@ -399,6 +399,13 @@ public class ProfileListsHttpTests(SardApiFactory api)
         Assert.Equal(JsonValueKind.Null, answer.GetProperty("updatedAt").ValueKind);
         Assert.True(answer.GetProperty("isReply").GetBoolean());
         Assert.Equal(thread, answer.GetProperty("parentCommentId").GetGuid());
+        // What it answers (#60): the other member's comment, by them.
+        var answered = answer.GetProperty("parentComment");
+        Assert.Equal(["id", "content", "user"], Names(answered));
+        Assert.Equal(thread, answered.GetProperty("id").GetGuid());
+        Assert.Equal("رأي", answered.GetProperty("content").GetString());
+        Assert.Equal(["id", "userName", "displayName", "profilePhoto"], Names(answered.GetProperty("user")));
+        Assert.Equal(other.Id, answered.GetProperty("user").GetProperty("id").GetString());
         Assert.Equal(["id", "slug", "title", "coverImageUrl"], Names(answer.GetProperty("novel")));
         Assert.Equal(novel.Id, answer.GetProperty("novel").GetProperty("id").GetGuid());
         Assert.Equal(novel.Slug, answer.GetProperty("novel").GetProperty("slug").GetString());
@@ -410,10 +417,13 @@ public class ProfileListsHttpTests(SardApiFactory api)
         Assert.Equal(third.Title, answeredIn.GetProperty("title").GetString());
         Assert.Equal(2, answeredIn.GetProperty("number").GetInt32());
         Assert.Equal(paragraph.Id, answer.GetProperty("paragraphId").GetGuid());
+        Assert.Equal("فقرة", answer.GetProperty("paragraphExcerpt").GetString());
 
         var onParagraphItem = Item(comments, onParagraph);
         Assert.False(onParagraphItem.GetProperty("isReply").GetBoolean());
         Assert.Equal(JsonValueKind.Null, onParagraphItem.GetProperty("parentCommentId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, onParagraphItem.GetProperty("parentComment").ValueKind);
+        Assert.Equal("فقرة", onParagraphItem.GetProperty("paragraphExcerpt").GetString());
         Assert.False(onParagraphItem.GetProperty("isLikedByCurrentUser").GetBoolean());
         Assert.Equal(paragraph.Id, onParagraphItem.GetProperty("paragraphId").GetGuid());
         Assert.Equal(third.Id, onParagraphItem.GetProperty("chapter").GetProperty("id").GetGuid());
@@ -421,6 +431,8 @@ public class ProfileListsHttpTests(SardApiFactory api)
         var onChapterItem = Item(comments, onChapter);
         Assert.StartsWith("https://files.test/comment-images/", onChapterItem.GetProperty("attachedImageUrl").GetString());
         Assert.Equal(JsonValueKind.Null, onChapterItem.GetProperty("paragraphId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, onChapterItem.GetProperty("paragraphExcerpt").ValueKind);
+        Assert.Equal(JsonValueKind.Null, onChapterItem.GetProperty("parentComment").ValueKind);
         Assert.Equal(first.Id, onChapterItem.GetProperty("chapter").GetProperty("id").GetGuid());
         Assert.Equal(1, onChapterItem.GetProperty("chapter").GetProperty("number").GetInt32());
 

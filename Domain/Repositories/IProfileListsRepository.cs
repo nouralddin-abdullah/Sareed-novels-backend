@@ -21,8 +21,13 @@ public interface IProfileListsRepository
     Task<(IReadOnlyList<ProfileReview> Items, int TotalCount)> GetReviewsAsync(string userId, int pageNumber, int pageSize,
         CancellationToken cancellationToken = default);
 
-    Task<(IReadOnlyList<ProfileComment> Items, int TotalCount)> GetCommentsAsync(string userId, int pageNumber, int pageSize,
-        CancellationToken cancellationToken = default);
+    /// <summary>
+    /// A page of the member's comments, read for <paramref name="viewerId"/> (null when signed out): a reply comes with
+    /// the comment it answers (#60), unless the viewer blocked that comment's author, as the comment lists leave such
+    /// comments out for them; the reply itself is listed either way, so the total is the same for everyone.
+    /// </summary>
+    Task<(IReadOnlyList<ProfileComment> Items, int TotalCount)> GetCommentsAsync(string userId, string? viewerId,
+        int pageNumber, int pageSize, CancellationToken cancellationToken = default);
 
     /// <summary>The totals of <see cref="GetReviewsAsync"/> and <see cref="GetCommentsAsync"/>.</summary>
     Task<ProfileCounts> CountAsync(string userId, CancellationToken cancellationToken = default);
