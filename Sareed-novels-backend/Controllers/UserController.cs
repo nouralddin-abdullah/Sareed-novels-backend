@@ -176,7 +176,8 @@ namespace Sareed_novels_backend.Controllers
         /// <summary>
         /// The member's comments and replies on chapters and paragraphs readers can open, newest first (#54, README),
         /// paged and answered like GET {userName}/reviews. Its total is commentsCount on the profile. Comments on posts
-        /// aren't listed.
+        /// aren't listed. A reply carries the comment it answers, and a paragraph comment the start of its paragraph
+        /// when the viewer may read the chapter (#60).
         /// </summary>
         [HttpGet("{userName}/comments")]
         [AllowAnonymous]

@@ -1107,11 +1107,24 @@ anywhere, so it stays listed. A chapter locked for early access is still publish
 | `likesCount`, `isLikedByCurrentUser` | as in the comment lists |
 | `createdAt`, `updatedAt` | UTC with "Z"; `updatedAt` is null (comments can't be edited yet) |
 | `isReply`, `parentCommentId` | whether it answers another comment, and which: the thread it is in |
+| `parentComment` | for a reply, the comment it answers (#60): `{ id, content, user: { id, userName, displayName, profilePhoto } }`, its full text (the apps shorten it) and its author as the comment lists show authors, with the names they have now. Null for a top-level comment, and for a reply to someone the signed-in viewer blocked (see below) |
 | `novel` | `{ id, slug, title, coverImageUrl }` |
 | `chapter` | `{ id, title, number }`: the chapter it was written on, for a paragraph comment the paragraph's; `number` is the chapter's number as readers see it, its position among the novel's published chapters from 1 (as the library's `lastReadChapterNumber`), which changes when chapters before it are published, unpublished, deleted or reordered |
-| `paragraphId` | the paragraph it was written on, or null for a comment on the chapter itself |
+| `paragraphId` | the paragraph it was written on, or null for a comment on the chapter itself. A reply in a paragraph's thread is on that paragraph too |
+| `paragraphExcerpt` | the start of that paragraph as plain text, at most 140 characters (a longer paragraph is cut, on a word where it can, and ends in "…"), exactly as the comment context gives it (`GET /api/notifications/comment/{id}`, #60). Null when `paragraphId` is null, when the paragraph has no text (only a picture, or a blank line), and when the reader wouldn't show the chapter to the viewer: a chapter in early access, to anyone but the novel's author and its subscribers. The comment is listed either way |
 
 The website opens a chapter at `/novel/{novel.slug}/chapter/{chapter.id}`.
+
+**What a reply answers (#60).** `parentComment` is always there for a reply but in one case: the signed-in viewer
+blocked the parent's author. The comment lists leave a blocked member's comments out for the one who blocked them
+(not the other way round), so here the reply stays listed, with `isReply` and `parentCommentId`, and
+`parentComment` is null; the list's total stays the profile's `commentsCount`. The parent's author shows with their
+names as they are now (a rename shows at once); a parent whose author deleted their account shows as the comment
+lists show it, `{ userName: "deleted-...", displayName: "مستخدم محذوف", profilePhoto: null }`, with its text. Replies
+whose parent was deleted aren't listed at all (above). With `parentComment`, `parentCommentId` and
+`chapter`/`paragraphId`, an app can say what a reply answers and open its thread (the replies are
+`GET /api/comment/chapter/comments/{parentCommentId}`) without reading the comment context first; the context still
+gives the page of the thread that holds the reply.
 
 **The counts.** `reviewsCount` and `commentsCount` on `GET /api/User/{userName}` and `GET /api/User/my-profile` (and so
 in update-me's `profile`) are the totals of these two lists as anyone signed out sees them, counted by the same
@@ -1127,7 +1140,10 @@ kept up to date but are no longer shown. So:
 **Performance.** Each profile counts both lists: the reviews on the (ReviewerId, NovelId) index, and the comments on
 `IX_Comments_UserId_CreatedAt`, (UserId, CreatedAt descending) with every column the comment list filters on, which
 the migration `AddCreatedAtToCommentsUserIndex` puts in place of `IX_Comments_UserId`. Both read the member's own
-rows, and a page of comments reads them in order.
+rows, and a page of comments reads them in order. A page of comments is its total and one query for its items, which
+also reads each reply's parent and its author and each paragraph's text, by primary key; whether the viewer may read
+a chapter is decided once for each chapter on the page that has a paragraph comment (the early-access check), never
+once per comment.
 
 **User names.** `followers-list` and `following-list` are reserved like `blocked` and `my-profile` (sign-up and
 update-me refuse them, in any letter case): `GET /api/User/followers-list/reviews` is the followers route, so a member

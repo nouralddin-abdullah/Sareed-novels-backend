@@ -13,7 +13,9 @@ namespace Infrastructure.Repositories;
 /// from them, and so are the profile's counts. Both start from the member's own rows: their reviews in the
 /// (ReviewerId, NovelId) index, their comments in IX_Comments_UserId_CreatedAt, which holds every column the comment
 /// list filters on, in its order. The places they were written are found by primary key, and whether a novel has a
-/// published chapter on the chapters' (NovelId, Status) index.
+/// published chapter on the chapters' (NovelId, Status) index. A page is its total and one query for its items, which
+/// also reads what each item shows besides its own row (a reply's parent and its author, a paragraph's text), by
+/// primary key, so it is the same two queries however many items it has.
 /// </remarks>
 internal sealed class ProfileListsRepository(ApplicationDbContext db) : IProfileListsRepository
 {
@@ -39,36 +41,51 @@ internal sealed class ProfileListsRepository(ApplicationDbContext db) : IProfile
                 x.Review.LikeCount,
                 x.Review.CreatedAt,
                 x.Review.UpdatedAt,
-                new ProfileNovel(x.Novel.Id, x.Novel.Slug, x.Novel.Title, x.Novel.CoverImageUrl)))
+                new ProfileNovel(x.Novel.Id, x.Novel.Slug, x.Novel.Title, x.Novel.CoverImageUrl, x.Novel.AuthorId)))
             .ToListAsync(cancellationToken);
         return (items, totalCount);
     }
 
-    public async Task<(IReadOnlyList<ProfileComment> Items, int TotalCount)> GetCommentsAsync(string userId, int pageNumber,
-        int pageSize, CancellationToken cancellationToken = default)
+    public async Task<(IReadOnlyList<ProfileComment> Items, int TotalCount)> GetCommentsAsync(string userId,
+        string? viewerId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
     {
         var listed = Comments(userId);
         var totalCount = await listed.CountAsync(cancellationToken);
-        var items = await listed
+        var page = listed
             .OrderByDescending(x => x.Comment.CreatedAt)
             .ThenBy(x => x.Comment.Id)
             .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .Select(x => new ProfileComment(
-                x.Comment.Id,
-                x.Comment.Content,
-                x.Comment.AttachedImageUrl,
-                x.Comment.LikesCount,
-                x.Comment.CreatedAt,
-                x.Comment.UpdatedAt,
-                x.Comment.ParentCommentId,
-                new ProfileNovel(x.Novel.Id, x.Novel.Slug, x.Novel.Title, x.Novel.CoverImageUrl),
-                // Its number among the published chapters, in the reader's order (ChapterIndex).
-                new ProfileChapter(x.Chapter.Id, x.Chapter.Title, db.Chapters.Count(other =>
-                    other.NovelId == x.Chapter.NovelId
-                    && other.Status == ChapterStatuses.Published
-                    && other.ChapterIndex < x.Chapter.ChapterIndex) + 1),
-                x.Comment.ParagraphId))
+            .Take(pageSize);
+        // Joined to the page's rows, by primary key: the comment a reply answers, if the viewer's comment lists show it
+        // (BlockFilters: not by someone they blocked), and a paragraph comment's paragraph.
+        var items = await (
+                from x in page
+                join parent in db.Comments.VisibleTo(db, viewerId) on x.Comment.ParentCommentId equals (Guid?)parent.Id
+                    into parents
+                from parent in parents.DefaultIfEmpty()
+                join paragraph in db.ChapterParagraphs on x.Comment.ParagraphId equals (Guid?)paragraph.Id into paragraphs
+                from paragraph in paragraphs.DefaultIfEmpty()
+                orderby x.Comment.CreatedAt descending, x.Comment.Id
+                select new ProfileComment(
+                    x.Comment.Id,
+                    x.Comment.Content,
+                    x.Comment.AttachedImageUrl,
+                    x.Comment.LikesCount,
+                    x.Comment.CreatedAt,
+                    x.Comment.UpdatedAt,
+                    x.Comment.ParentCommentId,
+                    // Its author's names as they are now (a deleted account as it is kept, anonymized).
+                    parent == null
+                        ? null
+                        : new ProfileParentComment(parent.Id, parent.Content, new ProfileUser(
+                            parent.User.Id, parent.User.UserName!, parent.User.DisplayName, parent.User.ProfilePhoto)),
+                    new ProfileNovel(x.Novel.Id, x.Novel.Slug, x.Novel.Title, x.Novel.CoverImageUrl, x.Novel.AuthorId),
+                    // Its number among the published chapters, in the reader's order (ChapterIndex).
+                    new ProfileChapter(x.Chapter.Id, x.Chapter.Title, db.Chapters.Count(other =>
+                        other.NovelId == x.Chapter.NovelId
+                        && other.Status == ChapterStatuses.Published
+                        && other.ChapterIndex < x.Chapter.ChapterIndex) + 1),
+                    paragraph == null ? null : new ProfileParagraph(paragraph.Id, paragraph.Content)))
             .ToListAsync(cancellationToken);
         return (items, totalCount);
     }
