@@ -39,4 +39,10 @@ public class UserIsProfile
     /// account: with the password, or with Google.
     /// </summary>
     public bool HasPassword { get; set; }
+
+    /// <summary>Who may browse the member's review list (#61): "Everyone" or "OnlyMe" (PATCH /api/User/me/privacy).</summary>
+    public string ReviewsVisibility { get; set; } = default!;
+
+    /// <summary>Who may browse the member's comment list (#61): "Everyone" or "OnlyMe" (PATCH /api/User/me/privacy).</summary>
+    public string CommentsVisibility { get; set; } = default!;
 }

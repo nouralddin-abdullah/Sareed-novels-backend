@@ -27,8 +27,11 @@ public class GetUserCommentsQueryHandler(
         // The member the profile shows, or its 404.
         var member = await ProfileLookup.FindMemberAsync(userManager, usersRepository, request.UserName, cancellationToken);
 
-        // As the member's posts: empty, not refused, when the viewer and the member blocked each other.
+        // Refused to anyone but the member when they hid it (#61), before the block rule.
         var viewer = userContext.GetCurrentUser();
+        HiddenLists.EnsureCommentsShownTo(member, viewer?.Id);
+
+        // As the member's posts: empty, not refused, when the viewer and the member blocked each other.
         if (await Blocks.EitherWayAsync(blocksRepository, viewer?.Id, member.Id, cancellationToken))
         {
             return new PagedResult<ProfileCommentDTO>([], 0, pageSize, pageNumber);

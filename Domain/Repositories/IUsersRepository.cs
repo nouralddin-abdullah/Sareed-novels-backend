@@ -1,4 +1,5 @@
 ﻿using Domain.Entities;
+using Domain.Profiles;
 using Microsoft.AspNetCore.Identity;
 namespace Domain.Repositories;
 
@@ -42,4 +43,17 @@ public interface IUsersRepository
     /// concurrency stamp. False when that no longer holds (a password was set meanwhile) or there is no such account.
     /// </summary>
     Task<bool> SetFirstPasswordAsync(string userId, string passwordHash, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Who may browse the member's review and comment lists (#61); null when there is no such account or it is deleted.
+    /// </summary>
+    Task<ProfileListPrivacy?> GetListPrivacyAsync(string userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets who may browse the member's review and comment lists (#61), leaving one that is null as it is, in one
+    /// statement that writes only those two columns and a new concurrency stamp; with neither, nothing is written.
+    /// Answers the settings as they are then, or null when there is no such account or it is deleted.
+    /// </summary>
+    Task<ProfileListPrivacy?> SetListPrivacyAsync(string userId, ListVisibility? reviews, ListVisibility? comments,
+        CancellationToken cancellationToken = default);
 }

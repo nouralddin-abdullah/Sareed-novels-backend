@@ -1,5 +1,6 @@
 ﻿using System.Security.Cryptography;
 using Domain.Entities;
+using Domain.Profiles;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -209,6 +210,35 @@ namespace Infrastructure.Repositories
                     .SetProperty(u => u.SecurityStamp, securityStamp)
                     .SetProperty(u => u.ConcurrencyStamp, concurrencyStamp), cancellationToken);
             return updated == 1;
+        }
+
+        public Task<ProfileListPrivacy?> GetListPrivacyAsync(string userId, CancellationToken cancellationToken = default) =>
+            dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId && u.DeletedAt == null)
+                .Select(u => new ProfileListPrivacy(u.ReviewsVisibility, u.CommentsVisibility))
+                .SingleOrDefaultAsync(cancellationToken);
+
+        public async Task<ProfileListPrivacy?> SetListPrivacyAsync(string userId, ListVisibility? reviews,
+            ListVisibility? comments, CancellationToken cancellationToken = default)
+        {
+            if (reviews is not null || comments is not null)
+            {
+                // Not through UserManager, which would save the whole row from the copy read at the start of the
+                // request, writing back counters or a suspension that changed meanwhile. One statement writes the two
+                // settings, a left-out one as it is at that moment (so two changes at once both stay), and a new
+                // concurrency stamp, so an update through UserManager that read the account before this (update-me)
+                // fails on it instead of writing the old settings back.
+                var concurrencyStamp = Guid.NewGuid().ToString();
+                await dbContext.Users
+                    .Where(u => u.Id == userId && u.DeletedAt == null)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(u => u.ReviewsVisibility, u => reviews ?? u.ReviewsVisibility)
+                        .SetProperty(u => u.CommentsVisibility, u => comments ?? u.CommentsVisibility)
+                        .SetProperty(u => u.ConcurrencyStamp, concurrencyStamp), cancellationToken);
+            }
+
+            return await GetListPrivacyAsync(userId, cancellationToken);
         }
     }
 }

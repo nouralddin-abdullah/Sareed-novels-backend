@@ -57,6 +57,9 @@ public class GetUserProfileQueryHandler(ILogger<GetUserProfileQueryHandler> logg
         profile.IsBlockedByMe = blockedByMe;
         profile.ReviewsCount = counts.Reviews;
         profile.CommentsCount = counts.Comments;
+        // Lists the member hid from everyone else (#61); the counts above stay as they are.
+        profile.ReviewsHidden = HiddenLists.IsHiddenFrom(user.ReviewsVisibility, user, currentUser?.Id);
+        profile.CommentsHidden = HiddenLists.IsHiddenFrom(user.CommentsVisibility, user, currentUser?.Id);
 
         return profile;
     }
