@@ -13,7 +13,14 @@ public class SearchNovelsRequest
     
     // Keep single range for backward compatibility
     public ChapterCountRange? ChapterRange { get; set; }
-    
+
+    /// <summary>
+    /// true: only the novels a reader can open, with at least one published chapter, in the page and in every count
+    /// (#58, the rule of withChapters on a member's works, #46). false or left out (null): every novel that isn't a
+    /// draft, those without a published chapter too, as before.
+    /// </summary>
+    public bool? WithChapters { get; set; }
+
     // Sorting
     public NovelSortBy SortBy { get; set; } = NovelSortBy.Relevance;
     
