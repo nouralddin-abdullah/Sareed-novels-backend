@@ -11,6 +11,10 @@ namespace Sareed_novels_backend.Controllers;
 [Route("api/search")]
 public class SearchController(IMediator mediator) : ControllerBase
 {
+    /// <summary>
+    /// Novel search, or browsing without a query: the same as GET, from a JSON body. With "withChapters": true only the
+    /// novels a reader can open (#58); a value that isn't a JSON boolean is 400 ValidationFailed.
+    /// </summary>
     [HttpPost("novels")]
     public async Task<IActionResult> SearchNovels([FromBody] SearchNovelsRequest request)
     {
@@ -19,6 +23,11 @@ public class SearchController(IMediator mediator) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Novel search, or browsing without a query. Drafts are never listed; novels without a published chapter are,
+    /// unless withChapters=true, which lists only the novels a reader can open, as #46 did for a member's works (#58,
+    /// the app's «آخر التحديثات»). A withChapters other than true or false is 400 ValidationFailed.
+    /// </summary>
     [HttpGet("novels")]
     public async Task<IActionResult> SearchNovelsGet(
         [FromQuery] string? query,
@@ -26,6 +35,7 @@ public class SearchController(IMediator mediator) : ControllerBase
         [FromQuery] string? status,
         [FromQuery] List<ChapterCountRange>? chapterRanges,
         [FromQuery] ChapterCountRange? chapterRange,
+        [FromQuery] bool? withChapters,
         [FromQuery] NovelSortBy sortBy = NovelSortBy.Relevance,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
@@ -37,6 +47,7 @@ public class SearchController(IMediator mediator) : ControllerBase
             Status = status,
             ChapterRanges = chapterRanges,
             ChapterRange = chapterRange,
+            WithChapters = withChapters,
             SortBy = sortBy,
             PageNumber = pageNumber,
             PageSize = pageSize
