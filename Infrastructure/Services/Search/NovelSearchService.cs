@@ -3,6 +3,7 @@ using Application.Search.DTOs;
 using Application.Services;
 using Domain.Search;
 using Infrastructure.Persistence;
+using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Services.Search;
@@ -10,8 +11,11 @@ namespace Infrastructure.Services.Search;
 /// <summary>
 /// Novel search straight from SQL. Every query word must appear in the normalized title (Novel.SearchTitle);
 /// relevance is exact title > title starts with the query > a word starts with it > contains it, then popularity.
-/// Like the sitemap and new arrivals, only novels a reader can open are listed: not a draft, and at least one
-/// published chapter.
+/// Drafts and deleted novels are never listed. Novels without a published chapter are, by the owner's decision (commit
+/// 31791c6): a novel shows here and on the genre pages before its first chapter is published, while the rankings, new
+/// arrivals and the sitemap still need one. With <see cref="SearchNovelsRequest.WithChapters"/> (#58) only the novels
+/// a reader can open are listed and counted (<see cref="NovelFilters.Readable"/>, as a member's works with
+/// withChapters=true, #46).
 /// </summary>
 public class NovelSearchService(ApplicationDbContext dbContext) : INovelSearchService
 {
@@ -33,8 +37,9 @@ public class NovelSearchService(ApplicationDbContext dbContext) : INovelSearchSe
         var phrase = string.Join(' ', tokens);
         var wordStart = " " + phrase;
 
-        var query = dbContext.Novels.AsNoTracking()
-            .Where(n => !n.IsDraft);
+        // Readable() leaves drafts out too. The count and the page below both come from this query, after every filter.
+        var novels = dbContext.Novels.AsNoTracking();
+        var query = request.WithChapters == true ? novels.Readable() : novels.Where(n => !n.IsDraft);
 
         foreach (var token in tokens)
         {
