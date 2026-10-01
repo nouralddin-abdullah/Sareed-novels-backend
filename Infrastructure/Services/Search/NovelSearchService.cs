@@ -1,4 +1,5 @@
 using Application.Common;
+using Application.Novels.DTOS;
 using Application.Search.DTOs;
 using Application.Services;
 using Domain.Search;
@@ -118,7 +119,15 @@ public class NovelSearchService(ApplicationDbContext dbContext) : INovelSearchSe
                 ReviewCount = n.ReviewCount,
                 TotalViews = n.TotalViews,
                 CreatedAt = n.CreatedAt,
-                LastUpdatedAt = n.LastUpdatedAt
+                LastUpdatedAt = n.LastUpdatedAt,
+                // Joined in this query: the author as the account is now, without a query per novel (#59).
+                Author = new AuthorDTO
+                {
+                    Id = n.Owner.Id,
+                    UserName = n.Owner.UserName!,
+                    DisplayName = n.Owner.DisplayName,
+                    ProfilePhoto = n.Owner.ProfilePhoto
+                }
             })
             .ToListAsync(cancellationToken);
 

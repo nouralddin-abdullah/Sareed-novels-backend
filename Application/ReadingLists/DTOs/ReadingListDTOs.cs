@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Application.Novels.DTOS;
 
 namespace Application.ReadingLists.DTOs;
 
@@ -65,4 +66,7 @@ public class NovelInListDTO
     public List<string> Genres { get; set; } = new();
     public int OrderIndex { get; set; }
     public DateTime AddedAt { get; set; }
+
+    /// <summary>The novel's author, as the novel page gives it (#59).</summary>
+    public AuthorDTO Author { get; set; } = default!;
 }

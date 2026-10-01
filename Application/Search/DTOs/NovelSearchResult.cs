@@ -1,3 +1,5 @@
+using Application.Novels.DTOS;
+
 namespace Application.Search.DTOs;
 
 public class NovelSearchResult
@@ -15,4 +17,7 @@ public class NovelSearchResult
     public int TotalViews { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime LastUpdatedAt { get; set; }
+
+    /// <summary>The novel's author, as the novel page gives it (#59).</summary>
+    public AuthorDTO Author { get; set; } = default!;
 }

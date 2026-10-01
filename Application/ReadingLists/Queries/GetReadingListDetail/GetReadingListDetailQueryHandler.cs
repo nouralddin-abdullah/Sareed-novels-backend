@@ -1,5 +1,7 @@
+using Application.Novels.DTOS;
 using Application.ReadingLists.DTOs;
 using Application.Users;
+using AutoMapper;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
@@ -12,7 +14,8 @@ public class GetReadingListDetailQueryHandler(
     IReadingListsRepository readingListsRepository,
     IReadingListFollowersRepository followersRepository,
     IUserBlocksRepository blocksRepository,
-    IUserContext userContext) : IRequestHandler<GetReadingListDetailQuery, ReadingListDetailDTO>
+    IUserContext userContext,
+    IMapper mapper) : IRequestHandler<GetReadingListDetailQuery, ReadingListDetailDTO>
 {
     public async Task<ReadingListDetailDTO> Handle(GetReadingListDetailQuery request, CancellationToken cancellationToken)
     {
@@ -64,7 +67,9 @@ public class GetReadingListDetailQueryHandler(
                         .Select(ng => ng.Genre.Name)
                         .ToList(),
                     OrderIndex = rln.OrderIndex,
-                    AddedAt = rln.AddedAt
+                    AddedAt = rln.AddedAt,
+                    // Loaded with the novels (GetByIdWithDetailsAsync), and mapped as the novel page maps it (#59).
+                    Author = mapper.Map<AuthorDTO>(rln.Novel.Owner)
                 })
                 .ToList(),
             IsOwner = currentUser != null && readingList.UserId == currentUser.Id,

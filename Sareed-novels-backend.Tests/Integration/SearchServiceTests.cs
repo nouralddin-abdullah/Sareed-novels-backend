@@ -179,6 +179,49 @@ public class SearchServiceTests(SqlServerDatabase database) : IClassFixture<SqlS
         Assert.Equal(expected, browse.Items.Select(n => n.Id).Order());
     }
 
+    [Fact]
+    public async Task Each_result_names_its_author_from_the_page_query_whatever_the_page_size()
+    {
+        var m = Seed.Marker();
+        var authors = Enumerable.Range(0, 5).Select(i => Seed.User(displayName: $"كاتب {i} {m}")).ToList();
+        authors[0].ProfilePhoto = "https://files.test/profile-images/photo.webp";
+        await using (var seed = database.CreateContext())
+        {
+            seed.Users.AddRange(authors);
+            await seed.SaveChangesAsync();
+        }
+        var authorOf = new Dictionary<Guid, User>();
+        foreach (var author in authors)
+        {
+            authorOf[(await AddNovel(author, $"{m} رواية")).Id] = author;
+        }
+
+        async Task<(List<NovelSearchResult> Items, CommandLog Log)> Page(int pageSize)
+        {
+            var log = new CommandLog();
+            await using var db = database.CreateContext(log);
+            var page = await new NovelSearchService(db).SearchNovelsAsync(new SearchNovelsRequest { Query = m, PageSize = pageSize });
+            return (page.Items.ToList(), log);
+        }
+
+        var (one, oneLog) = await Page(1);
+        var (five, fiveLog) = await Page(5);
+
+        Assert.Single(one);
+        Assert.Equal(authorOf.Keys.Order(), five.Select(n => n.Id).Order());
+        Assert.All(five, item =>
+        {
+            var author = authorOf[item.Id];
+            Assert.Equal((author.Id, author.UserName, author.DisplayName, author.ProfilePhoto),
+                (item.Author.Id, item.Author.UserName, item.Author.DisplayName, item.Author.ProfilePhoto));
+        });
+        // The count and the page, as before #59, for one novel or five: the authors are joined in the page's query (#59),
+        // not read with a query per novel.
+        Assert.Equal(2, oneLog.Commands.Count);
+        Assert.Equal(2, fiveLog.Commands.Count);
+        Assert.Single(fiveLog.Commands, sql => sql.Contains("[AspNetUsers]"));
+    }
+
     [Theory]
     [InlineData("%")]
     [InlineData("_")]
