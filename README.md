@@ -972,6 +972,33 @@ on a member's works:
     body: the error is under the value's JSON path, `errors["$.withChapters"]`, and `message` is
     «تعذّرت قراءة البيانات المرسلة. تأكد من صيغتها وحاول مرة أخرى.».
 
+### The author of each novel in search results and on a reading list (#59)
+
+Each item of `GET`/`POST /api/search/novels` (`items`) and each novel of a reading list (`GET /api/readinglist/{id}`,
+`novels`) has `author`: the novel page's own `author` (`GET /api/novel/{slug}`, `GET /api/novel/by-id/{id}`), the same
+object, so one model reads all three.
+
+```json
+"author": { "id": "3f2a9c1b-…", "userName": "sara_writes", "displayName": "سارة", "profilePhoto": "https://…/photo.webp" }
+```
+
+| Field | |
+|---|---|
+| `id` | the author's account id (the `userId` of `GET /api/myworks/user/{userId}`) |
+| `userName` | their user name now (the profile is `GET /api/User/{userName}`) |
+| `displayName` | the name readers see, now |
+| `profilePhoto` | the photo's URL, or null when they have none (beyond the issue's three fields, as the novel page sends it) |
+
+- **Current, never a copy.** It is read from the account together with the novel, so a new user name, display name or
+  photo shows in the very next answer.
+- **No extra requests or queries.** Search reads it in the page's own SQL query, and a reading list with its novels:
+  the number of queries doesn't grow with the page size or the list's length.
+- **A deleted account** (by the member or by an admin): its novels are deleted with it, so they are in neither list, nor
+  in its counts (`totalItemsCount`, `novelsCount`). If one were ever restored, it would name its author as the novel
+  page does: «مستخدم محذوف», a `deleted-…` user name and no photo.
+- **Additive.** An API from before #59 leaves `author` out: the app keeps its own lookup when the field is missing. The
+  web doesn't read it yet. `GET /api/search/suggest` is unchanged.
+
 ### Blocks: a single post, its discussion, likes, comments and notifications (#52)
 
 A block now reaches a single post and its discussion, likes, comments on posts, replies and notifications, as it

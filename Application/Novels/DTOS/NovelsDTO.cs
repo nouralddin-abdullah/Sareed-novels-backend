@@ -24,12 +24,17 @@ public class NovelsDTO
     public AuthorDTO Author { get; set; } = default!;
 }
 
+/// <summary>
+/// A member shown as an author: the novel page, search results and a reading list's novels (#59) give a novel's author
+/// this way, read from the account as it is now, so a rename shows at once.
+/// </summary>
 public class AuthorDTO
 {
     public string Id { get; set; } = default!;
     public string UserName { get; set; } = default!;
     public string DisplayName { get; set; } = default!;
-    public string ProfilePhoto { get; set; } = default!;
+    /// <summary>The photo's URL; null when the member has none.</summary>
+    public string? ProfilePhoto { get; set; }
 }
 
 public class GenreSmallDto
