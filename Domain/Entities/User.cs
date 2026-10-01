@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using Domain.Profiles;
+using Microsoft.AspNetCore.Identity;
 
 namespace Domain.Entities;
 
@@ -44,6 +45,18 @@ public class User : IdentityUser
     /// can't sign in, its access tokens are refused and it has no profile. Set through IAccountDeletionService.
     /// </summary>
     public DateTime? DeletedAt { get; set; }
+
+    /// <summary>
+    /// Who may browse the member's review list on their profile (#61); stored as text. Their reviews stay on the
+    /// novels either way, and reviewsCount still shows. Set through IUsersRepository.SetListPrivacyAsync.
+    /// </summary>
+    public ListVisibility ReviewsVisibility { get; set; } = ListVisibility.Everyone;
+
+    /// <summary>
+    /// Who may browse the member's comment list on their profile (#61); stored as text. Their comments stay in the
+    /// chapters either way, and commentsCount still shows. Set through IUsersRepository.SetListPrivacyAsync.
+    /// </summary>
+    public ListVisibility CommentsVisibility { get; set; } = ListVisibility.Everyone;
 
     public ICollection<Follow> Following { get; set; } = new List<Follow>();
     public ICollection<Follow> Followers { get; set; } = new List<Follow>();

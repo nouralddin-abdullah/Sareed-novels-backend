@@ -5,10 +5,12 @@ using Application.Users.Commands.FollowUser;
 using Application.Users.Commands.SetPassword;
 using Application.Users.Commands.UnblockUser;
 using Application.Users.Commands.UnFollowUser;
+using Application.Users.Commands.UpdateListPrivacy;
 using Application.Users.Commands.UpdateMe;
 using Application.Users.Queries.GetBlockedUsers;
 using Application.Users.Queries.GetFollowersList;
 using Application.Users.Queries.GetFollowingList;
+using Application.Users.Queries.GetListPrivacy;
 using Application.Users.Queries.GetMyProfile;
 using Application.Users.Queries.GetUserComments;
 using Application.Users.Queries.GetUserProfile;
@@ -115,6 +117,25 @@ namespace Sareed_novels_backend.Controllers
         public async Task<IActionResult> UnblockUserById([FromRoute] string userId) =>
             Ok(await mediator.Send(new UnblockUserCommand { UserId = userId }));
 
+        /// <summary>
+        /// Who may browse the caller's review and comment lists (#61, README): {"reviews", "comments"}, each "Everyone"
+        /// (the default) or "OnlyMe".
+        /// </summary>
+        [HttpGet("me/privacy")]
+        public async Task<IActionResult> GetListPrivacy(CancellationToken cancellationToken) =>
+            Ok(await mediator.Send(new GetListPrivacyQuery(), cancellationToken));
+
+        /// <summary>
+        /// Sets who may browse the caller's review and comment lists (#61, README) from {"reviews"?, "comments"?}: each
+        /// "Everyone" or "OnlyMe" in any letter case; one left out (or null) keeps its setting, and an empty body (or
+        /// {}) changes nothing. Answers both settings as GET me/privacy does. 400 ValidationFailed for any other value.
+        /// </summary>
+        [HttpPatch("me/privacy")]
+        public async Task<IActionResult> UpdateListPrivacy(
+            [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] UpdateListPrivacyCommand? command,
+            CancellationToken cancellationToken) =>
+            Ok(await mediator.Send(command ?? new UpdateListPrivacyCommand(), cancellationToken));
+
         /// <summary>The users the caller blocked, most recent first, with their current names.</summary>
         [HttpGet("blocked")]
         public async Task<IActionResult> GetBlockedUsers([FromQuery] int? pageNumber, [FromQuery] int? pageSize) =>
@@ -164,8 +185,8 @@ namespace Sareed_novels_backend.Controllers
         /// <summary>
         /// The member's reviews on novels readers can open, newest first (#54, README): pageNumber from 1, pageSize 1
         /// to 50 (10 by default). Its total is reviewsCount on the profile. 404 UserNotFound as GET {userName} (an old
-        /// user name finds the member too); an empty page when the signed-in viewer and the member blocked each other,
-        /// either way.
+        /// user name finds the member too); then 403 ListHidden to anyone but the member when they hid it (#61); then
+        /// an empty page when the signed-in viewer and the member blocked each other, either way.
         /// </summary>
         [HttpGet("{userName}/reviews")]
         [AllowAnonymous]
