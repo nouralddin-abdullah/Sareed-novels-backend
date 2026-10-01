@@ -7,6 +7,10 @@ public interface IReadingListsRepository
 {
     Task<ReadingList?> GetByIdAsync(Guid id);
     Task<ReadingList?> GetByIdWithNovelsAsync(Guid id);
+    /// <summary>
+    /// A list with its owner and its novels, each with its author (#59) and genres, tracked; deleted novels never load.
+    /// Three queries however many novels it has: the list with its owner, the novels with their authors, their genres.
+    /// </summary>
     Task<ReadingList?> GetByIdWithDetailsAsync(Guid id);
     Task<(IEnumerable<ReadingList>, int)> GetUserReadingListsAsync(string userId, int pageNumber, int pageSize);
     /// <summary>

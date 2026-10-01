@@ -231,6 +231,54 @@ public class ReadingListRepositoryTests(SqlServerDatabase database) : IClassFixt
     }
 
     [Fact]
+    public async Task A_lists_novels_load_with_their_authors_in_three_queries_however_many_there_are()
+    {
+        var owner = Seed.User();
+        var authors = Enumerable.Range(0, 4).Select(i => Seed.User(displayName: $"كاتب {i}")).ToList();
+        authors[1].ProfilePhoto = "https://files.test/profile-images/photo.webp";
+        var novels = authors.Select(a => Seed.Novel(a, "رواية " + Seed.Marker())).ToList();
+        var deleted = Seed.Novel(authors[0], "محذوفة " + Seed.Marker());
+        deleted.IsDeleted = true;
+        var (small, large) = (List(owner, isPublic: true), List(owner, isPublic: true));
+        await using (var db = database.CreateContext())
+        {
+            db.Users.AddRange(authors.Append(owner));
+            db.Novels.AddRange(novels.Append(deleted));
+            db.ReadingLists.AddRange(small, large);
+            db.ReadingListNovels.Add(new ReadingListNovel { ReadingListId = small.Id, NovelId = novels[0].Id });
+            db.ReadingListNovels.AddRange(novels.Append(deleted).Select((n, i) => new ReadingListNovel
+            {
+                ReadingListId = large.Id, NovelId = n.Id, OrderIndex = i
+            }));
+            await db.SaveChangesAsync();
+        }
+
+        async Task<(ReadingList List, CommandLog Log)> Load(ReadingList list)
+        {
+            var log = new CommandLog();
+            await using var db = database.CreateContext(log);
+            return ((await new ReadingListsRepository(db).GetByIdWithDetailsAsync(list.Id))!, log);
+        }
+
+        var (one, oneLog) = await Load(small);
+        var (four, fourLog) = await Load(large);
+
+        Assert.Equal(authors[0].DisplayName, Assert.Single(one.Novels).Novel.Owner.DisplayName);
+        // The deleted novel doesn't load; every other one comes with its author (#59).
+        Assert.Equal(novels.Select(n => (n.Id, n.AuthorId)).Order(), four.Novels.Select(rln => (rln.Novel.Id, rln.Novel.Owner.Id)).Order());
+        Assert.All(four.Novels, rln =>
+        {
+            var author = authors.Single(a => a.Id == rln.Novel.AuthorId);
+            Assert.Equal((author.UserName, author.DisplayName, author.ProfilePhoto),
+                (rln.Novel.Owner.UserName, rln.Novel.Owner.DisplayName, rln.Novel.Owner.ProfilePhoto));
+        });
+        // The list with its owner, the novels with their authors, their genres: as many queries as before #59, for one
+        // novel or four.
+        Assert.Equal(3, oneLog.Commands.Count);
+        Assert.Equal(3, fourLog.Commands.Count);
+    }
+
+    [Fact]
     public async Task A_removal_or_an_add_during_a_reorder_waits_for_it()
     {
         var owner = Seed.User();
