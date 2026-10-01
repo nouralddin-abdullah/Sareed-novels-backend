@@ -940,6 +940,38 @@ the author gets what anyone gets.
 - **No token is needed.** A token that doesn't validate (expired, signed out everywhere, or the web's `Bearer undefined`
   when signed out) is answered as signed out: 200, never 401.
 
+### Search and browsing with something to read: `withChapters=true` (#58)
+
+`GET /api/search/novels` (query parameters) and `POST /api/search/novels` (the same fields in a JSON body) search
+novels by title, or browse them without a query: `genres`, `status`, `chapterRanges`, `sortBy`, `pageNumber` from 1,
+`pageSize` 1 to 50 (20 by default); signed in or not. Since #58 both take `withChapters`, with the meaning #46 gave it
+on a member's works:
+
+| Request | Listed, and counted in `totalItemsCount`, `totalPages` and `itemsTo` |
+|---|---|
+| `withChapters=true`, or `"withChapters": true` | only the novels a reader can open: not a draft, with at least one published chapter |
+| without it, `false`, an empty value (`withChapters=`) or a JSON `null` | every novel that isn't a draft, with or without a published chapter, as before #58 |
+
+- **The default doesn't change.** By the owner's decision (25 September 2026), a novel shows in search and on the genre
+  pages before its first chapter is published; drafts never do. The rankings, new arrivals, recommendations and the
+  sitemap list only novels with a published chapter, as before.
+- **The app** sends `withChapters=true` for browsing («آخر التحديثات»: no query, `sortBy=LastUpdated`) and can drop
+  its own filter: every item has a `chapterCount` of at least 1, and every page but the last is full. An API from
+  before #58 ignores the parameter and lists every novel that isn't a draft.
+- **The web doesn't send it**: its search page lists novels before their first chapter, as before.
+- **A published chapter** is one whose status is `Published` now, as in #46: with the flag a novel is left out while it
+  has no chapter, only drafts (never published, or published and made a draft again), or none left after its published
+  chapters were deleted, and it is listed as soon as one of its chapters is published.
+- **The other fields** narrow it further: the query words, `genres`, `status`, `chapterRanges` (which already need at
+  least one published chapter), and every `sortBy`. Deleted novels are never listed.
+- **Pages** never repeat or skip a novel: novels with the same sort value go by id.
+- **A value other than `true` or `false`** is 400 `ValidationFailed` with an Arabic `message`, never a 500:
+  - GET (`withChapters=abc`, or `1`), as #46 answers: `errors.withChapters` «القيمة المرسلة غير صالحة» and `message`
+    «البيانات المرسلة غير صالحة.».
+  - POST (`"withChapters": "abc"`, `1`, or the string `"true"`), as any JSON value of the wrong type in any request
+    body: the error is under the value's JSON path, `errors["$.withChapters"]`, and `message` is
+    «تعذّرت قراءة البيانات المرسلة. تأكد من صيغتها وحاول مرة أخرى.».
+
 ### Blocks: a single post, its discussion, likes, comments and notifications (#52)
 
 A block now reaches a single post and its discussion, likes, comments on posts, replies and notifications, as it
