@@ -25,8 +25,8 @@ public class NovelsDTO
 }
 
 /// <summary>
-/// A member shown as an author: the novel page, search results and a reading list's novels (#59) give a novel's author
-/// this way, read from the account as it is now, so a rename shows at once.
+/// A member shown as an author: the novel page, search results and a reading list's novels (#59), and the ranked lists
+/// (#68), give a novel's author this way, read from the account as it is now, so a rename shows at once.
 /// </summary>
 public class AuthorDTO
 {
@@ -44,6 +44,10 @@ public class GenreSmallDto
     public string Slug { get; set; } = default!;
 }
 
+/// <summary>
+/// A novel in a ranked list: the rankings (GET /api/rankings/{genreSlug}/{type} and /site-wide/{type}) and a genre's
+/// novels (GET /api/genre/{genreSlug}/novels), in every sorting.
+/// </summary>
 public class NovelInRankingDto
 {
     public Guid Id { get; set; }
@@ -56,4 +60,9 @@ public class NovelInRankingDto
     public int TotalViews { get; set; }
     public decimal TotalAverageScore { get; set; }
     public int ReviewCount { get; set; }
+    /// <summary>
+    /// Who wrote it (#68): the novel page's own author, as search results and reading lists give it (#59), read with
+    /// the page. A ranking stores only its novels' places, so a rename shows in the next answer.
+    /// </summary>
+    public AuthorDTO Author { get; set; } = default!;
 }

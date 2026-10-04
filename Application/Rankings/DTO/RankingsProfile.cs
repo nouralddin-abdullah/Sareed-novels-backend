@@ -18,6 +18,8 @@ public class RankingsProfile : Profile
             .ForMember(dest => dest.TotalViews, opt => opt.MapFrom(src => src.Novel.TotalViews))
             .ForMember(dest => dest.TotalAverageScore, opt => opt.MapFrom(src => src.Novel.TotalAverageScore))
             .ForMember(dest => dest.ReviewCount, opt => opt.MapFrom(src => src.Novel.ReviewCount))
-            .ForMember(dest => dest.GenresList, opt => opt.MapFrom(src => src.Novel.NovelGenres.Select(ng => ng.Genre)));
+            .ForMember(dest => dest.GenresList, opt => opt.MapFrom(src => src.Novel.NovelGenres.Select(ng => ng.Genre)))
+            // Loaded with the entry's novel (RankingRepository), as it is now: the entry stores only the novel's place.
+            .ForMember(dest => dest.Author, opt => opt.MapFrom(src => src.Novel.Owner));
     }
 }

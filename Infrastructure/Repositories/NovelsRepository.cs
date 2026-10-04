@@ -109,6 +109,7 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         .Readable()
         .Include(n => n.NovelGenres)
             .ThenInclude(ng => ng.Genre)
+        // The author New Arrivals shows (#68), as the account is now, joined in the same query.
         .Include(n => n.Owner)
         .OrderByDescending(n => n.CreatedAt); // Real-time ordering by creation date
 

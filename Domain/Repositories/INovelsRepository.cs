@@ -25,6 +25,10 @@ public interface INovelsRepository
     /// an update to readers (#39), not a draft, a chapter published again, an edit or a deletion.
     /// </summary>
     Task RefreshChapterCountAsync(Guid novelId, DateTime? lastUpdatedAt = null);
+    /// <summary>
+    /// The site-wide New Arrivals: novels readers can open (not a draft, with a published chapter) that are eligible
+    /// for ranking, newest first, with their genres and their author (Owner, #68) loaded.
+    /// </summary>
     Task<(IEnumerable<Novel>, int)> GetLatestNovels(int pageSize, int pageNumber);
     Task<(IEnumerable<Novel?>, int)> GetWorks(string userId, int PageNumber, int PageSize);
     /// <summary>

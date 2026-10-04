@@ -31,7 +31,10 @@ public class NovelProfiles : Profile
             .ForMember(dest => dest.Author, opt => opt.MapFrom(src => src.Owner))
             .ForMember(dest => dest.GenresList, opt => opt.MapFrom(src => src.NovelGenres.Select(ng => ng.Genre)));
 
+        // The genre page's live sortings and the site-wide New Arrivals, which load each novel's Owner with the page
+        // (#68).
         CreateMap<Novel, NovelInRankingDto>()
-            .ForMember(dest => dest.GenresList, opt => opt.MapFrom(src => src.NovelGenres.Select(ng => ng.Genre)));
+            .ForMember(dest => dest.GenresList, opt => opt.MapFrom(src => src.NovelGenres.Select(ng => ng.Genre)))
+            .ForMember(dest => dest.Author, opt => opt.MapFrom(src => src.Owner));
     }
 }
