@@ -32,10 +32,10 @@ namespace Infrastructure.Migrations
     {
         /// <summary>
         /// A stored counter, <see cref="Table"/>.<see cref="Column"/>, what it counts (<see cref="Counts"/>, for the
-        /// scripts), and <see cref="Recount"/>: given the table hint the counted rows are read with ("" for none), a
-        /// query of one row whose <c>Value</c> is the counter's value for the row <c>t</c> of <see cref="Table"/>.
+        /// scripts), and <see cref="Query"/>: given the table hint the counted rows are read with ("" for none), a query
+        /// of one row whose <c>Value</c> is the counter's value for the row <c>t</c> of <see cref="Table"/>.
         /// </summary>
-        internal sealed record Counter(string Table, string Column, string Counts, Func<string, string> Recount)
+        internal sealed record Counter(string Table, string Column, string Counts, Func<string, string> Query)
         {
             public string Name => Table + "." + Column;
         }
@@ -134,7 +134,7 @@ namespace Infrastructure.Migrations
                 -- {c.Name}: {c.Counts}.
                 UPDATE t SET {c.Column} = r.Value
                 FROM {c.Table} t
-                CROSS APPLY ({Continued(c.Recount(HoldLock), 13)}) r
+                CROSS APPLY ({Continued(c.Query(HoldLock), 13)}) r
                 WHERE t.{c.Column} <> r.Value;
 
 
@@ -169,7 +169,7 @@ namespace Infrastructure.Migrations
                        COUNT(CASE WHEN t.{c.Column} < r.Value THEN 1 END) AS StoredTooLow,
                        CAST(ISNULL(SUM(ABS(t.{c.Column} - r.Value)), 0) AS decimal(19, 2)) AS TotalAbsoluteDrift
                 FROM {c.Table} t
-                CROSS APPLY ({Continued(c.Recount(""), 13)}) r
+                CROSS APPLY ({Continued(c.Query(""), 13)}) r
 
                 """))
             + """
@@ -183,7 +183,7 @@ namespace Infrastructure.Migrations
                 SELECT {i + 1} AS Step, N'{c.Name}' AS Counter, CONVERT(nvarchar(450), t.Id) AS RowId,
                        CAST(t.{c.Column} AS decimal(19, 2)) AS Stored, CAST(r.Value AS decimal(19, 2)) AS Recounted
                 FROM {c.Table} t
-                CROSS APPLY ({Continued(c.Recount(""), 13)}) r
+                CROSS APPLY ({Continued(c.Query(""), 13)}) r
                 WHERE t.{c.Column} <> r.Value
 
                 """))
