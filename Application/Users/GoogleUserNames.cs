@@ -14,13 +14,19 @@ namespace Application.Users;
 /// <list type="number">
 /// <item>From the person's Google name when every letter of it is Latin (<see cref="FromName"/>): «Shahd Elattar» is
 /// shahd-elattar.</item>
-/// <item>When another account holds that, the same with a number: shahd-elattar-2, -3 ... up to
-/// -<see cref="NumberedUpTo"/> (<see cref="Numbered"/>), all looked up in one query.</item>
-/// <item>Otherwise, and when all of those are taken: "sarduser" and six digits, as before #69 (<see cref="Fallback"/>).</item>
+/// <item>When that is in use, the same with a number: shahd-elattar-2, -3 ... up to -<see cref="NumberedUpTo"/>
+/// (<see cref="Numbered"/>), all looked up in one query.</item>
+/// <item>Otherwise, and when all of those are in use: "sarduser" and six digits, as before #69 (<see cref="Fallback"/>).</item>
 /// </list>
 /// Every handle meets update-me's rules (<see cref="UserNameCheck"/>), so the member can keep it through any later edit
 /// of their profile. The name's own handle must meet them as it is (a two-letter name gives none); the number only
 /// makes room for a namesake.
+/// <para>
+/// In use means another account holds the name now, or a member gave it up (the rename history behind old profile
+/// links). The second is a deliberate difference from update-me, which lets a member choose a name someone gave up, so
+/// that old links to it then open them: a choice made by hand. A name made for a newcomer never takes over an
+/// existing member's old profile links on its own.
+/// </para>
 /// </summary>
 public sealed class GoogleUserNames(UserNameCheck userNameCheck, IUsersRepository users)
 {
@@ -34,9 +40,9 @@ public sealed class GoogleUserNames(UserNameCheck userNameCheck, IUsersRepositor
     public const int FallbackAttempts = 5;
 
     /// <summary>
-    /// The user names a new account tries, in order: the handles from the name that no account holds now, then the
-    /// "sarduser" ones. The account is created with the first one still free when it is saved: a sign-in at the same
-    /// moment may take one first.
+    /// The user names a new account tries, in order: the handles from the name that are not in use (no account holds
+    /// them, and no member gave them up), then the "sarduser" ones. The account is created with the first one still
+    /// free when it is saved: a sign-in at the same moment may take one first.
     /// </summary>
     public async Task<IReadOnlyList<string>> CandidatesAsync(GoogleJsonWebSignature.Payload payload, CancellationToken cancellationToken)
     {
@@ -57,8 +63,8 @@ public sealed class GoogleUserNames(UserNameCheck userNameCheck, IUsersRepositor
         }
 
         var candidates = Numbered(handle).Where(userNameCheck.AllowsForNewAccount).ToList();
-        var taken = await users.GetTakenUserNamesAsync(candidates, cancellationToken);
-        return candidates.Where(candidate => !taken.Contains(candidate)).ToList();
+        var inUse = await users.GetUserNamesInUseAsync(candidates, cancellationToken);
+        return candidates.Where(candidate => !inUse.Contains(candidate)).ToList();
     }
 
     /// <summary>

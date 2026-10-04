@@ -1238,14 +1238,19 @@ saving it. Existing accounts keep their names. Nothing tells the member that a n
 6. The handle must pass update-me's rules as it is (the same code, `UserNameCheck`): 3 to 20 characters, only
    `a-z A-Z 0-9 - . _ +`, no `@`, not a reserved name, not starting with `deleted-`. A name that breaks one (a two-letter
    name like «Al», «Blocked») gives no handle.
-7. Taken by any account, in any letter case: `-2`, `-3` … up to `-20`, the handle giving up letters at its end so the
-   whole stays within 20 characters. The twenty are looked up in one query. A name another member gave up is free, as
-   for update-me (below).
-8. Otherwise (no handle from the name, or all twenty taken): `sarduser` and six digits, as before.
+7. In use: `-2`, `-3` … up to `-20`, the handle giving up letters at its end so the whole stays within 20 characters.
+   In use means an account holds the name now, in any letter case, or a member gave it up (the rename history, which
+   keeps their old profile links opening them). The twenty are looked up in one query.
+8. Otherwise (no handle from the name, or all twenty in use): `sarduser` and six digits, as before.
+
+Counting the names members gave up is a deliberate difference from update-me and the check below, which let a member
+take such a name by hand (its old links then open them). A name made for a newcomer never takes over an existing
+member's old profile links on its own.
 
 | Google name | Handle |
 |---|---|
 | «Shahd Elattar» | `shahd-elattar`; the next «Shahd Elattar» gets `shahd-elattar-2`, then `-3`… |
+| «Shahd Elattar», when a member renamed away from `shahd-elattar` | `shahd-elattar-2`: `/profile/shahd-elattar` still opens that member |
 | «Zoë Saldaña» | `zoe-saldana` |
 | «Jean-Luc O'Brien ✨» | `jean-luc-obrien` |
 | «Agent 47» | `agent-47` |
@@ -1282,7 +1287,8 @@ The first refusal is the answer:
   from the account, not from the token, which may carry a name changed since. Only a name from before today's rules
   that breaks one of order 1 (say 21 characters) is refused as update-me would refuse saving it.
 - A name another member gave up is available, as update-me lets anyone take it: their old profile link then opens the
-  new holder, since a member who holds a name now wins over the rename history.
+  new holder, since a member who holds a name now wins over the rename history. Google sign-up never picks such a name
+  for a new account on its own (above).
 - The messages are update-me's own. For the same name update-me refuses with the same message: those of order 1 in
   its `ValidationFailed` problem, the one of order 4 after «تعذّر تحديث الملف الشخصي.».
 - 401 when signed out. 429 `TooManyRequests` past 60 checks a minute from one address: debounce the typing (e.g.

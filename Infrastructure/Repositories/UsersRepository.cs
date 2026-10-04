@@ -177,7 +177,7 @@ namespace Infrastructure.Repositories
             return user?.DeletedAt == null ? user : null;
         }
 
-        public async Task<IReadOnlySet<string>> GetTakenUserNamesAsync(IReadOnlyCollection<string> userNames,
+        public async Task<IReadOnlySet<string>> GetUserNamesInUseAsync(IReadOnlyCollection<string> userNames,
             CancellationToken cancellationToken = default)
         {
             var normalized = userNames.Select(name => userManager.NormalizeName(name)).Distinct().ToList();
@@ -186,13 +186,16 @@ namespace Infrastructure.Repositories
                 return new HashSet<string>();
             }
 
-            var held = (await dbContext.Users
-                    .AsNoTracking()
+            // One query (UNION ALL): the names accounts hold now, then those members gave up.
+            var inUse = (await dbContext.Users
                     .Where(u => normalized.Contains(u.NormalizedUserName!))
                     .Select(u => u.NormalizedUserName!)
+                    .Concat(dbContext.UserNameChanges
+                        .Where(c => normalized.Contains(c.OldNormalizedUserName))
+                        .Select(c => c.OldNormalizedUserName))
                     .ToListAsync(cancellationToken))
                 .ToHashSet(StringComparer.Ordinal);
-            return userNames.Where(name => held.Contains(userManager.NormalizeName(name))).ToHashSet(StringComparer.Ordinal);
+            return userNames.Where(name => inUse.Contains(userManager.NormalizeName(name))).ToHashSet(StringComparer.Ordinal);
         }
 
         public async Task<IdentityResult> CreateWithoutPasswordAsync(User user)

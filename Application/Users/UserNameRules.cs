@@ -101,7 +101,7 @@ public static class UserNameRules
     /// update-me's refusal of a user name another account holds now, compared as Identity compares names (its
     /// normalized form, so any letter case). The member's own name in any case isn't taken (#25), and nor is a name
     /// someone gave up: the name history (UserNameChange) only keeps old profile links working, and a member who holds
-    /// a name now wins over it.
+    /// a name now wins over it. (Google sign-up's handles avoid such names: <see cref="GoogleUserNames"/>.)
     /// </summary>
     public static async Task<UserNameRefusal?> TakenRefusalAsync(UserManager<User> userManager, string? userName, User member)
     {

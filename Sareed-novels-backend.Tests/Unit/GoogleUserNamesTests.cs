@@ -170,8 +170,9 @@ public class GoogleUserNamesTests
         return new UserNameCheck(new UpdateMeCommandValidator(), userManager);
     }
 
-    private void Taken(params string[] userNames) =>
-        users.GetTakenUserNamesAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
+    /// <summary>The names the lookup finds in use (held now or given up: the repository answers both, see the HTTP tests).</summary>
+    private void InUse(params string[] userNames) =>
+        users.GetUserNamesInUseAsync(Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<IReadOnlyCollection<string>>().Where(userNames.Contains).ToHashSet());
 
     private static GoogleJsonWebSignature.Payload Google(string? name, string? givenName = null, string? familyName = null) => new()
@@ -189,7 +190,7 @@ public class GoogleUserNamesTests
     [Fact]
     public async Task A_free_handle_comes_first_then_its_numbers_then_the_sarduser_ones()
     {
-        Taken();
+        InUse();
         var payload = Google("Shahd Elattar");
 
         var candidates = await Component().CandidatesAsync(payload, CancellationToken.None);
@@ -198,22 +199,22 @@ public class GoogleUserNamesTests
     }
 
     [Fact]
-    public async Task Taken_handles_are_skipped_and_all_twenty_are_looked_up_in_one_query()
+    public async Task Handles_in_use_are_skipped_and_all_twenty_are_looked_up_in_one_query()
     {
-        Taken("shahd-elattar", "shahd-elattar-2");
+        InUse("shahd-elattar", "shahd-elattar-2");
 
         var candidates = await Component().CandidatesAsync(Google("Shahd Elattar"), CancellationToken.None);
 
         Assert.Equal("shahd-elattar-3", candidates[0]);
-        await users.Received(1).GetTakenUserNamesAsync(
+        await users.Received(1).GetUserNamesInUseAsync(
             Arg.Is<IReadOnlyCollection<string>>(names => names.SequenceEqual(GoogleUserNames.Numbered("shahd-elattar"))),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task When_all_twenty_are_taken_only_the_sarduser_ones_are_left()
+    public async Task When_all_twenty_are_in_use_only_the_sarduser_ones_are_left()
     {
-        Taken([.. GoogleUserNames.Numbered("shahd-elattar")]);
+        InUse([.. GoogleUserNames.Numbered("shahd-elattar")]);
         var payload = Google("Shahd Elattar");
 
         Assert.Equal(Fallbacks(payload), await Component().CandidatesAsync(payload, CancellationToken.None));
@@ -233,14 +234,14 @@ public class GoogleUserNamesTests
         var payload = Google(name);
 
         Assert.Equal(Fallbacks(payload), await Component().CandidatesAsync(payload, CancellationToken.None));
-        await users.DidNotReceiveWithAnyArgs().GetTakenUserNamesAsync(default!, default);
+        await users.DidNotReceiveWithAnyArgs().GetUserNamesInUseAsync(default!, default);
     }
 
     [Fact]
     public async Task Numbers_that_break_a_rule_are_skipped()
     {
         // "deleted" is a name like any other, but "deleted-2" starts like a deleted account's.
-        Taken();
+        InUse();
         var payload = Google("Deleted");
 
         Assert.Equal(["deleted", .. Fallbacks(payload)], await Component().CandidatesAsync(payload, CancellationToken.None));
@@ -249,7 +250,7 @@ public class GoogleUserNamesTests
     [Fact]
     public async Task Without_a_full_name_the_given_and_family_names_are_used_and_never_the_email()
     {
-        Taken();
+        InUse();
 
         var given = await Component().CandidatesAsync(Google(null, "Shahd", "Elattar"), CancellationToken.None);
         var none = Google(null);
@@ -270,7 +271,7 @@ public class GoogleUserNamesTests
     [MemberData(nameof(Names))]
     public async Task Every_user_name_tried_meets_update_mes_rules(string? name)
     {
-        Taken();
+        InUse();
         var updateMe = new UpdateMeCommandValidator();
 
         var candidates = await Component().CandidatesAsync(Google(name), CancellationToken.None);

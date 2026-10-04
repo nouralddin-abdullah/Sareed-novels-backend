@@ -9,10 +9,14 @@ using Application.Users.Commands.GoogleLogin;
 using Domain.Entities;
 using Google.Apis.Auth;
 using Infrastructure.Persistence;
+using Infrastructure.Repositories;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using NSubstitute;
 
 namespace Sareed_novels_backend.Tests.Integration;
 
@@ -422,6 +426,100 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
 
         Assert.True(fallback.GetProperty("isNewAccount").GetBoolean());
         Assert.Equal(GoogleUserNames.Fallback(subject, 0), (await MyProfile(fallback)).GetProperty("userName").GetString());
+    }
+
+    private async Task<HttpResponseMessage> Rename(string token, string userName)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Patch, "/api/User/update-me")
+        {
+            Content = new MultipartFormDataContent { { new StringContent(userName), "UserName" } }
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await api.ClientFrom(NewIp()).SendAsync(request);
+    }
+
+    [Fact]
+    public async Task A_handle_another_member_gave_up_is_in_use_so_their_old_links_keep_opening_them()
+    {
+        var (name, handle) = UniqueLatinName();
+        var memberToken = await Register(handle, NewEmail(), AttackersPassword);
+        var memberId = (await (await MyProfile(memberToken)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
+        Assert.Equal(HttpStatusCode.OK, (await Rename(memberToken, NewName())).StatusCode);
+
+        var newcomer = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: name));
+
+        Assert.True(newcomer.GetProperty("isNewAccount").GetBoolean());
+        Assert.Equal(handle + "-2", (await MyProfile(newcomer)).GetProperty("userName").GetString());
+        var oldLink = await api.ClientFrom(NewIp()).GetAsync($"/api/User/{handle}");
+        Assert.Equal(memberId, (await oldLink.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString());
+
+        // A deliberate difference: chosen by hand, the name is free, as update-me lets one take it.
+        var check = new HttpRequestMessage(HttpMethod.Get, $"/api/User/username-available?userName={handle}");
+        check.Headers.Authorization = new AuthenticationHeaderValue("Bearer", newcomer.GetProperty("accessToken").GetString());
+        var answer = await (await api.ClientFrom(NewIp()).SendAsync(check)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(answer.GetProperty("available").GetBoolean());
+    }
+
+    [Fact]
+    public async Task When_every_numbered_handle_is_held_or_was_given_up_the_account_gets_a_sarduser_one()
+    {
+        var (name, handle) = UniqueLatinName();
+        var numbered = GoogleUserNames.Numbered(handle).ToList();
+        var member = "member-" + Guid.NewGuid().ToString("N")[..8];
+        await Occupy(member);
+        using (var scope = api.Services.CreateScope())
+        {
+            // Every other handle is a name the member gave up, the rest are held now.
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var renamed = await db.Users.Where(u => u.UserName == member).Select(u => u.Id).SingleAsync();
+            db.UserNameChanges.AddRange(numbered.Where((_, i) => i % 2 == 0).Select(old => new UserNameChange
+            {
+                UserId = renamed,
+                OldUserName = old,
+                OldNormalizedUserName = old.ToUpperInvariant(),
+                ChangedAt = DateTime.UtcNow
+            }));
+            await db.SaveChangesAsync();
+        }
+        foreach (var held in numbered.Where((_, i) => i % 2 == 1))
+        {
+            await Occupy(held);
+        }
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+
+        var result = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: name, subject: subject));
+
+        Assert.True(result.GetProperty("isNewAccount").GetBoolean());
+        Assert.Equal(GoogleUserNames.Fallback(subject, 0), (await MyProfile(result)).GetProperty("userName").GetString());
+    }
+
+    [Fact]
+    public async Task Names_held_now_and_names_given_up_are_found_in_one_query_in_any_letter_case()
+    {
+        var id = Guid.NewGuid().ToString("N")[..8];
+        var (held, givenUp, free) = ($"held-{id}", $"given-up-{id}", $"free-{id}");
+        await Occupy(held);
+        var log = new CommandLog();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlServer(api.ConnectionString).AddInterceptors(log).Options);
+        db.UserNameChanges.Add(new UserNameChange
+        {
+            UserId = await db.Users.Where(u => u.UserName == held).Select(u => u.Id).SingleAsync(),
+            OldUserName = givenUp,
+            OldNormalizedUserName = givenUp.ToUpperInvariant(),
+            ChangedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var userManager = new UserManager<User>(Substitute.For<IUserStore<User>>(), Options.Create(new IdentityOptions()),
+            null!, null!, null!, new UpperInvariantLookupNormalizer(), new IdentityErrorDescriber(), null!,
+            NullLogger<UserManager<User>>.Instance);
+        log.Commands.Clear();
+
+        var inUse = await new UsersRepositories(userManager, db).GetUserNamesInUseAsync(
+            [held.ToUpperInvariant(), "Given-Up-" + id, free]);
+
+        Assert.Equal(["Given-Up-" + id, held.ToUpperInvariant()], inUse.Order(StringComparer.Ordinal));
+        Assert.Contains("UNION ALL", Assert.Single(log.Commands));
     }
 
     /// <summary>
