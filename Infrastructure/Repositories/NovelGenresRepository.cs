@@ -83,6 +83,8 @@ public class NovelGenresRepository(ApplicationDbContext dbContext) : INovelGenre
             .Take(pageSize)
             .Include(n => n.NovelGenres)
                 .ThenInclude(ng => ng.Genre)
+            // Its author as the account is now (#68), joined in the same query.
+            .Include(n => n.Owner)
             .ToListAsync();
 
         return (novels, totalCount);

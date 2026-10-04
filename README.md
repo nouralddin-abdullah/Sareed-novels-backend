@@ -999,6 +999,28 @@ object, so one model reads all three.
 - **Additive.** An API from before #59 leaves `author` out: the app keeps its own lookup when the field is missing. The
   web doesn't read it yet. `GET /api/search/suggest` is unchanged.
 
+### The author of each novel in the rankings and a genre's lists (#68)
+
+Every list that answers with ranked novels (`NovelInRankingDto`) gives each one the same `author` as #59, the novel
+page's own: `{ id, userName, displayName, profilePhoto }` (`profilePhoto` null without one).
+
+| Request | |
+|---|---|
+| `GET /api/rankings/site-wide/{type}` | `Trending`, `AllTime`, `NewArrivals`: the app's home rails and rankings screen |
+| `GET /api/rankings/{genreSlug}/{type}` | a genre's `trending`, `top_rated` and `new` rankings |
+| `GET /api/genre/{genreSlug}/novels` | a genre's novels in every `sorting`: the ranked `trending`, `top_rated`, `new`, and `popular`, `newest`, `rating`, `most_reviewed` |
+
+- **Current, never a copy.** A ranking is stored as its novels' places only (recomputed every 30 minutes); what each
+  novel shows, now its author too, is read with the page. So a new user name, display name or photo shows in the very
+  next answer, without waiting for the rankings to be computed again. The API doesn't cache these answers (no
+  `Cache-Control`); how long the app keeps a page it loaded is the app's choice.
+- **No extra queries.** The author is joined in the page's own SQL query: a page of many novels by many authors is as
+  many queries as a page of one.
+- **A deleted account**: its novels are deleted with it and leave every one of these lists at once, before the
+  rankings are computed again.
+- **Additive.** A client that doesn't read `author` is unaffected, and the app shows no author line where it is missing
+  (an API from before #68).
+
 ### Blocks: a single post, its discussion, likes, comments and notifications (#52)
 
 A block now reaches a single post and its discussion, likes, comments on posts, replies and notifications, as it

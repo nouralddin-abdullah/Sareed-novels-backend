@@ -32,6 +32,9 @@ public class RankingRepository(ApplicationDbContext dbContext) : IRankingReposit
             .Include(re => re.Novel)
                 .ThenInclude(n => n.NovelGenres)
                     .ThenInclude(ng => ng.Genre)
+            // Its author as the account is now (#68), joined in the same query.
+            .Include(re => re.Novel)
+                .ThenInclude(n => n.Owner)
             .OrderBy(re => re.Rank)
             .Skip(skip)
             .Take(pageSize)
@@ -55,6 +58,9 @@ public class RankingRepository(ApplicationDbContext dbContext) : IRankingReposit
             .Include(re => re.Novel)
                 .ThenInclude(n => n.NovelGenres)
                     .ThenInclude(ng => ng.Genre)
+            // Its author as the account is now (#68), joined in the same query.
+            .Include(re => re.Novel)
+                .ThenInclude(n => n.Owner)
             .OrderBy(re => re.Rank)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
