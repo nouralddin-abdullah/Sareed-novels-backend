@@ -1202,3 +1202,44 @@ with the member they already load, so they cost no extra query.
 **Routes.** No user name had to be reserved for `me/privacy`: it matches no path of the `{userName}` routes (their
 second segment is `reviews` or `comments`, and `GET /api/User/{userName}` has one segment), and `me` is shorter than
 the 3 characters a user name needs anyway.
+
+### Stored counters recounted once (#66)
+
+The counts the API shows are stored next to what they count (a post's `commentsCount`, a chapter's
+`totalCommentsCount`, a review's likes...), and since 2026-09-25 they move with atomic SQL. Before that they were written
+in the background by code that lost concurrent changes and logged its failures away, and nothing ever recounted them:
+post `17f1d72d` said `commentsCount: 0` with a comment (and a reply to it) under it. The migration
+`RecountStoredCounters` sets each of them, once, at the deploy, from the rows it counts, by the rule the code keeps it by:
+
+| Counter | Counts |
+|---|---|
+| `Posts.CommentsCount` | top-level comments on the post that their author hasn't deleted; replies don't count |
+| `ChapterParagraphs.CommentsCount` | top-level comments on the paragraph, not deleted |
+| `Chapters.CommentsCount`, `TotalCommentsCount` | top-level comments on the chapter itself, not deleted; the total adds its paragraphs' |
+| `AspNetUsers.CommentsCount`, `ReviewsCount` | the member's comments anywhere (replies included, not deleted) and reviews; not shown since #54 |
+| `Posts.LikesCount`, `Comments.LikesCount`, `Reviews.LikeCount` | likes; a deleted post or comment keeps its likes |
+| `Novels.ReviewCount` and its five average scores | the novel's reviews, and their averages as writing a review stores them (2 decimals) |
+| `AspNetUsers.LibraryNovelsCount` | novels in the member's library, deleted and draft novels included |
+| `ReadingLists.NovelsCount`, `FollowersCount` | novels on the list (hidden ones too; this one isn't shown), and its followers |
+| `Chapters.ParagraphsCount`, `Novels.ChapterCount` | the chapter's paragraphs; the novel's published chapters |
+
+- Every row is recounted, deleted posts, novels and accounts too, as the code keeps theirs. A comment a moderator
+  removed, or on a chapter or paragraph since deleted, is gone and counts nowhere; one its author deleted doesn't count,
+  and the replies under it still count for their authors.
+- Only rows whose value differs change, and running it again changes nothing. `Down` changes nothing: the drifted
+  values can't be told apart from right ones.
+- It holds what it counts until it commits and runs at high deadlock priority: a comment or like sent during the deploy
+  waits for it (or, in a deadlock, fails and can be sent again), and is never lost.
+- Not recounted: views, points and money, and what the scheduled jobs rebuild (rankings, the supporters board).
+
+**Before deploying: the diagnostic.** `Infrastructure/Migrations/20261004164302_RecountStoredCounters.Diagnostic.sql` is
+the same recount as three SELECT statements, generated from the migration's definitions (a test keeps the two equal and
+checks that it reports exactly the rows the migration fixes). It writes nothing; run each statement on production with
+a read-only connection:
+
+1. One row per counter: `RowsChecked`, `RowsToChange` (the rows the migration will update), `StoredTooHigh`,
+   `StoredTooLow`, and `TotalAbsoluteDrift`, the sum of |stored - recounted| (in points for the five score columns).
+2. Every row that will change: the counter, the row's id, its stored value and the recounted one.
+3. The comments by place (post, paragraph, chapter): "several places" and "no place" should not appear.
+
+After the deploy, statements 1 and 2 report nothing to change.
