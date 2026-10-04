@@ -15,7 +15,8 @@ namespace Infrastructure.Repositories;
 /// list filters on, in its order. The places they were written are found by primary key, and whether a novel has a
 /// published chapter on the chapters' (NovelId, Status) index. A page is its total and one query for its items, which
 /// also reads what each item shows besides its own row (a reply's parent and its author, a paragraph's text), by
-/// primary key, so it is the same two queries however many items it has.
+/// primary key, and the parent's replies on IX_Comments_ParentCommentId, so it is the same two queries however many
+/// items it has.
 /// </remarks>
 internal sealed class ProfileListsRepository(ApplicationDbContext db) : IProfileListsRepository
 {
@@ -56,12 +57,13 @@ internal sealed class ProfileListsRepository(ApplicationDbContext db) : IProfile
             .ThenBy(x => x.Comment.Id)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize);
-        // Joined to the page's rows, by primary key: the comment a reply answers, if the viewer's comment lists show it
-        // (BlockFilters: not by someone they blocked), and a paragraph comment's paragraph.
+        // The comments the viewer's comment lists show them (BlockFilters: not by someone they blocked).
+        var visible = db.Comments.VisibleTo(db, viewerId);
+        // Joined to the page's rows, by primary key: the comment a reply answers, if the viewer's comment lists show
+        // it, and a paragraph comment's paragraph.
         var items = await (
                 from x in page
-                join parent in db.Comments.VisibleTo(db, viewerId) on x.Comment.ParentCommentId equals (Guid?)parent.Id
-                    into parents
+                join parent in visible on x.Comment.ParentCommentId equals (Guid?)parent.Id into parents
                 from parent in parents.DefaultIfEmpty()
                 join paragraph in db.ChapterParagraphs on x.Comment.ParagraphId equals (Guid?)paragraph.Id into paragraphs
                 from paragraph in paragraphs.DefaultIfEmpty()
@@ -74,11 +76,20 @@ internal sealed class ProfileListsRepository(ApplicationDbContext db) : IProfile
                     x.Comment.CreatedAt,
                     x.Comment.UpdatedAt,
                     x.Comment.ParentCommentId,
-                    // Its author's names as they are now (a deleted account as it is kept, anonymized).
+                    // The parent as its thread shows it (#67): its own columns, and its replies counted as the comment
+                    // lists count them for the viewer (CommentsRepository.GetRepliesCounts), on the ParentCommentId
+                    // index. Its author's names as they are now (a deleted account as it is kept, anonymized).
                     parent == null
                         ? null
-                        : new ProfileParentComment(parent.Id, parent.Content, new ProfileUser(
-                            parent.User.Id, parent.User.UserName!, parent.User.DisplayName, parent.User.ProfilePhoto)),
+                        : new ProfileParentComment(
+                            parent.Id,
+                            parent.Content,
+                            parent.AttachedImageUrl,
+                            parent.LikesCount,
+                            parent.CreatedAt,
+                            visible.Count(reply => reply.ParentCommentId != null && reply.ParentCommentId == parent.Id),
+                            new ProfileUser(parent.User.Id, parent.User.UserName!, parent.User.DisplayName,
+                                parent.User.ProfilePhoto)),
                     new ProfileNovel(x.Novel.Id, x.Novel.Slug, x.Novel.Title, x.Novel.CoverImageUrl, x.Novel.AuthorId),
                     // Its number among the published chapters, in the reader's order (ChapterIndex).
                     new ProfileChapter(x.Chapter.Id, x.Chapter.Title, db.Chapters.Count(other =>

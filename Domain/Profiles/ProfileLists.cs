@@ -21,8 +21,19 @@ public sealed record ProfileParagraph(Guid Id, string Content);
 /// </summary>
 public sealed record ProfileUser(string Id, string UserName, string DisplayName, string? ProfilePhoto);
 
-/// <summary>The comment a listed reply answers (#60), with its full text and its author.</summary>
-public sealed record ProfileParentComment(Guid Id, string Content, ProfileUser User);
+/// <summary>
+/// The comment a listed reply answers (#60): its thread's top-level comment as the comment lists show it (#67), with
+/// its full text, its picture, its likes, when it was written, its author, and <see cref="RepliesCount"/>: the replies
+/// under it that its thread shows the viewer it was read for (not those by members the viewer blocked).
+/// </summary>
+public sealed record ProfileParentComment(
+    Guid Id,
+    string Content,
+    string? AttachedImageUrl,
+    int LikesCount,
+    DateTime CreatedAt,
+    int RepliesCount,
+    ProfileUser User);
 
 /// <summary>One of a member's reviews, with the novel it is on.</summary>
 public sealed record ProfileReview(

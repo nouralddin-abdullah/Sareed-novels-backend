@@ -27,31 +27,40 @@ internal static class ProfileListMapping
     };
 
     /// <summary>
-    /// The comment as listed. Its paragraph is quoted only when <paramref name="viewerReadsChapter"/>: the reader would
-    /// show its chapter's text to the viewer (Chapters.ChapterAccess).
+    /// The comment as listed. <paramref name="likedByViewer"/> holds the comments the viewer liked among the page's
+    /// comments and the ones they answer (empty when signed out). Its paragraph is quoted only when
+    /// <paramref name="viewerReadsChapter"/>: the reader would show its chapter's text to the viewer
+    /// (Chapters.ChapterAccess).
     /// </summary>
-    public static ProfileCommentDTO ToDto(this ProfileComment comment, bool isLikedByViewer, bool viewerReadsChapter) => new()
+    public static ProfileCommentDTO ToDto(this ProfileComment comment, IReadOnlySet<Guid> likedByViewer,
+        bool viewerReadsChapter) => new()
     {
         Id = comment.Id,
         Content = comment.Content,
         AttachedImageUrl = comment.AttachedImageUrl,
         LikesCount = comment.LikesCount,
-        IsLikedByCurrentUser = isLikedByViewer,
+        IsLikedByCurrentUser = likedByViewer.Contains(comment.Id),
         CreatedAt = Utc.Of(comment.CreatedAt),
         UpdatedAt = Utc.Of(comment.UpdatedAt),
         IsReply = comment.ParentCommentId != null,
         ParentCommentId = comment.ParentCommentId,
-        ParentComment = comment.ParentComment?.ToDto(),
+        ParentComment = comment.ParentComment?.ToDto(likedByViewer),
         Novel = comment.Novel.ToDto(),
         Chapter = new ProfileChapterDTO { Id = comment.Chapter.Id, Title = comment.Chapter.Title, Number = comment.Chapter.Number },
         ParagraphId = comment.Paragraph?.Id,
         ParagraphExcerpt = comment.Paragraph is { } paragraph && viewerReadsChapter ? ParagraphExcerpt.Of(paragraph.Content) : null
     };
 
-    private static ProfileParentCommentDTO ToDto(this ProfileParentComment parent) => new()
+    private static ProfileParentCommentDTO ToDto(this ProfileParentComment parent,
+        IReadOnlySet<Guid> likedByViewer) => new()
     {
         Id = parent.Id,
         Content = parent.Content,
+        AttachedImageUrl = parent.AttachedImageUrl,
+        LikesCount = parent.LikesCount,
+        IsLikedByCurrentUser = likedByViewer.Contains(parent.Id),
+        CreatedAt = Utc.Of(parent.CreatedAt),
+        TotalRepliesCount = parent.RepliesCount,
         User = new CommentUserDTO
         {
             Id = parent.User.Id,
