@@ -3,20 +3,20 @@ using Application.Users.Commands.UserLogin;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Moderation;
+using Domain.Repositories;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Google.Apis.Auth;
-using System.Buffers.Binary;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Application.Users.Commands.GoogleLogin
 {
     public class GoogleLoginCommandHandler(
         ILogger<GoogleLoginCommandHandler> logger,
         UserManager<User> userManager,
+        IUsersRepository users,
+        GoogleUserNames googleUserNames,
         IJWTService jwtService,
         IGoogleIdTokenValidator googleTokens,
         ITokenRevocationService tokenRevocation,
@@ -54,6 +54,7 @@ namespace Application.Users.Commands.GoogleLogin
             // Find or create user
             var user = await userManager.FindByEmailAsync(payload.Email);
             var passwordReset = false;
+            var isNewAccount = user == null;
 
             // A moderator suspended the account: no sign-in, and nothing about it changes.
             if (user != null && Suspension.IsActive(user.SuspendedUntil, time.GetUtcNow().UtcDateTime))
@@ -64,7 +65,7 @@ namespace Application.Users.Commands.GoogleLogin
 
             if (user == null)
             {
-                user = await CreateUserAsync(payload);
+                user = await CreateUserAsync(payload, cancellationToken);
 
                 // Add Google login
                 var addLoginResult = await userManager.AddLoginAsync(user, new UserLoginInfo(GoogleProvider, payload.Subject, GoogleProvider));
@@ -102,21 +103,22 @@ namespace Application.Users.Commands.GoogleLogin
             var accessToken = jwtService.GenerateAccessToken(user);
             var expiresAt = DateTime.UtcNow.AddDays(60);
 
-            return new UserLoginResult(accessToken, expiresAt, passwordReset);
+            return new UserLoginResult(accessToken, expiresAt, passwordReset, isNewAccount);
         }
 
         /// <summary>
         /// A new account for a Google user. The handle is public (/profile/{userName}), so it never comes from the email
-        /// address, and neither does the display name: it is "sarduser" and six digits (<see cref="CandidateUserName"/>),
-        /// drawn again when another account holds it.
+        /// address, and neither does the display name: the handle is one from the person's Google name when it is Latin,
+        /// else "sarduser" and six digits (<see cref="GoogleUserNames"/>, #69). A handle another account holds when this
+        /// one is saved, also one a sign-in at the same moment just took, gives way to the next.
         /// </summary>
-        private async Task<User> CreateUserAsync(GoogleJsonWebSignature.Payload payload)
+        private async Task<User> CreateUserAsync(GoogleJsonWebSignature.Payload payload, CancellationToken cancellationToken)
         {
-            IdentityResult result;
-            var attempt = 0;
-            do
+            IdentityResult? result = null;
+            var attempts = 0;
+            foreach (var userName in await googleUserNames.CandidatesAsync(payload, cancellationToken))
             {
-                var userName = CandidateUserName(payload.Subject, attempt);
+                attempts++;
                 var user = new User
                 {
                     Id = Guid.NewGuid().ToString(),
@@ -128,32 +130,22 @@ namespace Application.Users.Commands.GoogleLogin
                     CreatedAt = DateTime.UtcNow
                 };
 
-                result = await userManager.CreateAsync(user);
+                result = await users.CreateWithoutPasswordAsync(user);
                 if (result.Succeeded)
                 {
                     return user;
                 }
-            } while (++attempt < UserNameAttempts
-                     && result.Errors.All(e => e.Code == nameof(IdentityErrorDescriber.DuplicateUserName)));
+                if (!result.Errors.All(e => e.Code == nameof(IdentityErrorDescriber.DuplicateUserName)))
+                {
+                    break;
+                }
+            }
 
             // Every handle tried was taken, or the account was refused for another reason (the address was just taken
             // by a sign-in running at the same time): an answer, not a server error.
             logger.LogError("Failed to create Google user after {Attempts} attempt(s): {Errors}",
-                attempt, string.Join(", ", result.Errors.Select(e => e.Code)));
+                attempts, string.Join(", ", result?.Errors.Select(e => e.Code) ?? []));
             throw new BadRequestException(SignInFailedMessage, SignInFailedCode);
-        }
-
-        /// <summary>How many handles a new Google user tries before sign-in gives up.</summary>
-        public const int UserNameAttempts = 5;
-
-        /// <summary>
-        /// The handle a new Google account tries on its <paramref name="attempt"/>th try (from 0): "sarduser" and six
-        /// digits from a hash of Google's id for the person, so each try differs and a test can predict them.
-        /// </summary>
-        public static string CandidateUserName(string googleSubject, int attempt)
-        {
-            var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{googleSubject}:{attempt}"));
-            return $"sarduser{BinaryPrimitives.ReadUInt32BigEndian(hash) % 900_000 + 100_000}";
         }
 
         public const string InvalidTokenCode = "GoogleTokenInvalid";

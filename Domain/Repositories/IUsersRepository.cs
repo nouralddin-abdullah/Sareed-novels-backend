@@ -34,6 +34,21 @@ public interface IUsersRepository
     /// </summary>
     Task<User?> GetByPreviousUserNameAsync(string userName, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Which of <paramref name="userNames"/> an account holds now, compared as Identity compares user names (their
+    /// normalized form, so in any letter case; deleted accounts included, as their names stay taken), in one query.
+    /// Answers the names as given. Names members gave up (<see cref="UserNameChange"/>) aren't held.
+    /// </summary>
+    Task<IReadOnlySet<string>> GetTakenUserNamesAsync(IReadOnlyCollection<string> userNames, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates an account without a password (Google sign-up) through Identity, with its validators. When another
+    /// account holds the user name the answer is Identity's DuplicateUserName, whether the validators found that account
+    /// or the unique index on user names refused this one (an account created with the name at the same moment); the
+    /// refused account is then no longer tracked, so the caller can try it again with another name.
+    /// </summary>
+    Task<IdentityResult> CreateWithoutPasswordAsync(User user);
+
     /// <summary>These users (untracked) by id, in one query; ids without a user are left out.</summary>
     Task<Dictionary<string, User>> GetByIdsAsync(IReadOnlyCollection<string> userIds, CancellationToken cancellationToken = default);
 

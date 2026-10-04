@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Application.Services;
+using Application.Users;
 using Application.Users.Commands.GoogleLogin;
 using Domain.Entities;
 using Google.Apis.Auth;
@@ -272,13 +273,13 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
     {
         // Used to be an InvalidOperationException, answered 500 "Something went wrong".
         var subject = "google-" + Guid.NewGuid().ToString("N");
-        var first = GoogleLoginCommandHandler.CandidateUserName(subject, 0);
+        var first = GoogleUserNames.Fallback(subject, 0);
         await Occupy(first);
 
         var result = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), subject: subject));
 
         var profile = await (await MyProfile(result.GetProperty("accessToken").GetString()!)).Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(GoogleLoginCommandHandler.CandidateUserName(subject, 1), profile.GetProperty("userName").GetString());
+        Assert.Equal(GoogleUserNames.Fallback(subject, 1), profile.GetProperty("userName").GetString());
         Assert.NotEqual(first, profile.GetProperty("userName").GetString());
     }
 
@@ -286,9 +287,9 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
     public async Task When_every_handle_it_tries_is_taken_sign_in_is_refused_with_a_code_not_a_server_error()
     {
         var subject = "google-" + Guid.NewGuid().ToString("N");
-        for (var attempt = 0; attempt < GoogleLoginCommandHandler.UserNameAttempts; attempt++)
+        for (var attempt = 0; attempt < GoogleUserNames.FallbackAttempts; attempt++)
         {
-            await Occupy(GoogleLoginCommandHandler.CandidateUserName(subject, attempt));
+            await Occupy(GoogleUserNames.Fallback(subject, attempt));
         }
         var email = NewEmail();
 
@@ -303,12 +304,12 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
     [Fact]
     public async Task Candidate_handles_are_six_digit_sard_handles_that_differ_per_attempt()
     {
-        var candidates = Enumerable.Range(0, GoogleLoginCommandHandler.UserNameAttempts)
-            .Select(attempt => GoogleLoginCommandHandler.CandidateUserName("same-subject", attempt))
+        var candidates = Enumerable.Range(0, GoogleUserNames.FallbackAttempts)
+            .Select(attempt => GoogleUserNames.Fallback("same-subject", attempt))
             .ToList();
 
         Assert.All(candidates, name => Assert.Matches("^sarduser[1-9][0-9]{5}$", name));
         Assert.Equal(candidates.Count, candidates.Distinct().Count());
-        Assert.Equal(candidates[0], GoogleLoginCommandHandler.CandidateUserName("same-subject", 0));
+        Assert.Equal(candidates[0], GoogleUserNames.Fallback("same-subject", 0));
     }
 }

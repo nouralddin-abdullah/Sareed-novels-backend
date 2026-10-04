@@ -26,5 +26,9 @@ public static class ServiceCollectionExtensions
 
         // Proving it's them again: deleting the account, setting its first password.
         services.AddScoped<Reauthentication>();
+
+        // update-me's checks on a new user name, for GET username-available and Google sign-up's handle (#69).
+        services.AddScoped<UserNameCheck>();
+        services.AddScoped<GoogleUserNames>();
     }
 }

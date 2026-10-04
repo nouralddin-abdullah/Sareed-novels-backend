@@ -59,9 +59,9 @@ public class DeletedUserNameTests
     [InlineData("104857392017463829105")]
     public void Google_sign_up_never_draws_such_a_name(string subject)
     {
-        for (var attempt = 0; attempt < GoogleLoginCommandHandler.UserNameAttempts; attempt++)
+        for (var attempt = 0; attempt < GoogleUserNames.FallbackAttempts; attempt++)
         {
-            Assert.False(UserNameRules.LooksDeleted(GoogleLoginCommandHandler.CandidateUserName(subject, attempt)));
+            Assert.False(UserNameRules.LooksDeleted(GoogleUserNames.Fallback(subject, attempt)));
         }
     }
 
