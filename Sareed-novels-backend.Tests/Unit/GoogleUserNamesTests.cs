@@ -73,6 +73,7 @@ public class GoogleUserNamesTests
     [InlineData("✨Shahd✨", "shahd")]
     [InlineData("Noor 👩‍💻", "noor")]
     [InlineData("O'Brien", "obrien")]
+    [InlineData("Jean-Luc O'Brien ✨", "jean-luc-obrien")]
     [InlineData("D’Angelo Russo", "dangelo-russo")]
     [InlineData("Hawaiʻi Kai", "hawaii-kai")]
     [InlineData("John (JJ) Smith", "john-jj-smith")]
