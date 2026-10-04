@@ -88,7 +88,7 @@ public partial class ProfileListsHttpTests
                 Assert.True(item.GetProperty("isReply").GetBoolean());
                 Assert.Equal(parent, item.GetProperty("parentCommentId").GetGuid());
                 var answered = item.GetProperty("parentComment");
-                Assert.Equal(["id", "content", "user"], Names(answered));
+                Assert.Equal(ParentFields, Names(answered));
                 Assert.Equal(parent, answered.GetProperty("id").GetGuid());
                 Assert.Equal(text, answered.GetProperty("content").GetString());
                 Assert.Equal(["id", "userName", "displayName", "profilePhoto"], Names(answered.GetProperty("user")));

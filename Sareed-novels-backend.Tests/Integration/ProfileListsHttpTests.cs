@@ -399,9 +399,9 @@ public partial class ProfileListsHttpTests(SardApiFactory api)
         Assert.Equal(JsonValueKind.Null, answer.GetProperty("updatedAt").ValueKind);
         Assert.True(answer.GetProperty("isReply").GetBoolean());
         Assert.Equal(thread, answer.GetProperty("parentCommentId").GetGuid());
-        // What it answers (#60): the other member's comment, by them.
+        // What it answers (#60): the other member's comment, by them, as its thread shows it (#67).
         var answered = answer.GetProperty("parentComment");
-        Assert.Equal(["id", "content", "user"], Names(answered));
+        Assert.Equal(ParentFields, Names(answered));
         Assert.Equal(thread, answered.GetProperty("id").GetGuid());
         Assert.Equal("رأي", answered.GetProperty("content").GetString());
         Assert.Equal(["id", "userName", "displayName", "profilePhoto"], Names(answered.GetProperty("user")));
