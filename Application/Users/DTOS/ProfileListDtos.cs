@@ -64,12 +64,28 @@ public class ProfileCommentDTO
     public string? ParagraphExcerpt { get; set; }
 }
 
-/// <summary>The comment a listed reply answers (#60).</summary>
+/// <summary>
+/// The comment a listed reply answers (#60): its thread's top-level comment. Since #67 it has what the chapter and
+/// paragraph comment lists give a comment to draw it (CommentsDTO), under the same names and with the same meanings,
+/// so an app draws it on top of the thread without reading it again. Left out: where it is (parentCommentId,
+/// chapterId), which the listed reply says, and hasMoreReplies, which would always be true here.
+/// </summary>
 public class ProfileParentCommentDTO
 {
     public Guid Id { get; set; }
     /// <summary>Its full text (the apps shorten it).</summary>
     public string Content { get; set; } = default!;
+    /// <summary>Its picture's URL; null when it has none.</summary>
+    public string? AttachedImageUrl { get; set; }
+    public int LikesCount { get; set; }
+    /// <summary>Whether the signed-in viewer liked it; false when signed out.</summary>
+    public bool IsLikedByCurrentUser { get; set; }
+    public DateTime CreatedAt { get; set; }
+    /// <summary>
+    /// The replies its thread shows the viewer, as the comment lists count them: not those by members the viewer
+    /// blocked. At least one, the listed reply.
+    /// </summary>
+    public int TotalRepliesCount { get; set; }
     /// <summary>
     /// Its author, as the comment lists show a comment's (their names now; a deleted account as «مستخدم محذوف»).
     /// </summary>

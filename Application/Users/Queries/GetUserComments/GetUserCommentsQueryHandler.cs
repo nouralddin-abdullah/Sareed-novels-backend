@@ -39,16 +39,26 @@ public class GetUserCommentsQueryHandler(
 
         var (comments, totalCount) = await profileLists.GetCommentsAsync(member.Id, viewer?.Id, pageNumber, pageSize,
             cancellationToken);
+        // What the viewer liked among the listed comments and the comments they answer (#67), in one query.
         var liked = viewer != null && comments.Count > 0
-            ? await commentLikesRepository.GetUserLikedCommentIds(viewer.Id, comments.Select(c => c.Id))
+            ? await commentLikesRepository.GetUserLikedCommentIds(viewer.Id, CommentsShown(comments))
             : [];
         var readChapters = await ChaptersTheViewerReads(comments, viewer?.Id);
 
         logger.LogInformation("Listed {Count} of {Total} comments of user {UserId}", comments.Count, totalCount, member.Id);
         return new PagedResult<ProfileCommentDTO>(
-            comments.Select(c => c.ToDto(liked.Contains(c.Id), readChapters.Contains(c.Chapter.Id))).ToList(),
+            comments.Select(c => c.ToDto(liked, readChapters.Contains(c.Chapter.Id))).ToList(),
             totalCount, pageSize, pageNumber);
     }
+
+    /// <summary>
+    /// The comments a page shows: its items and the comments its replies answer, each once (a reply to the member's own
+    /// comment may answer one of the items).
+    /// </summary>
+    private static IEnumerable<Guid> CommentsShown(IReadOnlyList<ProfileComment> comments) =>
+        comments
+            .SelectMany(c => c.ParentComment is { } parent ? new[] { c.Id, parent.Id } : new[] { c.Id })
+            .Distinct();
 
     /// <summary>
     /// The chapters of the page's paragraph comments whose text the reader would show the viewer, so their paragraphs

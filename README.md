@@ -1108,7 +1108,7 @@ anywhere, so it stays listed. A chapter locked for early access is still publish
 | `likesCount`, `isLikedByCurrentUser` | as in the comment lists |
 | `createdAt`, `updatedAt` | UTC with "Z"; `updatedAt` is null (comments can't be edited yet) |
 | `isReply`, `parentCommentId` | whether it answers another comment, and which: the thread it is in |
-| `parentComment` | for a reply, the comment it answers (#60): `{ id, content, user: { id, userName, displayName, profilePhoto } }`, its full text (the apps shorten it) and its author as the comment lists show authors, with the names they have now. Null for a top-level comment, and for a reply to someone the signed-in viewer blocked (see below) |
+| `parentComment` | for a reply, the comment it answers (#60), whole as its thread shows it (#67): `{ id, content, attachedImageUrl, likesCount, isLikedByCurrentUser, createdAt, totalRepliesCount, user: { id, userName, displayName, profilePhoto } }`, its full text (the apps shorten it) and its author as the comment lists show authors, with the names they have now (the fields are below). Null for a top-level comment, and for a reply to someone the signed-in viewer blocked (see below) |
 | `novel` | `{ id, slug, title, coverImageUrl }` |
 | `chapter` | `{ id, title, number }`: the chapter it was written on, for a paragraph comment the paragraph's; `number` is the chapter's number as readers see it, its position among the novel's published chapters from 1 (as the library's `lastReadChapterNumber`), which changes when chapters before it are published, unpublished, deleted or reordered |
 | `paragraphId` | the paragraph it was written on, or null for a comment on the chapter itself. A reply in a paragraph's thread is on that paragraph too |
@@ -1127,6 +1127,24 @@ whose parent was deleted aren't listed at all (above). With `parentComment`, `pa
 `GET /api/comment/chapter/comments/{parentCommentId}`) without reading the comment context first; the context still
 gives the page of the thread that holds the reply.
 
+**The parent, whole (#67).** `parentComment` has what the chapter and paragraph comment lists give a top-level
+comment to draw it, under the same names and with the same meanings, so the app draws it on top of the thread at once,
+without reading the comment first:
+
+| Field | |
+|---|---|
+| `id`, `content`, `user` | as above (#60) |
+| `attachedImageUrl` | its picture, or null |
+| `likesCount` | its likes |
+| `isLikedByCurrentUser` | the signed-in viewer's like; false when signed out |
+| `createdAt` | when it was written, UTC with "Z", like the list's other dates (the thread lists send the same instant without the "Z") |
+| `totalRepliesCount` | the replies its thread shows the viewer, as the thread lists count them: not those by members the viewer blocked, nor deleted ones. At least 1: the listed reply is one of them |
+
+Of the thread lists' fields, three aren't sent: `parentCommentId` (always null: threads are one level deep), `chapterId`
+(the listed reply's `chapter` and `paragraphId` say where the thread is) and `hasMoreReplies` (always true here). The
+thread lists have no `updatedAt` (comments can't be edited). The fields are additive; a client from before #67 ignores
+them. Blocks and nulls are #60's: when `parentComment` is null, there is nothing of it to send.
+
 **The counts.** `reviewsCount` and `commentsCount` on `GET /api/User/{userName}` and `GET /api/User/my-profile` (and so
 in update-me's `profile`) are the totals of these two lists as anyone signed out sees them, counted by the same
 queries on every request. They were the stored counters `User.ReviewsCount` and `User.CommentsCount`, which are still
@@ -1142,9 +1160,12 @@ kept up to date but are no longer shown. So:
 `IX_Comments_UserId_CreatedAt`, (UserId, CreatedAt descending) with every column the comment list filters on, which
 the migration `AddCreatedAtToCommentsUserIndex` puts in place of `IX_Comments_UserId`. Both read the member's own
 rows, and a page of comments reads them in order. A page of comments is its total and one query for its items, which
-also reads each reply's parent and its author and each paragraph's text, by primary key; whether the viewer may read
-a chapter is decided once for each chapter on the page that has a paragraph comment (the early-access check), never
-once per comment.
+also reads each reply's parent and its author and each paragraph's text, by primary key, and counts each parent's
+replies on `IX_Comments_ParentCommentId` (#67); the viewer's likes are one query for the items and their parents
+together; whether the viewer may read a chapter is decided once for each chapter on the page that has a paragraph
+comment (the early-access check), never once per comment. #67 added no query: a signed-out page of chapter comments
+is 3 SQL commands (the member, the total, the page) and a signed-in one 5 (adding the block check and the likes), as
+before.
 
 **User names.** `followers-list` and `following-list` are reserved like `blocked` and `my-profile` (sign-up and
 update-me refuse them, in any letter case): `GET /api/User/followers-list/reviews` is the followers route, so a member
