@@ -6,20 +6,21 @@ namespace Infrastructure.Migrations
 {
     /// <summary>
     /// #66: every stored counter that counts rows is set, once, from the rows it counts. Until the counters moved with
-    /// atomic SQL (SocialCounters, 2026-09-25) they were written in the background by read-modify-write code that lost
-    /// concurrent changes and logged its failures away, a post comment's deletion never lowered the post's count, and
-    /// TotalCommentsCount was added at 0 next to the chapters' existing comments; nothing ever recounted them. In
-    /// production post 17f1d72d, with one comment and a reply to it, said 0 comments. From here the atomic code keeps
-    /// them right.
+    /// atomic SQL (SocialCounters, 2026-09-25), the code read them, changed them and wrote whole rows back, some of it in
+    /// the background with failures only logged, so concurrent changes and failed writes were lost; deleting a post's
+    /// comment never lowered the post's count, and TotalCommentsCount was added at 0 next to the chapters' existing
+    /// comments. Nothing ever recounted them: in production post 17f1d72d, with one comment and a reply to it, said 0
+    /// comments. From here the atomic code keeps them right.
     /// <para>
     /// Data, set based and idempotent (<see cref="Recount"/>): each counter in <see cref="Counters"/> gets what the live
     /// code maintains for it over a normal history (each one's rule is in the list), on every row of its table: deleted
     /// posts, novels and accounts too, whose counters the live code keeps as well. Each UPDATE touches only the rows whose
     /// stored value differs, so running it again changes nothing. The counted rows are read with HOLDLOCK and the batch
-    /// runs at high deadlock priority, so a request writing during the deploy can't make it lose a change: the request
-    /// waits for the commit (its +1 then lands on the recounted value), or, in a deadlock, is the one that fails, never
-    /// the migration and with it the startup. Views, points and money aren't counts of rows and stay as they are. Down
-    /// changes nothing: the drifted values can't be told apart from right ones, so there is nothing to put back.
+    /// runs at high deadlock priority, so a request that writes a row and its count in one transaction during the deploy
+    /// (a comment, a like, a review, a library entry) can't make it lose a change: the request waits for the commit (its
+    /// +1 then lands on the recounted value), or, in a deadlock, is the one that fails, never the migration and with it
+    /// the startup. Views, points and money aren't counts of rows and stay as they are. Down changes nothing: the
+    /// drifted values can't be told apart from right ones, so there is nothing to put back.
     /// </para>
     /// <para>
     /// <see cref="Diagnostic"/> is the same recount as SELECT statements, the file

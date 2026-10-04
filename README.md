@@ -1206,10 +1206,11 @@ the 3 characters a user name needs anyway.
 ### Stored counters recounted once (#66)
 
 The counts the API shows are stored next to what they count (a post's `commentsCount`, a chapter's
-`totalCommentsCount`, a review's likes...), and since 2026-09-25 they move with atomic SQL. Before that they were written
-in the background by code that lost concurrent changes and logged its failures away, and nothing ever recounted them:
-post `17f1d72d` said `commentsCount: 0` with a comment (and a reply to it) under it. The migration
-`RecountStoredCounters` sets each of them, once, at the deploy, from the rows it counts, by the rule the code keeps it by:
+`totalCommentsCount`, a review's likes...), and since 2026-09-25 they move with atomic SQL. Before that the code read
+them, changed them and wrote whole rows back, some of it in the background with failures only logged, so concurrent
+changes and failed writes were lost, and nothing ever recounted them: post `17f1d72d` said `commentsCount: 0` with a
+comment (and a reply to it) under it. The migration `RecountStoredCounters` sets each of them, once, at the deploy,
+from the rows it counts, by the rule the code keeps it by:
 
 | Counter | Counts |
 |---|---|
@@ -1228,8 +1229,8 @@ post `17f1d72d` said `commentsCount: 0` with a comment (and a reply to it) under
   and the replies under it still count for their authors.
 - Only rows whose value differs change, and running it again changes nothing. `Down` changes nothing: the drifted
   values can't be told apart from right ones.
-- It holds what it counts until it commits and runs at high deadlock priority: a comment or like sent during the deploy
-  waits for it (or, in a deadlock, fails and can be sent again), and is never lost.
+- It holds what it counts until it commits and runs at high deadlock priority: a comment, like, review or library
+  change sent during the deploy waits for it (or, in a deadlock, fails and can be sent again), and is counted once.
 - Not recounted: views, points and money, and what the scheduled jobs rebuild (rankings, the supporters board).
 
 **Before deploying: the diagnostic.** `Infrastructure/Migrations/20261004164302_RecountStoredCounters.Diagnostic.sql` is
