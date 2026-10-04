@@ -13,6 +13,7 @@ using Application.Users.Queries.GetFollowingList;
 using Application.Users.Queries.GetListPrivacy;
 using Application.Users.Queries.GetMyProfile;
 using Application.Users.Queries.GetUserComments;
+using Application.Users.Queries.GetUserNameAvailability;
 using Application.Users.Queries.GetUserProfile;
 using Application.Users.Queries.GetUserReviews;
 using MediatR;
@@ -172,6 +173,18 @@ namespace Sareed_novels_backend.Controllers
             var paginatedFollowingList = await mediator.Send(query);
             return Ok(paginatedFollowingList);
         }
+
+        /// <summary>
+        /// Whether the caller could take this user name now (#69, README): 200 {available, code, message}, what PATCH
+        /// update-me would answer it with, through the same checks (UserNameCheck). code is null (available: the caller's
+        /// own name in any letter case is), InvalidUserName (missing or empty, length, "@", characters), ReservedUserName
+        /// (a route name, the "deleted-" prefix) or UserNameTaken (another account holds it, in any letter case); message
+        /// is update-me's Arabic one. Choosing the name is still update-me. 60 requests a minute per address.
+        /// </summary>
+        [HttpGet("username-available")]
+        [EnableRateLimiting(RateLimitPolicies.UserNameCheck)]
+        public async Task<IActionResult> GetUserNameAvailability([FromQuery] string? userName, CancellationToken cancellationToken) =>
+            Ok(await mediator.Send(new GetUserNameAvailabilityQuery(userName), cancellationToken));
 
         [HttpGet("{userName}")]
         [AllowAnonymous]

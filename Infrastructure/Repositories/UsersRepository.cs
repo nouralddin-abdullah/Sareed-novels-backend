@@ -4,6 +4,7 @@ using Domain.Profiles;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories
@@ -174,6 +175,52 @@ namespace Infrastructure.Repositories
             // A deleted account's old names were removed with it; a deleted account is never found this way.
             var user = userId == null ? null : await userManager.FindByIdAsync(userId);
             return user?.DeletedAt == null ? user : null;
+        }
+
+        public async Task<IReadOnlySet<string>> GetUserNamesInUseAsync(IReadOnlyCollection<string> userNames,
+            CancellationToken cancellationToken = default)
+        {
+            var normalized = userNames.Select(name => userManager.NormalizeName(name)).Distinct().ToList();
+            if (normalized.Count == 0)
+            {
+                return new HashSet<string>();
+            }
+
+            // One query (UNION ALL): the names accounts hold now, then those members gave up.
+            var inUse = (await dbContext.Users
+                    .Where(u => normalized.Contains(u.NormalizedUserName!))
+                    .Select(u => u.NormalizedUserName!)
+                    .Concat(dbContext.UserNameChanges
+                        .Where(c => normalized.Contains(c.OldNormalizedUserName))
+                        .Select(c => c.OldNormalizedUserName))
+                    .ToListAsync(cancellationToken))
+                .ToHashSet(StringComparer.Ordinal);
+            return userNames.Where(name => inUse.Contains(userManager.NormalizeName(name))).ToHashSet(StringComparer.Ordinal);
+        }
+
+        public async Task<IdentityResult> CreateWithoutPasswordAsync(User user)
+        {
+            try
+            {
+                return await userManager.CreateAsync(user);
+            }
+            catch (DbUpdateException ex) when (IsDuplicateUserName(ex))
+            {
+                // The validators found no account with the name, but another request saved one with it first.
+                dbContext.Entry(user).State = EntityState.Detached;
+                return IdentityResult.Failed(userManager.ErrorDescriber.DuplicateUserName(user.UserName!));
+            }
+        }
+
+        /// <summary>SQL Server refusing a duplicate key in the unique index on normalized user names (Identity's UserNameIndex).</summary>
+        private bool IsDuplicateUserName(DbUpdateException ex)
+        {
+            var index = dbContext.Model.FindEntityType(typeof(User))?.GetIndexes()
+                .SingleOrDefault(i => i.IsUnique && i.Properties is [{ Name: nameof(User.NormalizedUserName) }])
+                ?.GetDatabaseName();
+            return index != null
+                && ex.InnerException is SqlException { Number: 2601 or 2627 } sql
+                && sql.Message.Contains($"'{index}'", StringComparison.Ordinal);
         }
 
         public async Task<Dictionary<string, User>> GetByIdsAsync(IReadOnlyCollection<string> userIds, CancellationToken cancellationToken = default)

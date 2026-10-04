@@ -1,6 +1,7 @@
 ﻿using Amazon.Runtime;
 using Amazon.S3;
 using Application.Services;
+using Application.Users;
 using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Authorization;
@@ -42,7 +43,7 @@ public static class ServiceCollectionExtensions
             options.User.RequireUniqueEmail = true;
             // Identity's default set without "@": user names are public, and email addresses used as user names were
             // published that way (validators give the Arabic message; this is the backstop).
-            options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._+";
+            options.User.AllowedUserNameCharacters = UserNameRules.AllowedCharacters;
 
             // Password options - Make them more user-friendly
             options.Password.RequireDigit = false;              // Don't require numbers

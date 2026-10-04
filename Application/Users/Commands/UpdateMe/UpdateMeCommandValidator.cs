@@ -7,20 +7,26 @@ public class UpdateMeCommandValidator : AbstractValidator<UpdateMeCommand>
 {
     public UpdateMeCommandValidator()
     {
+        // The user name rules are also what GET /api/User/username-available and Google sign-up check (UserNameCheck,
+        // #69). Each carries the code that check answers; update-me's own refusal stays ValidationFailed.
         RuleFor(dto => dto.UserName)
             .NotEmpty()
-            .WithMessage("اختر اسم مستخدم")
-            .Length(3, 20)
-            .WithMessage("يجب أن يكون اسم المستخدم من 3 إلى 20 حرفًا")
+            .WithMessage(UserNameRules.RequiredMessage)
+            .WithErrorCode(UserNameRules.InvalidCode)
+            .Length(UserNameRules.MinLength, UserNameRules.MaxLength)
+            .WithMessage(UserNameRules.LengthMessage)
+            .WithErrorCode(UserNameRules.InvalidCode)
             .When(dto => dto.UserName != null);
 
         RuleFor(dto => dto.UserName)
             .Must(UserNameRules.HasNoAtSign)
-            .WithMessage(UserNameRules.NoAtSignMessage);
+            .WithMessage(UserNameRules.NoAtSignMessage)
+            .WithErrorCode(UserNameRules.InvalidCode);
 
         RuleFor(dto => dto.UserName)
             .Must(UserNameRules.IsNotReserved)
-            .WithMessage(UserNameRules.ReservedMessage);
+            .WithMessage(UserNameRules.ReservedMessage)
+            .WithErrorCode(UserNameRules.ReservedCode);
 
         RuleFor(dto => dto.DisplayName)
            .NotEmpty()

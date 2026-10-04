@@ -62,9 +62,11 @@ namespace Sareed_novels_backend.Controllers
 
         /// <summary>
         /// Google sign-in for the mobile app: Google Sign-In on Android hands the app an ID token, which it posts here
-        /// ({"idToken"}) and gets the same answer as /Login. The website uses the authorization code flow instead
-        /// (/google-callback), which redirects back to the site, so it can't serve the app. Refusals are 403
-        /// GoogleTokenInvalid, 403 GoogleEmailNotVerified, 403 AccountSuspended and 400 GoogleSignInFailed.
+        /// ({"idToken"}) and gets the same answer as /Login. isNewAccount is true only on the sign-in that created the
+        /// account (#69, README: its user name comes from the Google name when that is Latin). The website uses the
+        /// authorization code flow instead (/google-callback), which redirects back to the site, so it can't serve the
+        /// app. Refusals are 403 GoogleTokenInvalid, 403 GoogleEmailNotVerified, 403 AccountSuspended and 400
+        /// GoogleSignInFailed.
         /// </summary>
         [HttpPost("google-login")]
         [EnableRateLimiting(RateLimitPolicies.Auth)]

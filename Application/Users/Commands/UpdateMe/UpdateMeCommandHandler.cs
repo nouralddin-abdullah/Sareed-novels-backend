@@ -25,30 +25,19 @@ public class UpdateMeCommandHandler(
         var user = await userManager.FindByIdAsync(currentUser.Id) ?? throw new NotFoundException("المستخدم غير موجود", "UserNotFound");
 
         // "deleted-..." names are deleted accounts' (the Identity validator refuses them too; this says so with its code).
-        if (UserNameRules.LooksDeleted(request.UserName) && !string.Equals(request.UserName, user.UserName, StringComparison.OrdinalIgnoreCase))
+        // Then a new user name must be free. Names are unique whatever their case, so a change of case only finds the
+        // member themselves, which is fine (#25: it used to be refused as taken). The same checks as GET
+        // username-available (UserNameCheck, #69).
+        var userNameRefusal = UserNameRules.DeletedPrefixRefusal(request.UserName, user.UserName)
+            ?? await UserNameRules.TakenRefusalAsync(userManager, request.UserName, user);
+        if (userNameRefusal is not null)
         {
             return new UpdateMeResult
             {
                 Success = false,
-                Code = UserNameRules.DeletedPrefixCode,
-                Message = UserNameRules.DeletedPrefixMessage
+                Code = userNameRefusal.Code,
+                Message = userNameRefusal.Message
             };
-        }
-
-        // A new user name must be free. Names are unique whatever their case, so a change of case only finds the member
-        // themselves, which is fine (#25: it used to be refused as taken).
-        if (!string.IsNullOrEmpty(request.UserName) && request.UserName != user.UserName)
-        {
-            var existingUser = await userManager.FindByNameAsync(request.UserName);
-            if (existingUser != null && existingUser.Id != user.Id)
-            {
-                return new UpdateMeResult
-                {
-                    Success = false,
-                    Code = "UserNameTaken",
-                    Message = "اسم المستخدم مستخدم بالفعل، اختر اسمًا آخر"
-                };
-            }
         }
 
         //if request has ProfilePhoto you should upload it to CloudFlare first then assign it to the url
