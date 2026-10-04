@@ -28,6 +28,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The read-only diagnostic of the migration RecountStoredCounters (#66), which the tests compare with the
+         migration and run. -->
+    <None Include="..\Infrastructure\Migrations\20261004164302_RecountStoredCounters.Diagnostic.sql"
+          Link="Diagnostics\RecountStoredCounters.Diagnostic.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Domain\Domain.csproj" />
     <ProjectReference Include="..\Application\Application.csproj" />
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
