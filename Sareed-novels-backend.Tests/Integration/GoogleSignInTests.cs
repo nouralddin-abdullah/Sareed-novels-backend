@@ -461,6 +461,23 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
     }
 
     [Fact]
+    public async Task A_sarduser_handle_a_member_gave_up_is_skipped_so_their_old_link_keeps_opening_them()
+    {
+        // A member who chose a handle in the app («اختر اسم المستخدم») left their "sarduser" one in the rename history.
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+        var given = GoogleUserNames.Fallback(subject, 0);
+        var memberToken = await Register(given, NewEmail(), AttackersPassword);
+        var memberId = (await (await MyProfile(memberToken)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
+        Assert.Equal(HttpStatusCode.OK, (await Rename(memberToken, NewName())).StatusCode);
+
+        var newcomer = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: "ليلى", subject: subject));
+
+        Assert.Equal(GoogleUserNames.Fallback(subject, 1), (await MyProfile(newcomer)).GetProperty("userName").GetString());
+        var oldLink = await api.ClientFrom(NewIp()).GetAsync($"/api/User/{given}");
+        Assert.Equal(memberId, (await oldLink.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString());
+    }
+
+    [Fact]
     public async Task When_every_numbered_handle_is_held_or_was_given_up_the_account_gets_a_sarduser_one()
     {
         var (name, handle) = UniqueLatinName();

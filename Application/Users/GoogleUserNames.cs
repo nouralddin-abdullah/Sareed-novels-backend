@@ -15,9 +15,11 @@ namespace Application.Users;
 /// <item>From the person's Google name when every letter of it is Latin (<see cref="FromName"/>): «Shahd Elattar» is
 /// shahd-elattar.</item>
 /// <item>When that is in use, the same with a number: shahd-elattar-2, -3 ... up to -<see cref="NumberedUpTo"/>
-/// (<see cref="Numbered"/>), all looked up in one query.</item>
-/// <item>Otherwise, and when all of those are in use: "sarduser" and six digits, as before #69 (<see cref="Fallback"/>).</item>
+/// (<see cref="Numbered"/>).</item>
+/// <item>Otherwise, and when all of those are in use: "sarduser" and six digits, as before #69 (<see cref="Fallback"/>),
+/// skipping those in use too.</item>
 /// </list>
+/// All of them are looked up in one query.
 /// Every handle meets update-me's rules (<see cref="UserNameCheck"/>), so the member can keep it through any later edit
 /// of their profile. The name's own handle must meet them as it is (a two-letter name gives none); the number only
 /// makes room for a namesake.
@@ -25,7 +27,8 @@ namespace Application.Users;
 /// In use means another account holds the name now, or a member gave it up (the rename history behind old profile
 /// links). The second is a deliberate difference from update-me, which lets a member choose a name someone gave up, so
 /// that old links to it then open them: a choice made by hand. A name made for a newcomer never takes over an
-/// existing member's old profile links on its own.
+/// existing member's old profile links on its own. That holds for the "sarduser" handles as well: members who choose
+/// a handle in the app's «اختر اسم المستخدم» step leave theirs in the history, and their old links keep working.
 /// </para>
 /// </summary>
 public sealed class GoogleUserNames(UserNameCheck userNameCheck, IUsersRepository users)
@@ -36,35 +39,36 @@ public sealed class GoogleUserNames(UserNameCheck userNameCheck, IUsersRepositor
     /// </summary>
     public const int NumberedUpTo = 20;
 
-    /// <summary>How many "sarduser" handles a new account tries after those (each taken one draws the next).</summary>
+    /// <summary>How many "sarduser" handles a new account may try after those: the ones not in use of the first five.</summary>
     public const int FallbackAttempts = 5;
 
     /// <summary>
-    /// The user names a new account tries, in order: the handles from the name that are not in use (no account holds
-    /// them, and no member gave them up), then the "sarduser" ones. The account is created with the first one still
-    /// free when it is saved: a sign-in at the same moment may take one first.
+    /// The user names a new account tries, in order: the handles from the name, then the "sarduser" ones, all but those
+    /// in use (an account holds them, or a member gave them up), looked up in one query. The account is created with
+    /// the first one still free when it is saved: a sign-in at the same moment may take one first.
     /// </summary>
     public async Task<IReadOnlyList<string>> CandidatesAsync(GoogleJsonWebSignature.Payload payload, CancellationToken cancellationToken)
     {
-        var fromName = await FreeFromNameAsync(NameOf(payload), cancellationToken);
-        return [.. fromName, .. Enumerable.Range(0, FallbackAttempts).Select(attempt => Fallback(payload.Subject, attempt))];
+        List<string> candidates =
+        [
+            .. FromNameCandidates(NameOf(payload)),
+            .. Enumerable.Range(0, FallbackAttempts).Select(attempt => Fallback(payload.Subject, attempt))
+        ];
+        var inUse = await users.GetUserNamesInUseAsync(candidates, cancellationToken);
+        return candidates.Where(candidate => !inUse.Contains(candidate)).ToList();
     }
 
     /// <summary>The name a handle comes from: the person's full name at Google, else their given and family names.</summary>
     private static string NameOf(GoogleJsonWebSignature.Payload payload) =>
         string.IsNullOrWhiteSpace(payload.Name) ? $"{payload.GivenName} {payload.FamilyName}" : payload.Name;
 
-    private async Task<IReadOnlyList<string>> FreeFromNameAsync(string name, CancellationToken cancellationToken)
+    /// <summary>The handles from the name that update-me's rules allow, before anything is looked up.</summary>
+    private IEnumerable<string> FromNameCandidates(string name)
     {
         var handle = FromName(name);
-        if (handle is null || !userNameCheck.AllowsForNewAccount(handle))
-        {
-            return [];
-        }
-
-        var candidates = Numbered(handle).Where(userNameCheck.AllowsForNewAccount).ToList();
-        var inUse = await users.GetUserNamesInUseAsync(candidates, cancellationToken);
-        return candidates.Where(candidate => !inUse.Contains(candidate)).ToList();
+        return handle is null || !userNameCheck.AllowsForNewAccount(handle)
+            ? []
+            : Numbered(handle).Where(userNameCheck.AllowsForNewAccount);
     }
 
     /// <summary>

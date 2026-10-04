@@ -1241,11 +1241,13 @@ saving it. Existing accounts keep their names. Nothing tells the member that a n
 7. In use: `-2`, `-3` … up to `-20`, the handle giving up letters at its end so the whole stays within 20 characters.
    In use means an account holds the name now, in any letter case, or a member gave it up (the rename history, which
    keeps their old profile links opening them). The twenty are looked up in one query.
-8. Otherwise (no handle from the name, or all twenty in use): `sarduser` and six digits, as before.
+8. Otherwise (no handle from the name, or all twenty in use): `sarduser` and six digits, as before, skipping one in use
+   the same way: a member who chooses a handle in «اختر اسم المستخدم» leaves their `sarduser` one in the history.
+   All the handles a sign-up may try, these included, are looked up in that one query.
 
 Counting the names members gave up is a deliberate difference from update-me and the check below, which let a member
 take such a name by hand (its old links then open them). A name made for a newcomer never takes over an existing
-member's old profile links on its own.
+member's old profile links on its own, `/profile/sarduser…` ones included.
 
 | Google name | Handle |
 |---|---|

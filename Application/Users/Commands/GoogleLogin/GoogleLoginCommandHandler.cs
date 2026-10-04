@@ -141,10 +141,10 @@ namespace Application.Users.Commands.GoogleLogin
                 }
             }
 
-            // Every handle tried was taken, or the account was refused for another reason (the address was just taken
-            // by a sign-in running at the same time): an answer, not a server error.
+            // Every handle was in use or taken when tried, or the account was refused for another reason (the address
+            // was just taken by a sign-in running at the same time): an answer, not a server error.
             logger.LogError("Failed to create Google user after {Attempts} attempt(s): {Errors}",
-                attempts, string.Join(", ", result?.Errors.Select(e => e.Code) ?? []));
+                attempts, result is null ? "every user name to try is in use" : string.Join(", ", result.Errors.Select(e => e.Code)));
             throw new BadRequestException(SignInFailedMessage, SignInFailedCode);
         }
 

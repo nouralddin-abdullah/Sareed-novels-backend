@@ -199,16 +199,28 @@ public class GoogleUserNamesTests
     }
 
     [Fact]
-    public async Task Handles_in_use_are_skipped_and_all_twenty_are_looked_up_in_one_query()
+    public async Task Handles_in_use_are_skipped_and_all_are_looked_up_in_one_query()
     {
         InUse("shahd-elattar", "shahd-elattar-2");
+        var payload = Google("Shahd Elattar");
 
-        var candidates = await Component().CandidatesAsync(Google("Shahd Elattar"), CancellationToken.None);
+        var candidates = await Component().CandidatesAsync(payload, CancellationToken.None);
 
         Assert.Equal("shahd-elattar-3", candidates[0]);
         await users.Received(1).GetUserNamesInUseAsync(
-            Arg.Is<IReadOnlyCollection<string>>(names => names.SequenceEqual(GoogleUserNames.Numbered("shahd-elattar"))),
+            Arg.Is<IReadOnlyCollection<string>>(names =>
+                names.SequenceEqual(GoogleUserNames.Numbered("shahd-elattar").Concat(Fallbacks(payload)))),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task A_sarduser_handle_in_use_is_skipped_too()
+    {
+        // A member who chose a handle in the app left their "sarduser" one in the rename history.
+        var payload = Google("شهد");
+        InUse(GoogleUserNames.Fallback(payload.Subject, 0));
+
+        Assert.Equal(Fallbacks(payload)[1..], await Component().CandidatesAsync(payload, CancellationToken.None));
     }
 
     [Fact]
@@ -229,12 +241,14 @@ public class GoogleUserNamesTests
     [InlineData("Blocked")] // reserved: a route name
     [InlineData("Username Available")]
     [InlineData("Deleted Smith")] // deleted accounts' prefix
-    public async Task A_name_that_gives_no_usable_handle_gets_a_sarduser_one_without_a_lookup(string? name)
+    public async Task A_name_that_gives_no_usable_handle_gets_a_sarduser_one(string? name)
     {
+        InUse();
         var payload = Google(name);
 
         Assert.Equal(Fallbacks(payload), await Component().CandidatesAsync(payload, CancellationToken.None));
-        await users.DidNotReceiveWithAnyArgs().GetUserNamesInUseAsync(default!, default);
+        await users.Received(1).GetUserNamesInUseAsync(
+            Arg.Is<IReadOnlyCollection<string>>(names => names.SequenceEqual(Fallbacks(payload))), Arg.Any<CancellationToken>());
     }
 
     [Fact]
