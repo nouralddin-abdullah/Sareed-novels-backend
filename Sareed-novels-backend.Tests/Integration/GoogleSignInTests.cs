@@ -10,6 +10,7 @@ using Domain.Entities;
 using Google.Apis.Auth;
 using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -20,7 +21,8 @@ public sealed class FakeGoogleIdTokens : IGoogleIdTokenValidator
 {
     private readonly ConcurrentDictionary<string, GoogleJsonWebSignature.Payload> issued = new();
 
-    public string Issue(string email, bool emailVerified = true, string? name = "قارئة من Google", string? subject = null)
+    public string Issue(string email, bool emailVerified = true, string? name = "قارئة من Google", string? subject = null,
+        string? givenName = null, string? familyName = null)
     {
         var token = "test-google-id-token-" + Guid.NewGuid().ToString("N");
         issued[token] = new GoogleJsonWebSignature.Payload
@@ -29,6 +31,8 @@ public sealed class FakeGoogleIdTokens : IGoogleIdTokenValidator
             Email = email,
             EmailVerified = emailVerified,
             Name = name,
+            GivenName = givenName,
+            FamilyName = familyName,
         };
         return token;
     }
@@ -41,7 +45,8 @@ public sealed class FakeGoogleIdTokens : IGoogleIdTokenValidator
 
 /// <summary>
 /// Google sign-in through the real API pipeline (POST /api/identity/google-login, which the web's callback also
-/// ends in), including the pre-hijack case: an account registered with someone else's unverified address.
+/// ends in), including the pre-hijack case: an account registered with someone else's unverified address; and a new
+/// account's handle from the Google name, with isNewAccount (#69).
 /// </summary>
 public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactory>
 {
@@ -129,7 +134,10 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
         var unnamed = await GoogleLogin(api.GoogleTokens.Issue(unnamedEmail, name: null));
 
         Assert.False(named.GetProperty("passwordReset").GetBoolean());
+        Assert.True(named.GetProperty("isNewAccount").GetBoolean());
+        Assert.True(unnamed.GetProperty("isNewAccount").GetBoolean());
         var profile = await (await MyProfile(named.GetProperty("accessToken").GetString()!)).Content.ReadFromJsonAsync<JsonElement>();
+        // An Arabic name gives no handle (#69): the "sarduser" one.
         Assert.Matches("^sarduser[0-9]{6}$", profile.GetProperty("userName").GetString());
         Assert.Equal("ليلى", profile.GetProperty("displayName").GetString());
 
@@ -154,6 +162,7 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
         var result = await GoogleLogin(api.GoogleTokens.Issue(email));
 
         Assert.False(result.GetProperty("passwordReset").GetBoolean());
+        Assert.False(result.GetProperty("isNewAccount").GetBoolean()); // linked, not created
         Assert.Equal(HttpStatusCode.OK, await Login(name, AttackersPassword));
         Assert.Equal(HttpStatusCode.OK, (await MyProfile(ownToken)).StatusCode);
         var (user, logins) = await Account(email);
@@ -188,6 +197,7 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
         var result = await GoogleLogin(api.GoogleTokens.Issue(victimEmail, subject: victimsSubject));
 
         Assert.True(result.GetProperty("passwordReset").GetBoolean());
+        Assert.False(result.GetProperty("isNewAccount").GetBoolean()); // handed over, not created
         var victimsToken = result.GetProperty("accessToken").GetString()!;
 
         // The attacker's password and session are gone...
@@ -311,5 +321,163 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
         Assert.All(candidates, name => Assert.Matches("^sarduser[1-9][0-9]{5}$", name));
         Assert.Equal(candidates.Count, candidates.Distinct().Count());
         Assert.Equal(candidates[0], GoogleUserNames.Fallback("same-subject", 0));
+    }
+
+    // ---- The handle from the Google name, and isNewAccount (#69) ----
+
+    private async Task<JsonElement> MyProfile(JsonElement signIn) =>
+        await (await MyProfile(signIn.GetProperty("accessToken").GetString()!)).Content.ReadFromJsonAsync<JsonElement>();
+
+    /// <summary>A Latin name no other test uses ("Reader" and eight hex digits), and the handle it gives.</summary>
+    private static (string Name, string Handle) UniqueLatinName()
+    {
+        var id = Guid.NewGuid().ToString("N")[..8];
+        return ($"Reader {id.ToUpperInvariant()}", $"reader-{id}");
+    }
+
+    [Fact]
+    public async Task A_new_account_takes_its_handle_from_a_latin_Google_name_and_only_the_sign_in_that_made_it_is_new()
+    {
+        var email = NewEmail();
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+
+        var first = await GoogleLogin(api.GoogleTokens.Issue(email, name: "Shahd Elattar", subject: subject));
+        var again = await GoogleLogin(api.GoogleTokens.Issue(email, name: "Shahd Elattar", subject: subject));
+
+        string[] fields = ["accessToken", "expiresFor", "passwordReset", "isNewAccount"];
+        Assert.Equal(fields, first.EnumerateObject().Select(p => p.Name));
+        Assert.True(first.GetProperty("isNewAccount").GetBoolean());
+        Assert.False(again.GetProperty("isNewAccount").GetBoolean());
+        var profile = await MyProfile(first);
+        Assert.Equal("shahd-elattar", profile.GetProperty("userName").GetString());
+        Assert.Equal("Shahd Elattar", profile.GetProperty("displayName").GetString());
+        Assert.Equal(profile.GetProperty("id").GetString(), (await MyProfile(again)).GetProperty("id").GetString());
+
+        // Someone else with the same Google name.
+        var namesake = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: "Shahd Elattar"));
+        Assert.True(namesake.GetProperty("isNewAccount").GetBoolean());
+        Assert.Equal("shahd-elattar-2", (await MyProfile(namesake)).GetProperty("userName").GetString());
+    }
+
+    [Fact]
+    public async Task Signing_in_with_a_password_is_never_a_new_account()
+    {
+        var email = NewEmail();
+        var name = NewName();
+        await Register(name, email, AttackersPassword);
+
+        foreach (var login in new[] { email, name })
+        {
+            var response = await api.ClientFrom(NewIp()).PostAsJsonAsync("/api/identity/Login",
+                new { loginCardinality = login, password = AttackersPassword });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.False((await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("isNewAccount").GetBoolean());
+        }
+    }
+
+    [Theory]
+    [InlineData("شهد العطار")]
+    [InlineData("Shahd شهد")]
+    [InlineData("✨🌸")]
+    public async Task A_name_that_gives_no_handle_makes_a_new_account_with_a_sarduser_one(string name)
+    {
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+
+        var result = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: name, subject: subject));
+
+        Assert.True(result.GetProperty("isNewAccount").GetBoolean());
+        Assert.Equal(GoogleUserNames.Fallback(subject, 0), (await MyProfile(result)).GetProperty("userName").GetString());
+    }
+
+    [Fact]
+    public async Task Without_a_full_name_the_handle_comes_from_the_given_and_family_names()
+    {
+        var family = "Q" + Guid.NewGuid().ToString("N")[..8];
+
+        var result = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: null, givenName: "Noor", familyName: family));
+
+        Assert.Equal($"noor-{family.ToLowerInvariant()}", (await MyProfile(result)).GetProperty("userName").GetString());
+    }
+
+    [Fact]
+    public async Task A_taken_handle_gets_the_next_free_number_and_past_twenty_a_sarduser_one()
+    {
+        // Held in another letter case: user names are unique whatever their case.
+        var (name, handle) = UniqueLatinName();
+        await Occupy(handle.ToUpperInvariant());
+        await Occupy(handle + "-2");
+
+        var third = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: name));
+
+        Assert.Equal(handle + "-3", (await MyProfile(third)).GetProperty("userName").GetString());
+
+        var (crowded, crowdedHandle) = UniqueLatinName();
+        foreach (var taken in GoogleUserNames.Numbered(crowdedHandle))
+        {
+            await Occupy(taken);
+        }
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+
+        var fallback = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: crowded, subject: subject));
+
+        Assert.True(fallback.GetProperty("isNewAccount").GetBoolean());
+        Assert.Equal(GoogleUserNames.Fallback(subject, 0), (await MyProfile(fallback)).GetProperty("userName").GetString());
+    }
+
+    /// <summary>
+    /// Holds the new accounts of these addresses once the validators passed them, until all of them got there: none of
+    /// them existed when each was validated, so their inserts race for the same user name. Records the user names it
+    /// validates (signing in validates again when it adds the Google login).
+    /// </summary>
+    private sealed class SimultaneousSignUps(params string[] emails) : IUserValidator<User>
+    {
+        private readonly TaskCompletionSource allValidated = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int validated;
+
+        public ConcurrentQueue<string> UserNames { get; } = new();
+
+        public async Task<IdentityResult> ValidateAsync(UserManager<User> manager, User user)
+        {
+            if (emails.Contains(user.Email))
+            {
+                UserNames.Enqueue(user.UserName!);
+                if (Interlocked.Increment(ref validated) == emails.Length)
+                {
+                    allValidated.TrySetResult();
+                }
+                await allValidated.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            }
+            return IdentityResult.Success;
+        }
+    }
+
+    [Fact]
+    public async Task Two_first_sign_ins_with_the_same_name_at_once_both_get_an_account()
+    {
+        var (name, handle) = UniqueLatinName();
+        string[] emails = [NewEmail(), NewEmail()];
+        var race = new SimultaneousSignUps(emails);
+        await using var racing = api.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            services.AddSingleton<IUserValidator<User>>(race)));
+        var client = racing.CreateClient();
+
+        var responses = await Task.WhenAll(emails.Select(email =>
+            client.PostAsJsonAsync("/api/identity/google-login", new { idToken = api.GoogleTokens.Issue(email, name: name) })));
+
+        foreach (var response in responses)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.True(response.StatusCode == HttpStatusCode.OK, $"{(int)response.StatusCode}: {body}");
+            Assert.True(JsonDocument.Parse(body).RootElement.GetProperty("isNewAccount").GetBoolean());
+        }
+        // Both accounts were validated with the same free handle before either was saved: the unique index refused the
+        // second insert, and that sign-in went on with the next handle.
+        Assert.Equal([handle, handle], race.UserNames.Take(2));
+        var userNames = new List<string>();
+        foreach (var email in emails)
+        {
+            userNames.Add((await Account(email)).User.UserName!);
+        }
+        Assert.Equal([handle, handle + "-2"], userNames.Order());
     }
 }
