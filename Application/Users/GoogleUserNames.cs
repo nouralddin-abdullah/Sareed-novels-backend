@@ -45,7 +45,7 @@ public sealed class GoogleUserNames(UserNameCheck userNameCheck, IUsersRepositor
     }
 
     /// <summary>The name a handle comes from: the person's full name at Google, else their given and family names.</summary>
-    public static string NameOf(GoogleJsonWebSignature.Payload payload) =>
+    private static string NameOf(GoogleJsonWebSignature.Payload payload) =>
         string.IsNullOrWhiteSpace(payload.Name) ? $"{payload.GivenName} {payload.FamilyName}" : payload.Name;
 
     private async Task<IReadOnlyList<string>> FreeFromNameAsync(string name, CancellationToken cancellationToken)
