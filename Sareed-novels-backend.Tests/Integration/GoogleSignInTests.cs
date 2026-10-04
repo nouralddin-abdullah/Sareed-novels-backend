@@ -4,13 +4,19 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Application.Services;
+using Application.Users;
 using Application.Users.Commands.GoogleLogin;
 using Domain.Entities;
 using Google.Apis.Auth;
 using Infrastructure.Persistence;
+using Infrastructure.Repositories;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using NSubstitute;
 
 namespace Sareed_novels_backend.Tests.Integration;
 
@@ -19,7 +25,8 @@ public sealed class FakeGoogleIdTokens : IGoogleIdTokenValidator
 {
     private readonly ConcurrentDictionary<string, GoogleJsonWebSignature.Payload> issued = new();
 
-    public string Issue(string email, bool emailVerified = true, string? name = "قارئة من Google", string? subject = null)
+    public string Issue(string email, bool emailVerified = true, string? name = "قارئة من Google", string? subject = null,
+        string? givenName = null, string? familyName = null)
     {
         var token = "test-google-id-token-" + Guid.NewGuid().ToString("N");
         issued[token] = new GoogleJsonWebSignature.Payload
@@ -28,6 +35,8 @@ public sealed class FakeGoogleIdTokens : IGoogleIdTokenValidator
             Email = email,
             EmailVerified = emailVerified,
             Name = name,
+            GivenName = givenName,
+            FamilyName = familyName,
         };
         return token;
     }
@@ -40,7 +49,8 @@ public sealed class FakeGoogleIdTokens : IGoogleIdTokenValidator
 
 /// <summary>
 /// Google sign-in through the real API pipeline (POST /api/identity/google-login, which the web's callback also
-/// ends in), including the pre-hijack case: an account registered with someone else's unverified address.
+/// ends in), including the pre-hijack case: an account registered with someone else's unverified address; and a new
+/// account's handle from the Google name, with isNewAccount (#69).
 /// </summary>
 public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactory>
 {
@@ -128,7 +138,10 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
         var unnamed = await GoogleLogin(api.GoogleTokens.Issue(unnamedEmail, name: null));
 
         Assert.False(named.GetProperty("passwordReset").GetBoolean());
+        Assert.True(named.GetProperty("isNewAccount").GetBoolean());
+        Assert.True(unnamed.GetProperty("isNewAccount").GetBoolean());
         var profile = await (await MyProfile(named.GetProperty("accessToken").GetString()!)).Content.ReadFromJsonAsync<JsonElement>();
+        // An Arabic name gives no handle (#69): the "sarduser" one.
         Assert.Matches("^sarduser[0-9]{6}$", profile.GetProperty("userName").GetString());
         Assert.Equal("ليلى", profile.GetProperty("displayName").GetString());
 
@@ -153,6 +166,7 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
         var result = await GoogleLogin(api.GoogleTokens.Issue(email));
 
         Assert.False(result.GetProperty("passwordReset").GetBoolean());
+        Assert.False(result.GetProperty("isNewAccount").GetBoolean()); // linked, not created
         Assert.Equal(HttpStatusCode.OK, await Login(name, AttackersPassword));
         Assert.Equal(HttpStatusCode.OK, (await MyProfile(ownToken)).StatusCode);
         var (user, logins) = await Account(email);
@@ -187,6 +201,7 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
         var result = await GoogleLogin(api.GoogleTokens.Issue(victimEmail, subject: victimsSubject));
 
         Assert.True(result.GetProperty("passwordReset").GetBoolean());
+        Assert.False(result.GetProperty("isNewAccount").GetBoolean()); // handed over, not created
         var victimsToken = result.GetProperty("accessToken").GetString()!;
 
         // The attacker's password and session are gone...
@@ -272,13 +287,13 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
     {
         // Used to be an InvalidOperationException, answered 500 "Something went wrong".
         var subject = "google-" + Guid.NewGuid().ToString("N");
-        var first = GoogleLoginCommandHandler.CandidateUserName(subject, 0);
+        var first = GoogleUserNames.Fallback(subject, 0);
         await Occupy(first);
 
         var result = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), subject: subject));
 
         var profile = await (await MyProfile(result.GetProperty("accessToken").GetString()!)).Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(GoogleLoginCommandHandler.CandidateUserName(subject, 1), profile.GetProperty("userName").GetString());
+        Assert.Equal(GoogleUserNames.Fallback(subject, 1), profile.GetProperty("userName").GetString());
         Assert.NotEqual(first, profile.GetProperty("userName").GetString());
     }
 
@@ -286,9 +301,9 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
     public async Task When_every_handle_it_tries_is_taken_sign_in_is_refused_with_a_code_not_a_server_error()
     {
         var subject = "google-" + Guid.NewGuid().ToString("N");
-        for (var attempt = 0; attempt < GoogleLoginCommandHandler.UserNameAttempts; attempt++)
+        for (var attempt = 0; attempt < GoogleUserNames.FallbackAttempts; attempt++)
         {
-            await Occupy(GoogleLoginCommandHandler.CandidateUserName(subject, attempt));
+            await Occupy(GoogleUserNames.Fallback(subject, attempt));
         }
         var email = NewEmail();
 
@@ -303,12 +318,281 @@ public class GoogleSignInTests(SardApiFactory api) : IClassFixture<SardApiFactor
     [Fact]
     public async Task Candidate_handles_are_six_digit_sard_handles_that_differ_per_attempt()
     {
-        var candidates = Enumerable.Range(0, GoogleLoginCommandHandler.UserNameAttempts)
-            .Select(attempt => GoogleLoginCommandHandler.CandidateUserName("same-subject", attempt))
+        var candidates = Enumerable.Range(0, GoogleUserNames.FallbackAttempts)
+            .Select(attempt => GoogleUserNames.Fallback("same-subject", attempt))
             .ToList();
 
         Assert.All(candidates, name => Assert.Matches("^sarduser[1-9][0-9]{5}$", name));
         Assert.Equal(candidates.Count, candidates.Distinct().Count());
-        Assert.Equal(candidates[0], GoogleLoginCommandHandler.CandidateUserName("same-subject", 0));
+        Assert.Equal(candidates[0], GoogleUserNames.Fallback("same-subject", 0));
+    }
+
+    // ---- The handle from the Google name, and isNewAccount (#69) ----
+
+    private async Task<JsonElement> MyProfile(JsonElement signIn) =>
+        await (await MyProfile(signIn.GetProperty("accessToken").GetString()!)).Content.ReadFromJsonAsync<JsonElement>();
+
+    /// <summary>A Latin name no other test uses ("Reader" and eight hex digits), and the handle it gives.</summary>
+    private static (string Name, string Handle) UniqueLatinName()
+    {
+        var id = Guid.NewGuid().ToString("N")[..8];
+        return ($"Reader {id.ToUpperInvariant()}", $"reader-{id}");
+    }
+
+    [Fact]
+    public async Task A_new_account_takes_its_handle_from_a_latin_Google_name_and_only_the_sign_in_that_made_it_is_new()
+    {
+        var email = NewEmail();
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+
+        var first = await GoogleLogin(api.GoogleTokens.Issue(email, name: "Shahd Elattar", subject: subject));
+        var again = await GoogleLogin(api.GoogleTokens.Issue(email, name: "Shahd Elattar", subject: subject));
+
+        string[] fields = ["accessToken", "expiresFor", "passwordReset", "isNewAccount"];
+        Assert.Equal(fields, first.EnumerateObject().Select(p => p.Name));
+        Assert.True(first.GetProperty("isNewAccount").GetBoolean());
+        Assert.False(again.GetProperty("isNewAccount").GetBoolean());
+        var profile = await MyProfile(first);
+        Assert.Equal("shahd-elattar", profile.GetProperty("userName").GetString());
+        Assert.Equal("Shahd Elattar", profile.GetProperty("displayName").GetString());
+        Assert.Equal(profile.GetProperty("id").GetString(), (await MyProfile(again)).GetProperty("id").GetString());
+
+        // Someone else with the same Google name.
+        var namesake = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: "Shahd Elattar"));
+        Assert.True(namesake.GetProperty("isNewAccount").GetBoolean());
+        Assert.Equal("shahd-elattar-2", (await MyProfile(namesake)).GetProperty("userName").GetString());
+    }
+
+    [Fact]
+    public async Task Signing_in_with_a_password_is_never_a_new_account()
+    {
+        var email = NewEmail();
+        var name = NewName();
+        await Register(name, email, AttackersPassword);
+
+        foreach (var login in new[] { email, name })
+        {
+            var response = await api.ClientFrom(NewIp()).PostAsJsonAsync("/api/identity/Login",
+                new { loginCardinality = login, password = AttackersPassword });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.False((await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("isNewAccount").GetBoolean());
+        }
+    }
+
+    [Theory]
+    [InlineData("شهد العطار")]
+    [InlineData("Shahd شهد")]
+    [InlineData("✨🌸")]
+    public async Task A_name_that_gives_no_handle_makes_a_new_account_with_a_sarduser_one(string name)
+    {
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+
+        var result = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: name, subject: subject));
+
+        Assert.True(result.GetProperty("isNewAccount").GetBoolean());
+        Assert.Equal(GoogleUserNames.Fallback(subject, 0), (await MyProfile(result)).GetProperty("userName").GetString());
+    }
+
+    [Fact]
+    public async Task Without_a_full_name_the_handle_comes_from_the_given_and_family_names()
+    {
+        var family = "Q" + Guid.NewGuid().ToString("N")[..8];
+
+        var result = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: null, givenName: "Noor", familyName: family));
+
+        Assert.Equal($"noor-{family.ToLowerInvariant()}", (await MyProfile(result)).GetProperty("userName").GetString());
+    }
+
+    [Fact]
+    public async Task A_taken_handle_gets_the_next_free_number_and_past_twenty_a_sarduser_one()
+    {
+        // Held in another letter case: user names are unique whatever their case.
+        var (name, handle) = UniqueLatinName();
+        await Occupy(handle.ToUpperInvariant());
+        await Occupy(handle + "-2");
+
+        var third = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: name));
+
+        Assert.Equal(handle + "-3", (await MyProfile(third)).GetProperty("userName").GetString());
+
+        var (crowded, crowdedHandle) = UniqueLatinName();
+        foreach (var taken in GoogleUserNames.Numbered(crowdedHandle))
+        {
+            await Occupy(taken);
+        }
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+
+        var fallback = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: crowded, subject: subject));
+
+        Assert.True(fallback.GetProperty("isNewAccount").GetBoolean());
+        Assert.Equal(GoogleUserNames.Fallback(subject, 0), (await MyProfile(fallback)).GetProperty("userName").GetString());
+    }
+
+    private async Task<HttpResponseMessage> Rename(string token, string userName)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Patch, "/api/User/update-me")
+        {
+            Content = new MultipartFormDataContent { { new StringContent(userName), "UserName" } }
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await api.ClientFrom(NewIp()).SendAsync(request);
+    }
+
+    [Fact]
+    public async Task A_handle_another_member_gave_up_is_in_use_so_their_old_links_keep_opening_them()
+    {
+        var (name, handle) = UniqueLatinName();
+        var memberToken = await Register(handle, NewEmail(), AttackersPassword);
+        var memberId = (await (await MyProfile(memberToken)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
+        Assert.Equal(HttpStatusCode.OK, (await Rename(memberToken, NewName())).StatusCode);
+
+        var newcomer = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: name));
+
+        Assert.True(newcomer.GetProperty("isNewAccount").GetBoolean());
+        Assert.Equal(handle + "-2", (await MyProfile(newcomer)).GetProperty("userName").GetString());
+        var oldLink = await api.ClientFrom(NewIp()).GetAsync($"/api/User/{handle}");
+        Assert.Equal(memberId, (await oldLink.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString());
+
+        // A deliberate difference: chosen by hand, the name is free, as update-me lets one take it.
+        var check = new HttpRequestMessage(HttpMethod.Get, $"/api/User/username-available?userName={handle}");
+        check.Headers.Authorization = new AuthenticationHeaderValue("Bearer", newcomer.GetProperty("accessToken").GetString());
+        var answer = await (await api.ClientFrom(NewIp()).SendAsync(check)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(answer.GetProperty("available").GetBoolean());
+    }
+
+    [Fact]
+    public async Task A_sarduser_handle_a_member_gave_up_is_skipped_so_their_old_link_keeps_opening_them()
+    {
+        // A member who chose a handle in the app («اختر اسم المستخدم») left their "sarduser" one in the rename history.
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+        var given = GoogleUserNames.Fallback(subject, 0);
+        var memberToken = await Register(given, NewEmail(), AttackersPassword);
+        var memberId = (await (await MyProfile(memberToken)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
+        Assert.Equal(HttpStatusCode.OK, (await Rename(memberToken, NewName())).StatusCode);
+
+        var newcomer = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: "ليلى", subject: subject));
+
+        Assert.Equal(GoogleUserNames.Fallback(subject, 1), (await MyProfile(newcomer)).GetProperty("userName").GetString());
+        var oldLink = await api.ClientFrom(NewIp()).GetAsync($"/api/User/{given}");
+        Assert.Equal(memberId, (await oldLink.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task When_every_numbered_handle_is_held_or_was_given_up_the_account_gets_a_sarduser_one()
+    {
+        var (name, handle) = UniqueLatinName();
+        var numbered = GoogleUserNames.Numbered(handle).ToList();
+        var member = "member-" + Guid.NewGuid().ToString("N")[..8];
+        await Occupy(member);
+        using (var scope = api.Services.CreateScope())
+        {
+            // Every other handle is a name the member gave up, the rest are held now.
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var renamed = await db.Users.Where(u => u.UserName == member).Select(u => u.Id).SingleAsync();
+            db.UserNameChanges.AddRange(numbered.Where((_, i) => i % 2 == 0).Select(old => new UserNameChange
+            {
+                UserId = renamed,
+                OldUserName = old,
+                OldNormalizedUserName = old.ToUpperInvariant(),
+                ChangedAt = DateTime.UtcNow
+            }));
+            await db.SaveChangesAsync();
+        }
+        foreach (var held in numbered.Where((_, i) => i % 2 == 1))
+        {
+            await Occupy(held);
+        }
+        var subject = "google-" + Guid.NewGuid().ToString("N");
+
+        var result = await GoogleLogin(api.GoogleTokens.Issue(NewEmail(), name: name, subject: subject));
+
+        Assert.True(result.GetProperty("isNewAccount").GetBoolean());
+        Assert.Equal(GoogleUserNames.Fallback(subject, 0), (await MyProfile(result)).GetProperty("userName").GetString());
+    }
+
+    [Fact]
+    public async Task Names_held_now_and_names_given_up_are_found_in_one_query_in_any_letter_case()
+    {
+        var id = Guid.NewGuid().ToString("N")[..8];
+        var (held, givenUp, free) = ($"held-{id}", $"given-up-{id}", $"free-{id}");
+        await Occupy(held);
+        var log = new CommandLog();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlServer(api.ConnectionString).AddInterceptors(log).Options);
+        db.UserNameChanges.Add(new UserNameChange
+        {
+            UserId = await db.Users.Where(u => u.UserName == held).Select(u => u.Id).SingleAsync(),
+            OldUserName = givenUp,
+            OldNormalizedUserName = givenUp.ToUpperInvariant(),
+            ChangedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var userManager = new UserManager<User>(Substitute.For<IUserStore<User>>(), Options.Create(new IdentityOptions()),
+            null!, null!, null!, new UpperInvariantLookupNormalizer(), new IdentityErrorDescriber(), null!,
+            NullLogger<UserManager<User>>.Instance);
+        log.Commands.Clear();
+
+        var inUse = await new UsersRepositories(userManager, db).GetUserNamesInUseAsync(
+            [held.ToUpperInvariant(), "Given-Up-" + id, free]);
+
+        Assert.Equal(["Given-Up-" + id, held.ToUpperInvariant()], inUse.Order(StringComparer.Ordinal));
+        Assert.Contains("UNION ALL", Assert.Single(log.Commands));
+    }
+
+    /// <summary>
+    /// Holds the new accounts of these addresses once the validators passed them, until all of them got there: none of
+    /// them existed when each was validated, so their inserts race for the same user name. Records the user names it
+    /// validates (signing in validates again when it adds the Google login).
+    /// </summary>
+    private sealed class SimultaneousSignUps(params string[] emails) : IUserValidator<User>
+    {
+        private readonly TaskCompletionSource allValidated = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int validated;
+
+        public ConcurrentQueue<string> UserNames { get; } = new();
+
+        public async Task<IdentityResult> ValidateAsync(UserManager<User> manager, User user)
+        {
+            if (emails.Contains(user.Email))
+            {
+                UserNames.Enqueue(user.UserName!);
+                if (Interlocked.Increment(ref validated) == emails.Length)
+                {
+                    allValidated.TrySetResult();
+                }
+                await allValidated.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            }
+            return IdentityResult.Success;
+        }
+    }
+
+    [Fact]
+    public async Task Two_first_sign_ins_with_the_same_name_at_once_both_get_an_account()
+    {
+        var (name, handle) = UniqueLatinName();
+        string[] emails = [NewEmail(), NewEmail()];
+        var race = new SimultaneousSignUps(emails);
+        await using var racing = api.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            services.AddSingleton<IUserValidator<User>>(race)));
+        var client = racing.CreateClient();
+
+        var responses = await Task.WhenAll(emails.Select(email =>
+            client.PostAsJsonAsync("/api/identity/google-login", new { idToken = api.GoogleTokens.Issue(email, name: name) })));
+
+        foreach (var response in responses)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.True(response.StatusCode == HttpStatusCode.OK, $"{(int)response.StatusCode}: {body}");
+            Assert.True(JsonDocument.Parse(body).RootElement.GetProperty("isNewAccount").GetBoolean());
+        }
+        // Both accounts were validated with the same free handle before either was saved: the unique index refused the
+        // second insert, and that sign-in went on with the next handle.
+        Assert.Equal([handle, handle], race.UserNames.Take(2));
+        var userNames = new List<string>();
+        foreach (var email in emails)
+        {
+            userNames.Add((await Account(email)).User.UserName!);
+        }
+        Assert.Equal([handle, handle + "-2"], userNames.Order());
     }
 }

@@ -1287,3 +1287,99 @@ a read-only connection:
 3. The comments by place (post, paragraph, chapter): "several places" and "no place" should not appear.
 
 After the deploy, statements 1 and 2 report nothing to change.
+
+### Google sign-up: the user name, `isNewAccount` and checking a user name (#69)
+
+A new account made with Google used to get `sarduser` and six digits as its user name, the public handle
+(`/profile/{userName}`, the @handle on profiles, comments and lists). Now the handle comes from the person's Google name
+when that is written in Latin letters, the app learns that the account is new, and it can check a user name before
+saving it. Existing accounts keep their names. Nothing tells the member that a name was made for them.
+
+**`POST /api/identity/google-login`** answers one more field, `isNewAccount`:
+
+```json
+{ "accessToken": "...", "expiresFor": "...", "passwordReset": false, "isNewAccount": true }
+```
+
+- `true` only on the sign-in that created the account. Every other sign-in answers `false`: the next Google sign-ins,
+  a Google sign-in that links or takes over an existing account, and `POST /api/identity/Login`.
+- On `true` the app shows «اختر اسم المستخدم» once. The field is prefilled with the account's `userName` (from
+  `GET /api/User/my-profile`), or empty when that is the fallback: `sarduser` and six digits, `^sarduser[0-9]{6}$`.
+  Skipping keeps the handle the account has. Choosing one is `PATCH /api/User/update-me` with `UserName`, as always
+  (its rename history keeps the old `/profile/sarduser…` link working).
+- The web's Google sign-in (`/google-callback`) makes accounts the same way; its redirect doesn't carry the flag.
+
+**The handle from the Google name** (`Application/Users/GoogleUserNames.cs`):
+
+1. The name is Google's full name, or the given and family names when it has none. Never the email address.
+2. Every letter must be Latin once its accents are stripped. One Arabic (or other non-Latin) letter, and the name gives
+   no handle: nothing is transliterated. A name without any Latin letter gives none either.
+3. Lower case, accents stripped (é → e; the Latin letters that have none to strip as written without one: ß → ss,
+   æ → ae, ø → o, ł → l, đ → d, þ → th, ı → i), styled letters as plain ones (𝓢 → s, Ｓ → s). Digits stay in the words.
+4. Words (split by spaces, `-`, `_`, `.` and dashes) are joined with `-`. Every other character is dropped: apostrophes,
+   brackets and other punctuation, symbols, emoji. So a handle never has `--` or a `-` at either end.
+5. Longer than 20 characters: cut after the last whole word that fits, unless that leaves fewer than 3 characters;
+   then cut at 20.
+6. The handle must pass update-me's rules as it is (the same code, `UserNameCheck`): 3 to 20 characters, only
+   `a-z A-Z 0-9 - . _ +`, no `@`, not a reserved name, not starting with `deleted-`. A name that breaks one (a two-letter
+   name like «Al», «Blocked») gives no handle.
+7. In use: `-2`, `-3` … up to `-20`, the handle giving up letters at its end so the whole stays within 20 characters.
+   In use means an account holds the name now, in any letter case, or a member gave it up (the rename history, which
+   keeps their old profile links opening them). The twenty are looked up in one query.
+8. Otherwise (no handle from the name, or all twenty in use): `sarduser` and six digits, as before, skipping one in use
+   the same way: a member who chooses a handle in «اختر اسم المستخدم» leaves their `sarduser` one in the history.
+   All the handles a sign-up may try, these included, are looked up in that one query.
+
+Counting the names members gave up is a deliberate difference from update-me and the check below, which let a member
+take such a name by hand (its old links then open them). A name made for a newcomer never takes over an existing
+member's old profile links on its own, `/profile/sarduser…` ones included.
+
+| Google name | Handle |
+|---|---|
+| «Shahd Elattar» | `shahd-elattar`; the next «Shahd Elattar» gets `shahd-elattar-2`, then `-3`… |
+| «Shahd Elattar», when a member renamed away from `shahd-elattar` | `shahd-elattar-2`: `/profile/shahd-elattar` still opens that member |
+| «Zoë Saldaña» | `zoe-saldana` |
+| «Jean-Luc O'Brien ✨» | `jean-luc-obrien` |
+| «Agent 47» | `agent-47` |
+| «Maria de los Angeles Garcia» | `maria-de-los-angeles` (20 characters) |
+| «Christopher Alexander» (21) | `christopher` |
+| «Mohamed Abdelrahman», when `mohamed-abdelrahman` is taken | `mohamed-abdelrahma-2` |
+| «شهد العطار», «Shahd شهد», «✨», «Al» | `sarduser` and six digits |
+
+Two first sign-ins that take the same handle at the same moment both succeed: the database's unique index refuses the
+second account, and that sign-in takes the next handle.
+
+**`GET /api/User/username-available?userName=…`** (signed in): whether the caller could take a user name now, that is
+what `PATCH /api/User/update-me` would answer it with, through the same checks in the same order. Always 200 when
+signed in:
+
+```json
+{ "available": false, "code": "UserNameTaken", "message": "اسم المستخدم مستخدم بالفعل، اختر اسمًا آخر" }
+```
+
+The first refusal is the answer:
+
+| Order | `code` | When | `message` |
+|---|---|---|---|
+| 1 | `InvalidUserName` | `userName` missing, empty or blank | «اختر اسم مستخدم» |
+| 1 | `InvalidUserName` | fewer than 3 or more than 20 characters | «يجب أن يكون اسم المستخدم من 3 إلى 20 حرفًا» |
+| 1 | `InvalidUserName` | an `@` | «لا يمكن أن يحتوي اسم المستخدم على الرمز @» |
+| 1 | `ReservedUserName` | `blocked`, `my-profile`, `username-available`, `followers-list` or `following-list`, in any letter case | «اسم المستخدم هذا محجوز، اختر اسماً آخر» |
+| 2 | `ReservedUserName` | starts with `deleted-`, in any letter case | «لا يمكن أن يبدأ اسم المستخدم بـ deleted-، فهذه البداية محجوزة للحسابات المحذوفة» |
+| 3 | `UserNameTaken` | another account holds it, in any letter case | «اسم المستخدم مستخدم بالفعل، اختر اسمًا آخر» |
+| 4 | `InvalidUserName` | another character than `a-z A-Z 0-9 - . _ +` (a space, Arabic letters, `!`…) | «اسم المستخدم يجب أن يتكوّن من أحرف إنجليزية وأرقام فقط، ويمكن إضافة الرموز - . _ +» |
+| | `null`, with `"available": true` | none of these | «اسم المستخدم متاح» |
+
+- The caller's own name, in any letter case, is available (a change of case is a rename update-me accepts). It is read
+  from the account, not from the token, which may carry a name changed since. Only a name from before today's rules
+  that breaks one of order 1 (say 21 characters) is refused as update-me would refuse saving it.
+- A name another member gave up is available, as update-me lets anyone take it: their old profile link then opens the
+  new holder, since a member who holds a name now wins over the rename history. Google sign-up never picks such a name
+  for a new account on its own (above).
+- The messages are update-me's own. For the same name update-me refuses with the same message: those of order 1 in
+  its `ValidationFailed` problem, the one of order 4 after «تعذّر تحديث الملف الشخصي.».
+- 401 when signed out. 429 `TooManyRequests` past 60 checks a minute from one address: debounce the typing (e.g.
+  300 ms) and treat a 429 as "not known yet", leaving it to update-me when the member saves.
+- It only checks: saving is update-me, which checks again (someone may take the name in between).
+- `username-available` is reserved because `GET /api/User/username-available` would shadow a profile with that name.
+  Nobody had it (production answered 404 for that path before).
