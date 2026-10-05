@@ -7,6 +7,9 @@ public interface INovelsRepository
 {
     Task<bool> CreateNovel(Novel novel);
     Task<Novel?> GetOne(Guid novelId);
+
+    /// <summary>Whether the novel is hidden from readers (a draft), read now; false when there is no such novel.</summary>
+    Task<bool> IsDraftAsync(Guid novelId);
     /// <summary>
     /// The novel with its author and genres, drafts included like <see cref="GetOne"/> (the caller decides who may see
     /// a draft); deleted novels are never found.

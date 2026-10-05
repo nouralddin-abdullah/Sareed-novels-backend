@@ -133,6 +133,8 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
         return novel;
     }
 
+    public Task<bool> IsDraftAsync(Guid novelId) => dbContext.Novels.AnyAsync(n => n.Id == novelId && n.IsDraft);
+
     public async Task RefreshChapterCountAsync(Guid novelId, DateTime? lastUpdatedAt = null)
     {
         // Published chapters only, as the chapter list, search and recommendations count them (drafts are the author's).
@@ -177,9 +179,11 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
                 .ThenInclude(ng => ng.Genre)
             .AsQueryable();
         var totalCount = await userWork.CountAsync();
+        // Last updated first; the id breaks ties (#80), so a page never repeats a work another page has, or skips one.
+        userWork = userWork.OrderByDescending(f => f.LastUpdatedAt).ThenBy(f => f.Id);
         if (PageNumber > 0 && PageSize > 0)
         {
-            userWork = userWork.OrderByDescending(f => f.LastUpdatedAt).Skip(PageSize * (PageNumber - 1)).Take(PageSize);
+            userWork = userWork.Skip(PageSize * (PageNumber - 1)).Take(PageSize);
         }
         var userWorkList = await userWork.ToListAsync();
         return (userWorkList, totalCount);

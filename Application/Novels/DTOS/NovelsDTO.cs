@@ -21,6 +21,12 @@ public class NovelsDTO
     public decimal TotalAverageScore { get; set; }
     public int ReviewCount { get; set; }
     public int ChapterCount { get; set; }
+
+    /// <summary>
+    /// Whether the novel is hidden from readers (a draft, #76), so the app can tell its author «روايتك مخفية عن القرّاء»
+    /// (#80). Only the author gets a hidden novel's page, so readers always get false.
+    /// </summary>
+    public bool IsDraft { get; set; }
     public AuthorDTO Author { get; set; } = default!;
 }
 

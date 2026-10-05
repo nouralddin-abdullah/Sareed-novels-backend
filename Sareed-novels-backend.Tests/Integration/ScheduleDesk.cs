@@ -75,12 +75,12 @@ internal sealed class ScheduleDesk : IAsyncDisposable
     public ScheduledChapterPublishingService Scheduler() => new(
         services.GetRequiredService<IServiceScopeFactory>(), Clock, NullLogger<ScheduledChapterPublishingService>.Instance);
 
-    /// <summary>An author and a novel of hers, created 30 days before the clock's start.</summary>
-    public async Task<(User Author, Novel Novel)> SeedNovel()
+    /// <summary>An author and a novel of hers (hidden from readers with <paramref name="hidden"/>), created 30 days before the clock's start.</summary>
+    public async Task<(User Author, Novel Novel)> SeedNovel(bool hidden = false)
     {
         await using var db = database.CreateContext();
         var author = Seed.User();
-        var novel = Seed.Novel(author, "رواية " + Seed.Marker(), createdAt: Clock.UtcNow.AddDays(-30));
+        var novel = Seed.Novel(author, "رواية " + Seed.Marker(), isDraft: hidden, createdAt: Clock.UtcNow.AddDays(-30));
         db.Users.Add(author);
         db.Novels.Add(novel);
         await db.SaveChangesAsync();

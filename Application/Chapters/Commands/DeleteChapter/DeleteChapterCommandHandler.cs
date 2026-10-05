@@ -24,7 +24,7 @@ public class DeleteChapterCommandHandler(
         logger.LogInformation("Deleting chapter {@chapter}", request);
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         var novel = await novelsRepository.GetOne(request.NovelId) ?? throw new NotFoundException("الرواية غير موجودة", "NovelNotFound");
-        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new  NotFoundException("الفصل غير موجود");
+        var chapter = await chaptersRepository.GetChapterById(request.ChapterId) ?? throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
         
         if (novel.AuthorId != currentUser.Id) throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
 
