@@ -1,4 +1,5 @@
 using Application.Covers;
+using Infrastructure.Services.Images;
 using SkiaSharp;
 
 namespace Infrastructure.Services.Covers;
@@ -90,7 +91,7 @@ public static class ShareImageRenderer
 
         var markWidth = (int)(width * 0.5f);
         var markHeight = (int)Math.Round(markWidth * (double)Wordmark.Value.Height / Wordmark.Value.Width);
-        using var mark = CoverImageProcessor.Resize(Wordmark.Value, markWidth, markHeight);
+        using var mark = ImagePipeline.Resize(Wordmark.Value, markWidth, markHeight);
         using var paint = new SKPaint { Color = SKColors.White.WithAlpha(235) };
         canvas.DrawImage(mark, (width - markWidth) / 2f, (height - markHeight) / 2f, paint);
 
@@ -102,7 +103,7 @@ public static class ShareImageRenderer
     {
         // Blurring a small copy is as good as blurring a large one (all detail goes anyway) and much cheaper.
         var smallWidth = Math.Min(cover.Width, 240);
-        using var small = CoverImageProcessor.Resize(cover, smallWidth, Math.Max(1, (int)Math.Round(smallWidth * (double)cover.Height / cover.Width)));
+        using var small = ImagePipeline.Resize(cover, smallWidth, Math.Max(1, (int)Math.Round(smallWidth * (double)cover.Height / cover.Width)));
         var fill = Math.Max((float)Width / small.Width, (float)Height / small.Height);
         var drawnWidth = small.Width * fill;
         var drawnHeight = small.Height * fill;
@@ -138,7 +139,7 @@ public static class ShareImageRenderer
             canvas.DrawRoundRect(new SKRoundRect(shadowRect, CornerRadius), shadow);
         }
 
-        using var scaled = CoverImageProcessor.Resize(cover, width, height);
+        using var scaled = ImagePipeline.Resize(cover, width, height);
         canvas.Save();
         canvas.ClipRoundRect(rounded, SKClipOperation.Intersect, antialias: true);
         canvas.DrawImage(scaled, rect.Left, rect.Top);
@@ -153,7 +154,7 @@ public static class ShareImageRenderer
     {
         var mark = Wordmark.Value;
         var width = (int)Math.Round(WordmarkHeight * (double)mark.Width / mark.Height);
-        using var scaled = CoverImageProcessor.Resize(mark, width, WordmarkHeight);
+        using var scaled = ImagePipeline.Resize(mark, width, WordmarkHeight);
         using var paint = new SKPaint { Color = SKColors.White.WithAlpha(WordmarkAlpha) };
         canvas.DrawImage(scaled, WordmarkMargin, Height - WordmarkMargin - WordmarkHeight, paint);
     }

@@ -44,6 +44,11 @@ public static partial class NovelCovers
     /// <summary>Upload limit for the file itself (the web app shrinks photos before sending them).</summary>
     public const long MaxUploadBytes = 5 * 1024 * 1024;
 
+    /// <summary>The refusals that name the cover.</summary>
+    public static readonly ImageRefusalMessages Refusals = new(
+        NotAnImage: "يجب أن يكون الغلاف صورة بصيغة JPEG أو PNG أو WebP.",
+        FileTooLarge: $"يجب ألا يتجاوز حجم ملف الغلاف {MaxUploadBytes / (1024 * 1024)} ميغابايت.");
+
     /// <summary>The height that goes with a cover width.</summary>
     public static int HeightFor(int width) => (int)Math.Round(width * (double)RatioHeight / RatioWidth);
 

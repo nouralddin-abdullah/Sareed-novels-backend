@@ -131,6 +131,12 @@ public static class WebApplicationBuilderExtensions
             options.AddPolicy(RateLimitPolicies.UserNameCheck, context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            // Uploads the server decodes and re-encodes (chapter pictures, #86): each takes the one-image-at-a-time
+            // processing slot and stores a file. Per IP (this runs before authentication); 30 in 10 minutes is a chapter
+            // with many pictures, with room for a few writers behind one carrier NAT.
+            options.AddPolicy(RateLimitPolicies.Uploads, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(10), QueueLimit = 0 }));
         });
 
         // 2. Add MVC Controllers
@@ -194,4 +200,10 @@ public static class RateLimitPolicies
 
     /// <summary>Checking whether a user name is free (GET /api/User/username-available): 60 requests per minute per IP.</summary>
     public const string UserNameCheck = "username-check";
+
+    /// <summary>
+    /// Picture uploads the server processes: 30 requests per 10 minutes per IP. On chapter pictures
+    /// (POST /api/novel/{novelId}/chapter-images, #86); covers, posts and profile pictures have no limit yet.
+    /// </summary>
+    public const string Uploads = "uploads";
 }
