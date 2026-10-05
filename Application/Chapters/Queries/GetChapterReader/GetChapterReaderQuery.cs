@@ -1,9 +1,10 @@
 ﻿using Application.Chapters.DTOS;
+using Application.Chapters.Scheduling;
 using MediatR;
 
 namespace Application.Chapters.Queries.GetChapterReader;
 
-public class GetChapterReaderQuery(Guid novelId, Guid chapterId) : IRequest<ChapterSingleReaderDTO>
+public class GetChapterReaderQuery(Guid novelId, Guid chapterId) : IRequest<ChapterSingleReaderDTO>, IReadsNovel
 {
     public Guid NovelId { get; set; } = novelId;
     public Guid ChapterId { get; set; } = chapterId;
@@ -13,4 +14,6 @@ public class GetChapterReaderQuery(Guid novelId, Guid chapterId) : IRequest<Chap
     /// reading (?prefetch=true or X-Sard-Prefetch: 1), which the app counts with POST .../view when it is read.
     /// </summary>
     public bool TrackView { get; init; } = true;
+
+    Guid? IReadsNovel.ReadNovelId => NovelId;
 }

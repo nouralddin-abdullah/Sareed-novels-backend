@@ -23,6 +23,22 @@ public class ChaptersDTO
     public bool IsLocked { get; set; } = false; // Is this chapter locked by privilege?
 }
 
+/// <summary>
+/// A chapter in its author's list (<c>GET /api/myworks/{workId}/chapters</c>): the novel's list item, and what only the
+/// author sees (#77).
+/// </summary>
+public class ChaptersAuthorDTO : ChaptersDTO
+{
+    /// <summary>
+    /// The chapter's words (<c>ChapterWords</c>); null for a chapter from before word counts that the startup backfill
+    /// hasn't counted yet.
+    /// </summary>
+    public int? WordsCount { get; set; }
+
+    /// <summary>When the draft publishes itself (UTC with "Z"); null when it isn't scheduled (always, once published).</summary>
+    public DateTime? PublishAt { get; set; }
+}
+
 public class ChapterSingleAuthorDTO
 {
     public Guid Id { get; set; }
@@ -38,6 +54,13 @@ public class ChapterSingleAuthorDTO
     /// when it was written, which for a draft published later is earlier.
     /// </summary>
     public DateTime? PublishedAt { get; set; }
+
+    /// <summary>When the draft publishes itself (UTC with "Z", #77); null when it isn't scheduled.</summary>
+    public DateTime? PublishAt { get; set; }
+
+    /// <summary>The chapter's words (#77, <see cref="ChaptersAuthorDTO.WordsCount"/>).</summary>
+    public int? WordsCount { get; set; }
+
     public List<ChapterParagraphDTO> Paragraphs { get; set; } = new();
 }
 

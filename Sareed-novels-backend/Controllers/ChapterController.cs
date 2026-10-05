@@ -21,7 +21,10 @@ namespace Sareed_novels_backend.Controllers
         [Authorize]
         public async Task<IActionResult> CreateChapter([FromRoute] Guid novelId, CreateChapterRequest request)
         {
-            var command = new CreateChapterCommand(novelId, request.Status, request.Title, request.Content);
+            var command = new CreateChapterCommand(novelId, request.Status, request.Title, request.Content)
+            {
+                PublishAt = request.PublishAt
+            };
             var result = await mediator.Send(command);
             return Ok(result);
         }
@@ -41,7 +44,11 @@ namespace Sareed_novels_backend.Controllers
         [Authorize]
         public async Task<IActionResult> UpdateChapter([FromRoute] Guid novelId, [FromRoute] Guid chapterId, UpdateChapterRequest request)
         {
-            var command = new UpdateChapterCommand(chapterId, novelId, request.Title, request.Status, request.Content);
+            var command = new UpdateChapterCommand(chapterId, novelId, request.Title, request.Status, request.Content)
+            {
+                SetsSchedule = request.PublishAtSent,
+                PublishAt = request.PublishAt
+            };
             var result = await mediator.Send(command);
             if (result.Success)
             {

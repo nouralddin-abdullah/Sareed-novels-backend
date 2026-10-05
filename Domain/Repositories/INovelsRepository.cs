@@ -39,6 +39,11 @@ public interface INovelsRepository
     Task<(IEnumerable<Novel>, int)> GetUserPublishedWorks(string userId, int pageNumber, int pageSize, bool readableOnly);
     Task<(IEnumerable<Novel>, int)> GetAllNovelsBasicAsync(int pageNumber, int pageSize);
     Task<int> GetPublishedChaptersCountAsync(Guid novelId);
+    /// <summary>
+    /// The words of each of these novels (#77): the sum of <see cref="Chapter.WordsCount"/> over all of its chapters,
+    /// drafts included, 0 for a novel without chapters, and null while one of its chapters isn't counted yet.
+    /// </summary>
+    Task<Dictionary<Guid, int?>> GetWordsCountsAsync(IReadOnlyCollection<Guid> novelIds);
     Task<int> RecalculatePublishedSequencesAsync(Guid novelId);
     Task<List<Novel>> GetNovelsByIdsAsync(List<Guid> novelIds);
     /// <summary>The current slug and title of each of these novels that still exists (deleted ones are left out).</summary>

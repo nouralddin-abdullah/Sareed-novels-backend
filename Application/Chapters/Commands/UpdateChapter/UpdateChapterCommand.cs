@@ -10,4 +10,10 @@ public class UpdateChapterCommand(Guid chapterId, Guid novelId, string? title, s
     public string? Title { get; set; } = title;
     public string? Status { get; set; } = status;
     public string? Content { get; set; } = content;
+
+    /// <summary>Whether this save sets or cancels the draft's schedule (#77); false keeps it as it is.</summary>
+    public bool SetsSchedule { get; init; }
+
+    /// <summary>With <see cref="SetsSchedule"/>: when the draft publishes itself, or null to cancel its schedule.</summary>
+    public DateTime? PublishAt { get; init; }
 }

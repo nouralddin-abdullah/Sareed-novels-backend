@@ -284,6 +284,25 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
             .CountAsync();
     }
 
+    public async Task<Dictionary<Guid, int?>> GetWordsCountsAsync(IReadOnlyCollection<Guid> novelIds)
+    {
+        if (novelIds.Count == 0)
+        {
+            return [];
+        }
+
+        var counted = await dbContext.Chapters
+            .AsNoTracking()
+            .Where(c => novelIds.Contains(c.NovelId))
+            .GroupBy(c => c.NovelId)
+            .Select(g => new { NovelId = g.Key, Words = g.Sum(c => c.WordsCount ?? 0), Uncounted = g.Count(c => c.WordsCount == null) })
+            .ToDictionaryAsync(n => n.NovelId);
+
+        return novelIds.Distinct().ToDictionary(id => id, id => counted.TryGetValue(id, out var novel)
+            ? novel.Uncounted > 0 ? null : (int?)novel.Words
+            : 0);
+    }
+
     public async Task<int> RecalculatePublishedSequencesAsync(Guid novelId)
     {
         var allChapters = await dbContext.Chapters

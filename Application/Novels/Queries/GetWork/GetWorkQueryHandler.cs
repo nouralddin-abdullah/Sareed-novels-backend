@@ -21,6 +21,7 @@ public class GetWorkQueryHandler(ILogger<GetMyWorksQueryHandler> logger, IUserCo
             throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         }
         var result = mapper.Map<WorkDTO>(novel);
+        result.WordsCount = (await novelsRepository.GetWordsCountsAsync([novel.Id]))[novel.Id]; // drafts included (#77)
         return result;
     }
 }

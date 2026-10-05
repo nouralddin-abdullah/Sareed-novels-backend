@@ -139,6 +139,9 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<RankingRecalculationService>();
         services.AddHostedService<DailyPrivilegeUnlockService>();
         services.AddHostedService<GiftLeaderboardRecalculationService>();
+        // Scheduled chapters every minute, and the word counts of chapters from before them once (#77).
+        services.AddHostedService<ScheduledChapterPublishingService>();
+        services.AddHostedService<ChapterWordsBackfillService>();
 
         // Configure memory cache for recommendations
         services.AddMemoryCache(options =>

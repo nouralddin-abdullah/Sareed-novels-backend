@@ -11,4 +11,7 @@ public class CreateChapterCommand(Guid novelId, string status, string title, str
     public string Status { get; set; } = status;
     public string Content { get; set; } = content;
     public string Title { get; set; } = title;
+
+    /// <summary>When the draft publishes itself (#77, <see cref="CreateChapterRequest.PublishAt"/>); null: not scheduled.</summary>
+    public DateTime? PublishAt { get; init; }
 }
