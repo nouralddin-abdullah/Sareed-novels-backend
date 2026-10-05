@@ -14,10 +14,12 @@ public class GetUnreadCountQueryHandler(
     public async Task<int> Handle(GetUnreadCountQuery request, CancellationToken cancellationToken)
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
-        
-        logger.LogDebug("Getting unread notifications count for user {UserId}", currentUser.Id);
+        var types = NotificationTypeFilter.Parse(request.Types);
 
-        var unreadCount = await notificationsRepository.GetUnreadCount(currentUser.Id);
+        logger.LogDebug("Getting unread notifications count for user {UserId}, types {Types}", currentUser.Id,
+            types is null ? "all" : string.Join(",", types));
+
+        var unreadCount = await notificationsRepository.GetUnreadCount(currentUser.Id, types);
         
         return unreadCount;
     }

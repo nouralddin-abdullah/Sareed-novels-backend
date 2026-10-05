@@ -156,11 +156,10 @@ public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxS
         }
     }
 
-    public async Task<(IEnumerable<Notification>, int)> GetUserNotifications(string userId, int pageNumber, int pageSize, bool unreadOnly = false)
+    public async Task<(IEnumerable<Notification>, int)> GetUserNotifications(string userId, int pageNumber, int pageSize, bool unreadOnly = false,
+        IReadOnlyCollection<string>? types = null)
     {
-        IQueryable<Notification> query = dbContext.Notifications
-            .AsNoTracking()
-            .Where(n => n.UserId == userId);
+        var query = UserNotifications(userId, types);
 
         if (unreadOnly)
         {
@@ -169,8 +168,10 @@ public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxS
 
         var totalCount = await query.CountAsync();
 
+        // The id breaks ties between notifications of the same instant, so pages never repeat or skip one.
         var notifications = await query
             .OrderByDescending(n => n.CreatedAt)
+            .ThenByDescending(n => n.Id)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -184,10 +185,14 @@ public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxS
             .FirstOrDefaultAsync(n => n.Id == notificationId);
     }
 
-    public async Task<int> GetUnreadCount(string userId)
+    public Task<int> GetUnreadCount(string userId, IReadOnlyCollection<string>? types = null) =>
+        UserNotifications(userId, types).CountAsync(n => !n.IsRead);
+
+    /// <summary>The user's notifications, only of <paramref name="types"/> when given (filtered in SQL, #78).</summary>
+    private IQueryable<Notification> UserNotifications(string userId, IReadOnlyCollection<string>? types)
     {
-        return await dbContext.Notifications
-            .CountAsync(n => n.UserId == userId && !n.IsRead);
+        var query = dbContext.Notifications.AsNoTracking().Where(n => n.UserId == userId);
+        return types is null ? query : query.Where(n => types.Contains(n.Type));
     }
 
     public async Task<bool> MarkAsRead(Guid notificationId) =>
