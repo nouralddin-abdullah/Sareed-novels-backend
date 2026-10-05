@@ -1383,3 +1383,7 @@ The first refusal is the answer:
 - It only checks: saving is update-me, which checks again (someone may take the name in between).
 - `username-available` is reserved because `GET /api/User/username-available` would shadow a profile with that name.
   Nobody had it (production answered 404 for that path before).
+
+### A new novel can start as a draft (#76)
+
+`POST /api/myworks` takes an optional form field `isDraft` (default `false`, so the web is unchanged): `true` creates the novel as a draft, as `PATCH /api/myworks/{id}/draft` makes one (hidden from every public list and the rankings, listed with `isDraft: true` in `GET /api/myworks` and `/api/myworks/{id}`, published with `PATCH /api/myworks/{id}/publish`); the response has `isDraft` (`null` when refused), and an edit (`PATCH /api/myworks/{id}`) now refuses a title, summary or genre list with creating's rules and messages.

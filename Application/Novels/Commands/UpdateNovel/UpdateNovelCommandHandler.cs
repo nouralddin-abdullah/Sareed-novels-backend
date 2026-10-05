@@ -29,18 +29,17 @@ public class UpdateNovelCommandHandler(
             throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         }
 
-        // Validate the genres before changing anything, so a bad genre list can't leave a half-applied update.
+        // Validate the genres before changing anything, so a bad genre list can't leave a half-applied update. Refused
+        // with creating a novel's messages (#76).
         if (request.GenreIds != null)
         {
             var knownGenreIds = (await genresRepository.GetAllGenres()).Select(g => g.Id).ToHashSet();
-            if (request.GenreIds.Count == 0 || request.GenreIds.Count > 4
-                || request.GenreIds.Distinct().Count() != request.GenreIds.Count
-                || !request.GenreIds.All(knownGenreIds.Contains))
+            if (NovelRules.GenresRefusal(request.GenreIds, knownGenreIds) is { } refusal)
             {
                 return new OperationResult
                 {
-                    Code = "InvalidGenres",
-                    Message = "اختر من 1 إلى 4 تصنيفات مختلفة من التصنيفات المتاحة",
+                    Code = NovelRules.InvalidGenresCode,
+                    Message = refusal,
                     Success = false
                 };
             }
