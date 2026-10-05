@@ -9,15 +9,13 @@ namespace Application.Chapters.Commands.UpdateChapter
         {
             RuleFor(c => c.Title)
                 .NotNull()
-                .WithMessage("اكتب عنوان الفصل")
-                .MaximumLength(50)
-                .WithMessage("يجب ألا يتجاوز عنوان الفصل 50 حرفًا");
+                .WithMessage(ChapterTextRules.TitleMissingMessage)
+                .ChapterTitle();
 
             RuleFor(c => c.Content)
                 .NotNull()
-                .WithMessage("اكتب نص الفصل")
-                .MaximumLength(100000)
-                .WithMessage("يجب ألا يتجاوز نص الفصل 100000 حرف");
+                .WithMessage(ChapterTextRules.ContentMissingMessage)
+                .ChapterContent();
 
             RuleFor(c => c.Status)
                 .Must(status => ChapterStatuses.All.Contains(status))

@@ -68,9 +68,9 @@ public class ChapterViewHttpTests(SardApiFactory api)
                      await NewDevice().Send(HttpMethod.Get, Url(chapter), prefetchHeader: "true"),
                  })
         {
-            // The whole chapter, as for a read.
+            // The whole chapter, as for a read (its paragraph in chapter format v1, #74).
             var body = await response.OkJson();
-            Assert.Equal("<p>فقرة</p>", Assert.Single(body.GetProperty("paragraphs").EnumerateArray()).GetProperty("content").GetString());
+            Assert.Equal("فقرة", Assert.Single(body.GetProperty("paragraphs").EnumerateArray()).GetProperty("content").GetString());
         }
         await Task.Delay(500);
         Assert.Equal(0, await Views(chapter));

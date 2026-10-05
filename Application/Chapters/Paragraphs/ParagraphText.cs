@@ -5,24 +5,16 @@ using System.Text.RegularExpressions;
 
 namespace Application.Chapters.Paragraphs;
 
-/// <summary>How a chapter's content becomes paragraphs, and what counts as a paragraph's text.</summary>
+/// <summary>
+/// What counts as a paragraph's text (its words, for telling an unchanged paragraph from an edited one), and the stored
+/// hash. How a chapter's content becomes paragraphs is <see cref="ChapterFormat"/>.
+/// </summary>
 public static partial class ParagraphText
 {
     /// <summary>
-    /// Splits chapter content as the editor sends it (<c>&lt;p&gt;</c> blocks, or plain text with blank lines) into
-    /// paragraph contents. Same rule as chapter creation.
+    /// The stored <c>ContentHash</c>: SHA-256 of the paragraph's content as saved (inline HTML; a picture's address),
+    /// for chapter creation, edits and the format maintenance alike.
     /// </summary>
-    public static List<string> Split(string content) =>
-        content
-            .Split(new[] { "\n\n", "\r\n\r\n", "</p><p>", "</p>" }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(p => p.Trim()
-                .Replace("<p>", "")
-                .Replace("</p>", ""))
-            // Keep <br> tags to preserve line breaks within paragraphs
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .ToList();
-
-    /// <summary>The stored <c>ContentHash</c>: SHA-256 of the paragraph's HTML as saved, the same as chapter creation.</summary>
     public static string Hash(string content)
     {
         var normalized = content.Trim()
@@ -48,7 +40,19 @@ public static partial class ParagraphText
         }
 
         // Tags go first, then character references: "&lt;b&gt;" is text a reader sees, not a tag.
-        var text = WebUtility.HtmlDecode(Tag().Replace(content, TagReplacement));
+        return Words(WebUtility.HtmlDecode(Tag().Replace(content, TagReplacement)));
+    }
+
+    /// <summary>
+    /// Plain text's words as <see cref="VisibleText"/> compares them: every run of whitespace (no-break spaces and
+    /// line breaks included) one space, none at the ends.
+    /// </summary>
+    public static string Words(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
 
         var builder = new StringBuilder(text.Length);
         var pendingSpace = false;
@@ -72,16 +76,13 @@ public static partial class ParagraphText
         return builder.ToString();
     }
 
-    // A line break or a block boundary separates words; inline formatting (<strong>, <em>, <u>, <s>, <span>, <a>)
-    // sits inside or around them.
+    // A line break, a block boundary or a picture separates words (the blocks are those that end a paragraph in
+    // ChapterFormat); inline formatting (<strong>, <em>, <u>, <s>, <span>, <a>) sits inside or around them.
     private static string TagReplacement(Match tag) =>
-        BlockTags.Contains(tag.Groups["name"].Value) ? " " : string.Empty;
+        WordBreakingTags.Contains(tag.Groups["name"].Value) ? " " : string.Empty;
 
-    private static readonly HashSet<string> BlockTags = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "br", "p", "div", "li", "ul", "ol", "blockquote", "pre", "hr", "h1", "h2", "h3", "h4", "h5", "h6",
-        "table", "tr", "td", "th"
-    };
+    private static readonly HashSet<string> WordBreakingTags =
+        new(ChapterFormat.BlockElements.Concat(["br", "p", "hr", "img"]), StringComparer.OrdinalIgnoreCase);
 
     // An opening or closing tag. "a < b" in plain text is not one: a tag name starts right after the "<".
     [GeneratedRegex(@"</?(?<name>[A-Za-z][A-Za-z0-9]*)\b[^<>]*>")]

@@ -159,6 +159,9 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         entry.Property(c => c.CommentsCount).IsModified = false;
         entry.Property(c => c.TotalCommentsCount).IsModified = false;
         entry.Property(c => c.ViewsCount).IsModified = false;
+        // The paragraph count is written with the paragraphs, inside the edit of the chapter's text
+        // (ChapterParagraphsRepository.BeginEditAsync); the copy loaded here may be older than that edit.
+        entry.Property(c => c.ParagraphsCount).IsModified = false;
         // When the chapter came out is stored below, only while it has none (#39): the copy loaded for this save may
         // be older than another save that published it, whose date must stay, and only one save can be its first.
         // (Not modified puts the loaded value back, so the date SetStatus gave it is taken first.)

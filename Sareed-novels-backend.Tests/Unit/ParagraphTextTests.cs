@@ -30,6 +30,9 @@ public class ParagraphTextTests
     [InlineData("س < ص و ص > ع", "س < ص و ص > ع")]
     [InlineData("", "")]
     [InlineData("<p class=\"min-h-[1em]\"><br>", "")]
+    // A picture or any block that ends a paragraph in chapter format v1 separates words too
+    [InlineData("قبل<img src=\"https://x.test/a.png\">بعد", "قبل بعد")]
+    [InlineData("قبل<section>بعد</section><dd>ثم</dd>", "قبل بعد ثم")]
     public void Visible_text_is_the_words_a_reader_sees(string content, string expected)
     {
         Assert.Equal(expected, ParagraphText.VisibleText(content));
@@ -58,17 +61,6 @@ public class ParagraphTextTests
     public void Any_change_to_the_words_counts(string before, string after)
     {
         Assert.NotEqual(ParagraphText.VisibleText(before), ParagraphText.VisibleText(after));
-    }
-
-    [Fact]
-    public void Splitting_follows_the_editor_output_and_chapter_creation()
-    {
-        var html = "<p class=\"min-h-[1em]\">أول</p><p class=\"min-h-[1em]\">ثانٍ<br>وسطر</p><p>ثالث</p><p class=\"min-h-[1em]\"> </p>";
-
-        Assert.Equal(
-            ["<p class=\"min-h-[1em]\">أول", "<p class=\"min-h-[1em]\">ثانٍ<br>وسطر", "ثالث", "<p class=\"min-h-[1em]\">"],
-            ParagraphText.Split(html));
-        Assert.Equal(["أول", "ثانٍ", "ثالث"], ParagraphText.Split("أول\n\nثانٍ\r\n\r\n\n\nثالث\n\n  "));
     }
 
     [Fact]

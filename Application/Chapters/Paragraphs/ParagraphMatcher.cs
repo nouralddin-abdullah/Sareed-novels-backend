@@ -2,8 +2,9 @@ namespace Application.Chapters.Paragraphs;
 
 /// <summary>
 /// Decides which saved paragraphs an edited chapter still contains. A saved paragraph continues, keeping its id and
-/// with it its comments, only when an edited paragraph has exactly its visible text (<see cref="ParagraphText.VisibleText"/>);
-/// any change to the words, even one letter or one diacritic, makes a new paragraph.
+/// with it its comments, only when an edited paragraph has exactly its words (<see cref="FormattedParagraph.MatchKey"/>:
+/// the visible text, whatever the paragraph's kind or inline formatting; a break as a break; a picture by its address
+/// and caption); any change to the words, even one letter or one diacritic, makes a new paragraph.
 /// Equal paragraphs pair up as a multiset, so each copy of a repeated paragraph keeps its own id: first in order
 /// (a longest common subsequence, so deleting one copy removes that copy and not its twin), then whatever is left by
 /// text alone (paragraphs the author moved).
@@ -16,7 +17,11 @@ public static class ParagraphMatcher
     /// </summary>
     public const long InOrderCellLimit = 4_000_000;
 
-    public static ParagraphMatch Match(IReadOnlyList<string> saved, IReadOnlyList<string> edited)
+    /// <summary>
+    /// Pairs the edited chapter's paragraphs with the saved ones: the saved ones as the API reads them
+    /// (<see cref="ChapterFormat.Read"/>), the edited ones as <see cref="ChapterFormat.Parse"/> made them.
+    /// </summary>
+    public static ParagraphMatch Match(IReadOnlyList<FormattedParagraph> saved, IReadOnlyList<FormattedParagraph> edited)
     {
         var keyIds = new Dictionary<string, int>(StringComparer.Ordinal);
         var savedKeys = Keys(saved, keyIds);
@@ -63,15 +68,15 @@ public static class ParagraphMatcher
         return new ParagraphMatch(savedIndexByEdited, removed, inOrder, moved);
     }
 
-    private static int[] Keys(IReadOnlyList<string> paragraphs, Dictionary<string, int> keyIds)
+    private static int[] Keys(IReadOnlyList<FormattedParagraph> paragraphs, Dictionary<string, int> keyIds)
     {
         var keys = new int[paragraphs.Count];
         for (var i = 0; i < keys.Length; i++)
         {
-            var text = ParagraphText.VisibleText(paragraphs[i]);
-            if (!keyIds.TryGetValue(text, out var id))
+            var key = paragraphs[i].MatchKey;
+            if (!keyIds.TryGetValue(key, out var id))
             {
-                keyIds[text] = id = keyIds.Count;
+                keyIds[key] = id = keyIds.Count;
             }
 
             keys[i] = id;

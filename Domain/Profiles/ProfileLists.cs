@@ -12,8 +12,11 @@ public sealed record ProfileNovel(Guid Id, string Slug, string Title, string Cov
 /// </summary>
 public sealed record ProfileChapter(Guid Id, string Title, int Number);
 
-/// <summary>The paragraph a listed comment was written on, with its text (the HTML the chapter editor saves).</summary>
-public sealed record ProfileParagraph(Guid Id, string Content);
+/// <summary>
+/// The paragraph a listed comment was written on, with its stored text: content, kind and caption (chapter format v1,
+/// #74, or the editor's HTML in rows from before it).
+/// </summary>
+public sealed record ProfileParagraph(Guid Id, string Content, string ContentType, string? Caption);
 
 /// <summary>
 /// A comment's author as the comment lists show them, with the names they have now. A deleted account shows as it is

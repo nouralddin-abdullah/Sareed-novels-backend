@@ -51,7 +51,7 @@ public class ChapterOwnershipTests
             CancellationToken.None));
 
         await chapters.DidNotReceiveWithAnyArgs().UpdateChapter(default!);
-        await paragraphs.DidNotReceiveWithAnyArgs().SaveEditedParagraphs(default, default!, default!);
+        await paragraphs.DidNotReceiveWithAnyArgs().BeginEditAsync(default);
         Assert.Equal("draft", victimsChapter.Title);
     }
 
