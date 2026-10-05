@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Application.Chapters.Paragraphs;
+using Domain.Constants;
 
 namespace Sareed_novels_backend.Tests.Unit;
 
@@ -21,10 +22,17 @@ public class ParagraphMatcherTests
     /// <summary>For each edited paragraph, the saved index it continues (-1: new).</summary>
     private static int[] Pairs(ParagraphMatch match) => match.SavedIndexByEdited.ToArray();
 
+    /// <summary>Matches paragraphs given as stored HTML (text paragraphs), each read as the API reads a stored one.</summary>
+    private static ParagraphMatch Match(IEnumerable<string> saved, IEnumerable<string> edited) =>
+        ParagraphMatcher.Match(Read(saved), Read(edited));
+
+    private static List<FormattedParagraph> Read(IEnumerable<string> paragraphs) =>
+        paragraphs.Select(html => ChapterFormat.Read(html, ParagraphKinds.Text, null)).ToList();
+
     [Fact]
     public void Saving_an_unchanged_chapter_keeps_every_paragraph_in_place()
     {
-        var match = ParagraphMatcher.Match([A, B, C], [A, B, C]);
+        var match = Match([A, B, C], [A, B, C]);
 
         Assert.Equal([0, 1, 2], Pairs(match));
         Assert.Empty(match.RemovedSaved);
@@ -36,7 +44,7 @@ public class ParagraphMatcherTests
     {
         var fixedB = B.Replace("مجر كتاب", "مجرد كتاب");
 
-        var match = ParagraphMatcher.Match([A, B, C], [A, fixedB, C]);
+        var match = Match([A, B, C], [A, fixedB, C]);
 
         Assert.Equal([0, -1, 2], Pairs(match));
         Assert.Equal([1], match.RemovedSaved);
@@ -50,7 +58,7 @@ public class ParagraphMatcherTests
     [InlineData("ساقوم", "سأقوم")] // a hamza
     public void A_one_character_change_is_a_change(string before, string after)
     {
-        var match = ParagraphMatcher.Match([A, B], [A, B.Replace(before, after)]);
+        var match = Match([A, B], [A, B.Replace(before, after)]);
 
         Assert.Equal([0, -1], Pairs(match));
         Assert.Equal([1], match.RemovedSaved);
@@ -59,7 +67,7 @@ public class ParagraphMatcherTests
     [Fact]
     public void Deleting_a_paragraph_removes_only_that_paragraph()
     {
-        var match = ParagraphMatcher.Match([A, B, C, D], [A, C, D]);
+        var match = Match([A, B, C, D], [A, C, D]);
 
         Assert.Equal([0, 2, 3], Pairs(match));
         Assert.Equal([1], match.RemovedSaved);
@@ -68,7 +76,7 @@ public class ParagraphMatcherTests
     [Fact]
     public void Inserting_paragraphs_keeps_every_saved_one()
     {
-        var match = ParagraphMatcher.Match([A, C], [D, A, B, C, E]);
+        var match = Match([A, C], [D, A, B, C, E]);
 
         Assert.Equal([-1, 0, -1, 1, -1], Pairs(match));
         Assert.Empty(match.RemovedSaved);
@@ -78,7 +86,7 @@ public class ParagraphMatcherTests
     [Fact]
     public void Reordered_paragraphs_keep_their_ids()
     {
-        var match = ParagraphMatcher.Match([A, B, C, D, E], [E, A, C, B, D]);
+        var match = Match([A, B, C, D, E], [E, A, C, B, D]);
 
         Assert.Equal([4, 0, 2, 1, 3], Pairs(match));
         Assert.Empty(match.RemovedSaved);
@@ -89,7 +97,7 @@ public class ParagraphMatcherTests
     [Fact]
     public void Repeated_paragraphs_each_keep_their_own_id_through_an_unrelated_edit()
     {
-        var match = ParagraphMatcher.Match([X, A, X, B, X], [Y, X, A.Replace("معاً", "معا"), X, B, X]);
+        var match = Match([X, A, X, B, X], [Y, X, A.Replace("معاً", "معا"), X, B, X]);
 
         Assert.Equal([-1, 0, -1, 2, 3, 4], Pairs(match));
         Assert.Equal([1], match.RemovedSaved);
@@ -98,16 +106,16 @@ public class ParagraphMatcherTests
     [Fact]
     public void Deleting_one_copy_of_a_repeated_paragraph_removes_that_copy()
     {
-        Assert.Equal([0], ParagraphMatcher.Match([X, A, X], [A, X]).RemovedSaved);
-        Assert.Equal([2], ParagraphMatcher.Match([X, A, X], [X, A]).RemovedSaved);
-        Assert.Equal([1, 2], Pairs(ParagraphMatcher.Match([X, A, X], [A, X])));
-        Assert.Equal([0, 1], Pairs(ParagraphMatcher.Match([X, A, X], [X, A])));
+        Assert.Equal([0], Match([X, A, X], [A, X]).RemovedSaved);
+        Assert.Equal([2], Match([X, A, X], [X, A]).RemovedSaved);
+        Assert.Equal([1, 2], Pairs(Match([X, A, X], [A, X])));
+        Assert.Equal([0, 1], Pairs(Match([X, A, X], [X, A])));
     }
 
     [Fact]
     public void Repeated_paragraphs_moved_around_keep_their_ids()
     {
-        var match = ParagraphMatcher.Match([X, A, X, B], [B, X, A, X]);
+        var match = Match([X, A, X, B], [B, X, A, X]);
 
         Assert.Equal([3, 0, 1, 2], Pairs(match));
         Assert.Equal((3, 1), (match.Kept, match.Moved));
@@ -116,7 +124,7 @@ public class ParagraphMatcherTests
     [Fact]
     public void Adding_a_copy_of_a_paragraph_keeps_the_original_and_adds_a_new_one()
     {
-        var match = ParagraphMatcher.Match([X, A], [X, A, X]);
+        var match = Match([X, A], [X, A, X]);
 
         Assert.Equal([0, 1, -1], Pairs(match));
         Assert.Empty(match.RemovedSaved);
@@ -140,7 +148,7 @@ public class ParagraphMatcherTests
             P + Text(E).Replace("نور", "<u>نور</u>").Replace("والمزيفة", "<span dir=\"rtl\">والمزيفة</span>")
         ];
 
-        var match = ParagraphMatcher.Match(saved, edited);
+        var match = Match(saved, edited);
 
         Assert.Equal([0, 1, 2, 3, 4], Pairs(match));
         Assert.Empty(match.RemovedSaved);
@@ -152,11 +160,11 @@ public class ParagraphMatcherTests
         const string first = P + "كان الكسندر، صاحب دار النشر،";
         const string second = P + "رجلاً يرى الأعمال الأدبية بعين المستثمر والناقد معاً.";
 
-        var split = ParagraphMatcher.Match([A, B], [first, second, B]);
+        var split = Match([A, B], [first, second, B]);
         Assert.Equal([-1, -1, 1], Pairs(split));
         Assert.Equal([0], split.RemovedSaved);
 
-        var merged = ParagraphMatcher.Match([first, second, B], [A, B]);
+        var merged = Match([first, second, B], [A, B]);
         Assert.Equal([-1, 2], Pairs(merged));
         Assert.Equal([0, 1], merged.RemovedSaved);
     }
@@ -164,9 +172,9 @@ public class ParagraphMatcherTests
     [Fact]
     public void Empty_chapters_on_either_side()
     {
-        Assert.Equal([-1, -1], Pairs(ParagraphMatcher.Match([], [A, B])));
-        Assert.Equal([0, 1], ParagraphMatcher.Match([A, B], []).RemovedSaved);
-        Assert.Empty(Pairs(ParagraphMatcher.Match([], [])));
+        Assert.Equal([-1, -1], Pairs(Match([], [A, B])));
+        Assert.Equal([0, 1], Match([A, B], []).RemovedSaved);
+        Assert.Empty(Pairs(Match([], [])));
     }
 
     [Fact]
@@ -174,7 +182,7 @@ public class ParagraphMatcherTests
     {
         var paragraphs = Integration.ProductionChapter.Paragraphs;
 
-        var match = ParagraphMatcher.Match(paragraphs, paragraphs.ToList());
+        var match = Match(paragraphs, paragraphs.ToList());
 
         Assert.Equal(Enumerable.Range(0, paragraphs.Length), Pairs(match));
     }
@@ -188,7 +196,7 @@ public class ParagraphMatcherTests
         Assert.True((long)saved.Length * edited.Length > ParagraphMatcher.InOrderCellLimit);
 
         var stopwatch = Stopwatch.StartNew();
-        var match = ParagraphMatcher.Match(saved, edited);
+        var match = Match(saved, edited);
         stopwatch.Stop();
 
         Assert.Empty(match.RemovedSaved);
@@ -207,7 +215,7 @@ public class ParagraphMatcherTests
         edited.InsertRange(400, saved[500..530]);
 
         var stopwatch = Stopwatch.StartNew();
-        var match = ParagraphMatcher.Match(saved, edited);
+        var match = Match(saved, edited);
         stopwatch.Stop();
 
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), $"took {stopwatch.Elapsed}");
@@ -244,10 +252,10 @@ public class ParagraphMatcherTests
                 }
             }
 
-            var match = ParagraphMatcher.Match(saved, edited);
+            var match = Match(saved, edited);
 
             AssertValid(saved, edited, match);
-            Assert.Equal(Pairs(match), Pairs(ParagraphMatcher.Match(saved, edited)));
+            Assert.Equal(Pairs(match), Pairs(Match(saved, edited)));
         }
     }
 

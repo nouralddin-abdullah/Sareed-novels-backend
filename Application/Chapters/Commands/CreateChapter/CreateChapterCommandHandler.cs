@@ -1,4 +1,5 @@
 ﻿using Application.Chapters.DTOS;
+using Application.Chapters.Paragraphs;
 using Application.Services;
 using Application.Users;
 using Application.Users.Commands.FollowUser;
@@ -11,8 +12,6 @@ using Domain.Seo;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Application.Chapters.Commands.CreateChapter;
 
@@ -45,23 +44,13 @@ public class CreateChapterCommandHandler(
         chapter.CreatedAt = now;
         chapter.SetStatus(request.Status, now);
         
-        // Split content into paragraphs
-        var paragraphTexts = SplitIntoParagraphs(request.Content);
-        var paragraphs = paragraphTexts.Select((text, index) => new ChapterParagraph
-        {
-            Id = Guid.NewGuid(),
-            ChapterId = chapter.Id,
-            Content = text,
-            ContentHash = ComputeContentHash(text),
-            OrderIndex = index,
-            ContentType = "text",
-            CreatedAt = now,
-            CommentsCount = 0
-        }).ToList();
+        // The text as chapter format v1 stores it (#74), one row per paragraph.
+        var paragraphs = ChapterFormat.Parse(request.Content)
+            .Select((paragraph, index) => ParagraphRows.New(chapter.Id, paragraph, index, now))
+            .ToList();
         
         chapter.Paragraphs = paragraphs;
         chapter.ParagraphsCount = paragraphs.Count;
-        chapter.Content = null;
         
         var result = await chaptersRepository.CreateChapter(chapter);
         if (!result)
@@ -96,31 +85,6 @@ public class CreateChapterCommandHandler(
             chapter.Id, paragraphs.Count, novel.Id);
         
         return chapterDto;
-    }
-    
-    private static List<string> SplitIntoParagraphs(string content)
-    {
-        return content
-            .Split(new[] { "\n\n", "\r\n\r\n", "</p><p>", "</p>" }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(p => p.Trim()
-                .Replace("<p>", "")
-                .Replace("</p>", ""))
-            // Keep <br> tags to preserve line breaks within paragraphs
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .ToList();
-    }
-    
-    private static string ComputeContentHash(string content)
-    {
-        var normalized = content.Trim()
-            .Replace("\r\n", "\n")
-            .Replace("\r", "\n")
-            .Replace("\t", " ");
-        
-        using var sha256 = SHA256.Create();
-        var bytes = Encoding.UTF8.GetBytes(normalized);
-        var hashBytes = sha256.ComputeHash(bytes);
-        return Convert.ToBase64String(hashBytes);
     }
     
     private async Task SendNewChapterNotificationsInBackground(Guid novelId, Guid chapterId, string chapterSlug, string chapterTitle)

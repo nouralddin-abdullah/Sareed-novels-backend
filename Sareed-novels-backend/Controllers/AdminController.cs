@@ -1,3 +1,4 @@
+using Application.Chapters.Commands.CleanChapterFormat;
 using Application.Covers.Commands.ConvertLegacyCovers;
 using Application.Covers.Queries.GetCoverStatus;
 using Application.Reports.Commands.LiftSuspension;
@@ -39,6 +40,20 @@ public class AdminController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(new ConvertLegacyCoversCommand { BatchSize = batchSize, After = after, DryRun = dryRun });
         return result.ProcessorAvailable ? Ok(result) : StatusCode(StatusCodes.Status503ServiceUnavailable, result);
     }
+
+    // Chapter text (see Application.Chapters.Paragraphs.ChapterFormat)
+
+    /// <summary>
+    /// The chapter format maintenance (#74): converts the stored chapter paragraphs to chapter format v1. A dry run
+    /// unless dryRun=false: the report says what would change (counts, before and after examples, the paragraphs left
+    /// alone and why, the pictures). The real pass never changes the words a reader sees: such a paragraph is skipped and
+    /// reported. Each call works about 20 seconds; call again with after=nextCursor until nextCursor is null. Running it
+    /// again is harmless: what it converted is already in format v1.
+    /// </summary>
+    [HttpPost("chapters/clean-format")]
+    public async Task<IActionResult> CleanChapterFormat([FromQuery] bool dryRun = true, [FromQuery] Guid? after = null,
+        [FromQuery] int batchSize = 50, CancellationToken cancellationToken = default) =>
+        Ok(await mediator.Send(new CleanChapterFormatCommand { DryRun = dryRun, After = after, BatchSize = batchSize }, cancellationToken));
 
     // Moderation: reports (POST /api/reports), suspensions and account deletion
 

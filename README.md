@@ -1387,3 +1387,126 @@ The first refusal is the answer:
 ### A new novel can start as a draft (#76)
 
 `POST /api/myworks` takes an optional form field `isDraft` (default `false`, so the web is unchanged): `true` creates the novel as a draft, as `PATCH /api/myworks/{id}/draft` makes one (hidden from every public list and the rankings, listed with `isDraft: true` in `GET /api/myworks` and `/api/myworks/{id}`, published with `PATCH /api/myworks/{id}/publish`); the response has `isDraft` (`null` when refused), and an edit (`PATCH /api/myworks/{id}`) now refuses a title, summary or genre list with creating's rules and messages.
+
+### Chapter format v1: the chapter's text, for the app and the web (#74)
+
+The server stores and serves a chapter's text in one format, whoever sends it: the app's editor, the web's, or any
+client. The app's editor leads; the web follows. Anything else in what is sent is dropped, and paragraphs stored
+before this are served in the format too.
+
+**A chapter is a list of paragraphs**, each with a kind (`contentType`) and content. On the wire, the `content` of
+`POST /api/novel/{novelId}/chapter` and `PATCH /api/novel/{novelId}/chapter/{chapterId}` is HTML:
+
+| `contentType` | What it is | On the wire | Stored and served `content` |
+|---|---|---|---|
+| `text` | a normal paragraph (the default) | `<p>…</p>` | inline content |
+| `center` | a centered paragraph: a poem, a title inside the chapter, a sign | `<p data-kind="center">…</p>` | inline content |
+| `quote` | a set-off block: a letter, a message, a memory, a voice from elsewhere | `<p data-kind="quote">…</p>` | inline content |
+| `break` | a scene break | `<hr>` or `<p data-kind="break"></p>` | `* * *` |
+| `image` | a picture | `<img src="https://…">` alone in its `<p>`, or bare; with a caption, `<p data-kind="image"><img src="https://…">the caption</p>` | the picture's address; the caption in `caption` |
+
+**Inline content** (text, center, quote): text, `<strong>`, `<em>`, `<u>`, `<s>`, and `<br>` for a line break inside
+the paragraph (a poem's lines, a list of messages). Text is HTML-escaped: `&amp;`, `&lt;`, `&gt;`, and `&nbsp;` for a
+no-break space. A `"` stays as it is.
+
+**What the server drops or rewrites**, so that what is stored is only the above, written one way:
+
+- Every attribute. On `<p>` only `data-kind` is read (any letter case; an unknown kind is `text`), on `<img>` only
+  `src`. So the web editor's `class="min-h-[1em]"`, `style`, `dir`, `on…` handlers and links' `href` all go.
+- `<b>` becomes `<strong>` and `<i>` becomes `<em>`. Nested marks are written in one order (`strong`, `em`, `u`, `s`),
+  and a mark around no text is dropped.
+- Every other tag is unwrapped and its text kept: `span`, `a`, `font`, `sup`, ... Blocks (`div`, headings, list items,
+  table cells, `blockquote`, ...) end a paragraph: their text becomes paragraphs of its own (of the kind of the `<p>`
+  around them, if any).
+- Elements whose content isn't text go with all of it: `script`, `style`, `iframe`, `object`, `embed`, `svg`, `math`,
+  `video`, `audio`, `canvas`, `noscript`, `template`, form fields (`input`, `select`, `textarea`, `button`), and
+  comments.
+- Pictures: only an absolute `http`/`https` address is kept (normalized and escaped, so `HTTPS://Host/a b.png` becomes
+  `https://host/a%20b.png`); any other picture (relative, `data:`, `javascript:`) is dropped. A picture among a
+  paragraph's text becomes an `image` paragraph of its own, the text before and after it staying paragraphs of the
+  `<p>`'s kind. In `<p data-kind="image">` with one picture, the rest of the `<p>` is the caption, stored as plain text
+  (its formatting dropped, on one line). A `<p data-kind="image">` without exactly one picture is read as text.
+- A break's content is ignored: it is always stored as `* * *`, so a reader that doesn't know kinds shows a line.
+- Spaces a reader can't see: runs of spaces and tabs become one space; spaces at a paragraph's start or end, or next to
+  a `<br>`, go, and so do `<br>`s at a paragraph's start or end. A no-break space is kept.
+- Empty paragraphs (only spaces, `&nbsp;` or `<br>`) are dropped. A break never is.
+- Plain text (no `<p>`) works as it always did: each block between blank lines is a `text` paragraph. A single line
+  break in the text is a `<br>`, and a blank line ends the paragraph, inside a `<p>` too.
+
+The format is canonical: sending back exactly what was read changes nothing, and cleaning it again gives the same.
+
+**Reading back.** The author's chapter, `GET /api/myworks/{workId}/chapters/{chapterId}` (what an editor loads), the
+reader's, `GET /api/novel/{novelId}/chapter/{chapterId}`, and the answer of `POST /api/novel/{novelId}/chapter`
+list the paragraphs in order, each:
+
+```json
+{ "id": "…", "content": "كان <strong>الليل</strong> طويلاً<br>والريح تعوي.", "contentType": "text",
+  "caption": null, "orderIndex": 0, "commentsCount": 2 }
+{ "id": "…", "content": "https://files.example/map.png", "contentType": "image", "caption": "خريطة المدينة",
+  "orderIndex": 1, "commentsCount": 0 }
+{ "id": "…", "content": "* * *", "contentType": "break", "caption": null, "orderIndex": 2, "commentsCount": 0 }
+```
+
+`caption` is new: an image's caption as plain text (show it as text, not HTML), `null` for every other paragraph.
+A paragraph's quote next to a comment on it, `paragraphExcerpt` (the comment context,
+`GET /api/notifications/comment/{id}`, and a member's comment list, `GET /api/User/{userName}/comments`), is plain
+text: its words, an image's caption, `null` for a break.
+
+**Saving keeps a paragraph by its words.** A saved paragraph keeps its id and its comments when the edited chapter
+has a paragraph with the same words (#15), wherever it moved. Its kind and inline formatting are not part of its words:
+changing a `text` paragraph to `center`, or making a word bold, keeps it, and the stored content and kind are updated.
+A picture is kept by its address and caption, a break as a break. A changed word makes a new paragraph, and the old
+one goes with its comments, as before.
+
+**Limits.** The 100,000-character limit counts the text readers see (a break and the markup count nothing), so
+formatting doesn't take a writer's room: «يجب ألا يتجاوز نص الفصل 100000 حرف». As sent, formatting included, the text
+may be up to 400,000 characters: «يجب ألا يتجاوز نص الفصل مع تنسيقه 400000 حرف». Both are 400 `ValidationFailed`.
+
+**For the web.** It renders `content` as HTML today: it should show each paragraph by `contentType` (center, quote,
+a separator for `break`, a picture and its `caption` for `image`, whose `content` is an address, not HTML). The
+editor's output needs no change, and loading paragraphs into it as `<p>` blocks works as before. The SEO worker
+(`cloudflare-worker/seo-worker.js`) keeps only paragraphs with `contentType` `text`, so center and quote paragraphs are
+missing from the pages it renders until it learns the kinds.
+
+#### Paragraphs stored before the format: the maintenance
+
+`POST /api/admin/chapters/clean-format` (admins) runs the same cleaning over the stored paragraphs. **It is a dry run
+unless `dryRun=false`.**
+
+1. `POST /api/admin/chapters/clean-format`: nothing changes; the report says what the real pass would do.
+2. Look at the report: the counts, `examples` (before and after), `skipped` (and why), `pictures`.
+3. `POST /api/admin/chapters/clean-format?dryRun=false`: the real pass. A call works about 20 seconds; while
+   `nextCursor` isn't `null`, call again with `&after=<nextCursor>` (the dry run too, on a large database). Add up the
+   counts of the calls. Running it again changes nothing that is already converted.
+
+`batchSize` (default 50, at most 200) is how many chapters it reads at a time. The report:
+
+| Field | |
+|---|---|
+| `chaptersChecked`, `chaptersChanged`, `paragraphsChecked`, `paragraphsUnchanged` | what it went through, and what is already format v1 |
+| `paragraphsChanged` | the sum of the next four |
+| `paragraphsRewritten` | stored again in the format (the editor's `class`, markup, kind, a picture's address), same id and comments |
+| `paragraphsSplit`, `paragraphsAdded` | a picture among a paragraph's text split out (or blocks inside one paragraph): the paragraph keeps its first part with words, with its id and comments; the other parts are new paragraphs |
+| `emptyParagraphsRemoved` | paragraphs without words or picture and without comments, removed as empty paragraphs are |
+| `hashesFixed` | content already in the format whose stored `ContentHash` didn't match it |
+| `paragraphsSkipped`, `skipped` | left as they are, with `reason`: `VisibleTextChanged` (the cleaning would change the words a reader sees: `wordsBefore`, `wordsAfter`), `PictureDropped` (a picture without an http(s) address), `EmptyWithComments` |
+| `pictures` | paragraphs holding pictures, how many pictures are `kept` (as image paragraphs) and `notKept` (their paragraphs are skipped), and those paragraphs |
+| `legacyChapterContent` | chapters still holding text in the old `Chapters.Content` column, and how many of them have no paragraphs |
+| `failures` | chapters whose conversion failed (nothing of them was saved): run again |
+| `nextCursor` | where to continue; `null` at the end |
+
+It never changes the words a reader sees: a paragraph whose words or picture the cleaning would lose is skipped and
+reported, so nothing disappears unseen. It keeps `ContentHash` (SHA-256 of the stored content) right, and leaves the
+paragraphs' `updatedAt` (the author didn't change them). Each chapter is converted in its own transaction, holding the
+chapter's text as an author's save does: a save of that chapter waits for it, or it for the save, and it reads the
+paragraphs again inside. Readers already get every paragraph in the format before it runs; the pass makes the stored
+text match. Until it runs, a stored paragraph with a picture among its text is served as its text alone.
+
+**The old `Chapters.Content` column.** Chapters kept their text there before paragraphs; nothing reads it. Until now,
+every save copied the request's raw HTML into it; it is no longer written, and a save of the chapter's text clears it.
+The maintenance reports how many chapters still hold text there (`legacyChapterContent`), and how many of those have
+no paragraphs (readers see none of that text); it doesn't change the column. Dropping it is a later decision.
+
+The migration `AddChapterParagraphCaption` adds the nullable column `ChapterParagraphs.Caption`. The cleaning is
+`Application/Chapters/Paragraphs/ChapterFormat.cs`; the wiki's articles (parked) are to go through it when they come
+back.

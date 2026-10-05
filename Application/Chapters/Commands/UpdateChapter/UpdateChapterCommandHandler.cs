@@ -50,6 +50,8 @@ public class UpdateChapterCommandHandler(
         if (!string.IsNullOrEmpty(request.Content))
         {
             chapter.ParagraphsCount = await SaveParagraphs(chapter.Id, request.Content);
+            // The text is its paragraphs now; a copy left in the legacy Chapters.Content column is stale.
+            chapter.Content = null;
         }
         
         if (request.Title != null)
@@ -160,47 +162,36 @@ public class UpdateChapterCommandHandler(
     }
     
     /// <summary>
-    /// Replaces the chapter's paragraphs with the edited content and returns how many there are now. A paragraph
-    /// whose words are unchanged (<see cref="ParagraphText.VisibleText"/>) keeps its id and its comments, wherever
-    /// it moved and whatever its formatting; a changed or deleted paragraph goes, and its comments with it.
+    /// Replaces the chapter's paragraphs with the edited content, in chapter format v1 (#74), and returns how many
+    /// there are now. A paragraph whose words are unchanged (<see cref="FormattedParagraph.MatchKey"/>) keeps its id and
+    /// its comments, wherever it moved and whatever its kind or formatting, which are updated; a changed or deleted
+    /// paragraph goes, and its comments with it.
     /// </summary>
     private async Task<int> SaveParagraphs(Guid chapterId, string content)
     {
         var stopwatch = Stopwatch.StartNew();
-        var saved = await paragraphsRepository.GetChapterParagraphs(chapterId);
-        var editedTexts = ParagraphText.Split(content);
-        var match = ParagraphMatcher.Match(saved.Select(p => p.Content).ToList(), editedTexts);
+        var edited = ChapterFormat.Parse(content);
+        await using var edit = await paragraphsRepository.BeginEditAsync(chapterId);
+        var saved = edit.Paragraphs;
+        var match = ParagraphMatcher.Match(saved.Select(ParagraphRows.Read).ToList(), edited);
 
         var now = DateTime.UtcNow;
         var reformatted = 0;
-        var paragraphs = new List<ChapterParagraph>(editedTexts.Count);
-        for (var index = 0; index < editedTexts.Count; index++)
+        var paragraphs = new List<ChapterParagraph>(edited.Count);
+        for (var index = 0; index < edited.Count; index++)
         {
-            var text = editedTexts[index];
             var savedIndex = match.SavedIndexByEdited[index];
             if (savedIndex < 0)
             {
-                paragraphs.Add(new ChapterParagraph
-                {
-                    Id = Guid.NewGuid(),
-                    ChapterId = chapterId,
-                    Content = text,
-                    ContentHash = ParagraphText.Hash(text),
-                    OrderIndex = index,
-                    ContentType = "text",
-                    CreatedAt = now,
-                    CommentsCount = 0
-                });
+                paragraphs.Add(ParagraphRows.New(chapterId, edited[index], index, now));
                 continue;
             }
 
             var paragraph = saved[savedIndex];
             var changed = false;
-            if (paragraph.Content != text)
+            // Same words in another kind or markup (center, bold, line breaks, spacing): readers get the new one.
+            if (ParagraphRows.Store(paragraph, edited[index]))
             {
-                // Same words in new markup (bold, italic, line breaks, spacing): readers get the new markup.
-                paragraph.Content = text;
-                paragraph.ContentHash = ParagraphText.Hash(text);
                 reformatted++;
                 changed = true;
             }
@@ -220,7 +211,7 @@ public class UpdateChapterCommandHandler(
         }
 
         var removed = match.RemovedSaved.Select(i => saved[i]).ToList();
-        var deleted = await paragraphsRepository.SaveEditedParagraphs(chapterId, paragraphs, removed);
+        var deleted = await edit.SaveAsync(paragraphs, removed);
 
         logger.Log(deleted.Visible > 0 ? LogLevel.Warning : LogLevel.Information,
             "Chapter {ChapterId} paragraphs saved: {Kept} kept, {Moved} moved, {Created} new, {Removed} removed " +

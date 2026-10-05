@@ -48,7 +48,7 @@ internal static class ProfileListMapping
         Novel = comment.Novel.ToDto(),
         Chapter = new ProfileChapterDTO { Id = comment.Chapter.Id, Title = comment.Chapter.Title, Number = comment.Chapter.Number },
         ParagraphId = comment.Paragraph?.Id,
-        ParagraphExcerpt = comment.Paragraph is { } paragraph && viewerReadsChapter ? ParagraphExcerpt.Of(paragraph.Content) : null
+        ParagraphExcerpt = comment.Paragraph is { } paragraph && viewerReadsChapter ? ParagraphExcerpt.Of(paragraph.Content, paragraph.ContentType, paragraph.Caption) : null
     };
 
     private static ProfileParentCommentDTO ToDto(this ProfileParentComment parent,

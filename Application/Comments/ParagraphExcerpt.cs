@@ -1,4 +1,7 @@
+using System.Net;
+using Application.Chapters.Paragraphs;
 using Application.Common;
+using Domain.Constants;
 
 namespace Application.Comments;
 
@@ -12,6 +15,18 @@ internal static class ParagraphExcerpt
 {
     public const int MaxLength = 140;
 
-    /// <summary>The excerpt of a paragraph's HTML (as the chapter editor saves it); null when it has no text.</summary>
-    public static string? Of(string paragraphHtml) => PlainText.Excerpt(paragraphHtml, MaxLength);
+    /// <summary>
+    /// The excerpt of a stored paragraph (its content, kind and caption) as the API serves it, in chapter format v1
+    /// (#74): the words of text, center and quote; an image's caption; null for a break, or without words.
+    /// </summary>
+    public static string? Of(string content, string? kind, string? caption)
+    {
+        var paragraph = ChapterFormat.Read(content, kind, caption);
+        return paragraph.Kind switch
+        {
+            ParagraphKinds.Break => null,
+            ParagraphKinds.Image => PlainText.Excerpt(WebUtility.HtmlEncode(paragraph.Caption), MaxLength),
+            _ => PlainText.Excerpt(paragraph.Content, MaxLength)
+        };
+    }
 }
