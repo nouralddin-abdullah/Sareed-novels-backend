@@ -27,20 +27,23 @@ public partial class GetNotificationsQueryHandler(
     {
         var currentUser = userContext.GetCurrentUser() ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize);
-        
-        logger.LogInformation("Getting notifications for user {UserId}, page {PageNumber}, unreadOnly {UnreadOnly}", 
-            currentUser.Id, pageNumber, request.UnreadOnly);
+        var types = NotificationTypeFilter.Parse(request.Types);
+
+        logger.LogInformation("Getting notifications for user {UserId}, page {PageNumber}, unreadOnly {UnreadOnly}, types {Types}",
+            currentUser.Id, pageNumber, request.UnreadOnly, types is null ? "all" : string.Join(",", types));
 
         var (notifications, totalCount) = await notificationsRepository.GetUserNotifications(
             currentUser.Id,
             pageNumber,
             pageSize,
-            request.UnreadOnly);
+            request.UnreadOnly,
+            types);
 
         var notificationDtos = mapper.Map<List<NotificationDto>>(notifications);
         await SetParts(notificationDtos);
-        
-        var unreadCount = await notificationsRepository.GetUnreadCount(currentUser.Id);
+
+        // Of the same types as the list (#78): with a filter, the list's own unread count.
+        var unreadCount = await notificationsRepository.GetUnreadCount(currentUser.Id, types);
         
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 

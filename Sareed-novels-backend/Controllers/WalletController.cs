@@ -1,6 +1,7 @@
 ﻿using Application.Wallet.Commands.CancelWithdrawal;
 using Application.Wallet.Commands.RequestRecharge;
 using Application.Wallet.Commands.RequestWithdrawal;
+using Application.Wallet.Queries.GetMyEarnings;
 using Application.Wallet.Queries.GetMyRechargeHistory;
 using Application.Wallet.Queries.GetMyTransactionHistory;
 using Application.Wallet.Queries.GetMyWallet;
@@ -21,6 +22,17 @@ public class WalletController(IMediator mediator) : ControllerBase
     {
         var query = new GetMyWalletQuery();
         var result = await mediator.Send(query);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// What the caller's novels earned them (#78), in points only: totalEarned, pendingEarnings and nextReleaseAt as
+    /// GET /api/wallet gives them, and the earnings by novel (all time) and by month (the last 12, UTC).
+    /// </summary>
+    [HttpGet("earnings")]
+    public async Task<IActionResult> GetMyEarnings()
+    {
+        var result = await mediator.Send(new GetMyEarningsQuery());
         return Ok(result);
     }
 

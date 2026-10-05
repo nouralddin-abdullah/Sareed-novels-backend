@@ -49,6 +49,7 @@ public class EarningsHoldHttpTests(SardApiFactory api)
         Assert.Equal(300m, earned.GetProperty("currentBalance").GetDecimal());
         Assert.Equal(0m, earned.GetProperty("withdrawable").GetDecimal());
         Assert.Equal(300m, earned.GetProperty("pendingEarnings").GetDecimal());
+        Assert.Equal(300m, earned.GetProperty("totalEarned").GetDecimal()); // always 0 before #78
         var nextReleaseAt = earned.GetProperty("nextReleaseAt").GetString()!;
         Assert.EndsWith("Z", nextReleaseAt); // UTC, and says so
         Assert.Equal(sentAt.AddDays(30), DateTime.Parse(nextReleaseAt, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal),
@@ -58,6 +59,7 @@ public class EarningsHoldHttpTests(SardApiFactory api)
         Assert.Equal(700m, bought.GetProperty("currentBalance").GetDecimal());
         Assert.Equal(0m, bought.GetProperty("withdrawable").GetDecimal());
         Assert.Equal(0m, bought.GetProperty("pendingEarnings").GetDecimal());
+        Assert.Equal(0m, bought.GetProperty("totalEarned").GetDecimal());
         Assert.Equal(JsonValueKind.Null, bought.GetProperty("nextReleaseAt").ValueKind);
     }
 
@@ -99,6 +101,8 @@ public class EarningsHoldHttpTests(SardApiFactory api)
             await db.SaveChangesAsync();
         }
         Assert.Equal(1200m, (await Wallet(author)).GetProperty("withdrawable").GetDecimal());
+        // Earned: 1500, less the 300 taken back.
+        Assert.Equal(1200m, (await Wallet(author)).GetProperty("totalEarned").GetDecimal());
 
         (await Withdraw(author, 1000)).EnsureSuccessStatusCode();
         Assert.Equal(200m, (await Wallet(author)).GetProperty("withdrawable").GetDecimal());
