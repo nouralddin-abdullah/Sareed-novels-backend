@@ -1,15 +1,15 @@
 ﻿using System.Diagnostics;
 using Application.Chapters.Paragraphs;
+using Application.Chapters.Publishing;
+using Application.Chapters.Scheduling;
 using Application.Services;
 using Application.Users;
 using AutoMapper;
-using Domain.Constants;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using Domain.Seo;
 using MediatR;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Chapters.Commands.UpdateChapter;
@@ -39,12 +39,13 @@ public class UpdateChapterCommandHandler(
         if (chapter.NovelId != novel.Id) throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
 
         // The text as chapter format v1 stores it (#74), parsed before the chapter's text is held. A save with neither
-        // a title nor text changes the status alone (#75).
+        // a title nor text changes the status or the schedule alone (#75, #77).
         var edited = string.IsNullOrEmpty(request.Content) ? null : ChapterFormat.Parse(request.Content);
         var savesText = request.Title != null || edited != null;
 
-        // One save of a chapter at a time, from any device (and the format maintenance): the chapter is read again
-        // inside the edit, so the revision checked here is the one this save writes over (#75).
+        // One save of a chapter at a time, from any device (and the format maintenance, and the scheduled publish, #77):
+        // the chapter is read again inside the edit, so the revision checked here is the one this save writes over (#75),
+        // and the status and schedule are the ones it changes.
         await using var edit = await paragraphsRepository.BeginEditAsync(chapter.Id);
         if (!await chaptersRepository.ReloadAsync(chapter))
         {
@@ -55,6 +56,14 @@ public class UpdateChapterCommandHandler(
         if (savesText && request.BaseRevision is { } baseRevision && baseRevision != chapter.Revision)
         {
             throw new ChapterChangedException(chapter.Revision);
+        }
+
+        // A schedule (#77) is for a draft, at a time to come, as the chapter is now (the schedule may have published it
+        // meanwhile): refused before anything is saved. Null cancels it.
+        var now = time.GetUtcNow().UtcDateTime;
+        if (request.SetsSchedule && ChapterSchedule.Refusal(request.PublishAt, request.Status ?? chapter.Status, now) is { } refusal)
+        {
+            throw new BadRequestException(refusal.Message, refusal.Code);
         }
 
         var match = edited is null ? null : ParagraphMatcher.Match(edit.Paragraphs.Select(ParagraphRows.Read).ToList(), edited);
@@ -68,12 +77,8 @@ public class UpdateChapterCommandHandler(
             };
         }
 
-        // Track if status is changing to/from Published
-        var oldStatus = chapter.Status;
-        var statusChanging = !string.IsNullOrEmpty(request.Status) && request.Status != oldStatus;
-        var needsSequenceRecalculation = statusChanging && 
-            (oldStatus == "Published" || request.Status == "Published");
-        var now = time.GetUtcNow().UtcDateTime;
+        // The status as stored before this save: the effects of a publish or unpublish follow only a change of it.
+        var statusBefore = chapter.Status;
         
         // Paragraphs first, while the chapter entity is unchanged: the edit then holds the chapter row only from its
         // updates at the end, not from its first write, while readers may be commenting.
@@ -83,6 +88,8 @@ public class UpdateChapterCommandHandler(
             (chapter.ParagraphsCount, textChanged) = await SaveParagraphs(edit, chapter.Id, edited, match!, now);
             // The text is its paragraphs now; a copy left in the legacy Chapters.Content column is stale.
             chapter.Content = null;
+            // Its words (#77): the paragraphs just written are the edited ones, and the count is saved with them.
+            chapter.WordsCount = ChapterWords.Count(edited);
         }
         
         if (request.Title != null)
@@ -105,8 +112,15 @@ public class UpdateChapterCommandHandler(
             chapter.SetStatus(request.Status, now);
         }
 
-        // The revision counts the saves that change the title or the text; a change of status alone, or the title and
-        // text sent back as they are, leaves it (#75). Saved in the edit, over the revision read in it.
+        // The draft's schedule (#77), when this save sets or cancels it; a save that doesn't keeps it. Publishing the
+        // chapter cleared it (SetStatus).
+        if (request.SetsSchedule)
+        {
+            chapter.PublishAt = ChapterSchedule.ToUtc(request.PublishAt);
+        }
+
+        // The revision counts the saves that change the title or the text; a change of status or schedule alone, or the
+        // title and text sent back as they are, leaves it (#75). Saved in the edit, over the revision read in it.
         if (textChanged)
         {
             chapter.Revision++;
@@ -127,36 +141,10 @@ public class UpdateChapterCommandHandler(
 
         await edit.CommitAsync();
 
-        // Recalculate sequences if status changed to/from Published
-        if (needsSequenceRecalculation)
-        {
-            logger.LogInformation(
-                "Chapter {ChapterId} status changed from {OldStatus} to {NewStatus}, triggering sequence recalculation",
-                chapter.Id, oldStatus, request.Status);
-
-            await sequenceService.RecalculateSequencesForNovelAsync(request.NovelId);
-            await sequenceService.UpdateReadingProgressForNovelAsync(request.NovelId);
-
-            // The novel's ChapterCount counts published chapters, so publishing or unpublishing one changes it. Its last
-            // update moves only when the chapter comes out, published for the first time (#39); unpublishing it, or
-            // publishing it again after that, isn't an update to readers.
-            await novelsRepository.RefreshChapterCountAsync(
-                request.NovelId, lastUpdatedAt: saved.CameOut ? chapter.PublishedAt : null);
-
-            // Trigger privilege update if status changed to Published
-            if (request.Status == ChapterStatuses.Published && oldStatus != ChapterStatuses.Published)
-            {
-                var privilegeService = serviceProvider.GetRequiredService<IPrivilegeService>();
-                await privilegeService.OnChapterPublishedAsync(request.NovelId);
-
-                // Readers are told once, when the chapter comes out (#39): published again, it isn't new, as the
-                // library's «فصول جديدة» doesn't show it again either. Fire-and-forget.
-                if (saved.CameOut)
-                {
-                    _ = SendNewChapterNotificationsInBackground(novel.Id, chapter.Id, chapter.Slug, chapter.Title);
-                }
-            }
-        }
+        // Published or unpublished by this save: sequences, chapter count, last update, privileges and readers'
+        // notifications, as when the schedule publishes a chapter (#77).
+        await new ChapterStatusEffects(sequenceService, novelsRepository, serviceProvider, logger)
+            .ApplyAsync(novel.Id, chapter, statusBefore, saved);
 
         return new UpdateChapterResult
         {
@@ -180,44 +168,6 @@ public class UpdateChapterCommandHandler(
             CommentsDeleted = comments.Values.Sum(),
             Removed = removed.Select(p => new RemovedParagraphPreview { ParagraphId = p.Id, CommentsCount = comments[p.Id] }).ToList()
         };
-    }
-    
-    private async Task SendNewChapterNotificationsInBackground(Guid novelId, Guid chapterId, string chapterSlug, string chapterTitle)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundLibraryRepository = scope.ServiceProvider.GetRequiredService<ILibraryRepository>();
-            var backgroundNotificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-            var backgroundNovelsRepository = scope.ServiceProvider.GetRequiredService<INovelsRepository>();
-            
-            var novel = await backgroundNovelsRepository.GetOne(novelId);
-            if (novel == null) return;
-            
-            var chapter = new Chapter 
-            { 
-                Id = chapterId, 
-                Slug = chapterSlug, 
-                Title = chapterTitle,
-                NovelId = novelId 
-            };
-            
-            var userIds = await backgroundLibraryRepository.GetUsersWithNovelInLibrary(novelId);
-            
-            if (userIds.Any())
-            {
-                await backgroundNotificationService.SendNewChapterInLibraryNotification(userIds, novel, chapter);
-                logger.LogDebug("Sent NewChapterInLibrary notifications to {Count} users", userIds.Count);
-            }
-            else
-            {
-                logger.LogDebug("No users have novel {NovelId} in their library", novelId);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to send NewChapterInLibrary notifications for chapter {ChapterId}", chapterId);
-        }
     }
     
     /// <summary>

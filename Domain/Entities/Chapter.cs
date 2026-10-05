@@ -35,6 +35,22 @@ public class Chapter
     /// </summary>
     public DateTime? PublishedAt { get; set; }
 
+    /// <summary>
+    /// When the draft publishes itself (UTC, #77), or null when it isn't scheduled. Only a draft has one: publishing the
+    /// chapter, by hand or on schedule, clears it (<see cref="SetStatus"/>), and an edit that doesn't send one keeps it.
+    /// Set with the chapter held as for a save of its text (ChapterParagraphsRepository.BeginEditAsync), so a save and
+    /// the scheduled publish run one after the other.
+    /// </summary>
+    public DateTime? PublishAt { get; set; }
+
+    /// <summary>
+    /// How many words the chapter's text has (#77), by <c>ChapterWords</c>'s rule (whitespace-separated runs of what
+    /// readers see, image captions included, with at least one letter or digit). Set when the chapter is created and
+    /// with every save of its text, in the same transaction as its paragraphs; null for a chapter from before word
+    /// counts until the startup backfill counts it.
+    /// </summary>
+    public int? WordsCount { get; set; }
+
     // NEW: Paragraphs
     public ICollection<ChapterParagraph> Paragraphs { get; set; } = new List<ChapterParagraph>();
     
@@ -47,6 +63,7 @@ public class Chapter
     /// <summary>
     /// Sets the chapter's <see cref="Status"/>. Publishing it stamps <see cref="PublishedAt"/> with
     /// <paramref name="now"/> if it has never been published; unpublishing and publishing again keep the first stamp.
+    /// Publishing also clears its schedule (<see cref="PublishAt"/>, #77): only a draft has one.
     /// </summary>
     public void SetStatus(string status, DateTime now)
     {
@@ -54,6 +71,7 @@ public class Chapter
         if (status == ChapterStatuses.Published)
         {
             PublishedAt ??= now;
+            PublishAt = null;
         }
     }
 

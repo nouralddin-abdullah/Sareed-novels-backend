@@ -1524,8 +1524,8 @@ have them.
 - The revision goes up by one with every save that changes the chapter's title or text: words, a paragraph's kind or
   formatting, the order. A change of status alone doesn't move it, and nor does a save that sends the title and text
   exactly as they are (the web sends both with every save, also when only the status changed).
-- `updatedAt` is when the chapter was last saved: created, or any successful `PATCH`, a status change included.
-  Chapters from before this have revision 1 and `updatedAt` = when they were created.
+- `updatedAt` is when the chapter was last saved: created, or any successful `PATCH`, a status change included (not
+  the scheduled publish, #77). Chapters from before this have revision 1 and `updatedAt` = when they were created.
 
 **Saving.** `PATCH /api/novel/{novelId}/chapter/{chapterId}` takes an optional `baseRevision`, the revision the editor's
 copy was loaded at:
@@ -1553,7 +1553,8 @@ copy was loaded at:
 `PATCH …/chapter/{chapterId}` with `{ "status": "Published" }` publishes the chapter (or `"Draft"` unpublishes it)
 without sending its text. It needs no `baseRevision` (one sent is not checked: it doesn't touch the text), and the
 revision stays. Sent, the title and the text are both needed, with their limits (50 characters; 100,000 visible
-characters, 400,000 as sent). Neither a status nor a title and text: 400 «أرسل حالة الفصل، أو عنوانه ونصه».
+characters, 400,000 as sent). Neither a status, a schedule (`publishAt`, #77) nor a title and text: 400
+«أرسل حالة الفصل أو موعد نشره، أو عنوانه ونصه». Every combination is in #77's table below.
 
 **Know before saving what a save would delete.** `PATCH …/chapter/{chapterId}?dryRun=true`, with the body the save
 would send, runs everything the save runs (the checks above, the revision included, and the matching of paragraphs)
@@ -1574,6 +1575,7 @@ readers see: comments their authors deleted aren't counted, as the comment count
 |---|---|---|
 | 200 | | saved (`{ success, message, revision }`), or the dry run's answer |
 | 400 | `ValidationFailed` | a rule above; the messages are the validators' |
+| 400 | `PublishAtInPast`, `ScheduleRequiresDraft` | a schedule refused (#77) |
 | 403 | `NotOwner` | not the novel's author |
 | 404 | `NovelNotFound`, `ChapterNotFound` | no such novel, or the chapter isn't one of its chapters |
 | 409 | `ChapterChanged` | `baseRevision` isn't the chapter's revision; `revision` is the one it has |
@@ -1662,3 +1664,88 @@ How each row of her ledger (`PointTransactions`) counts:
 
 **`GET /api/wallet`'s `totalEarned`** was always 0: it was read from a column nothing ever wrote. It is now the figure
 above. `totalRecharged`, `totalWithdrawn` and `totalSpent` are still read from columns nothing writes: don't show them.
+
+### Writer extras: word counts and scheduled publishing (#77)
+
+**Word counts.** `wordsCount` (a number, or `null`) is in what only the author sees:
+
+| Where | `wordsCount` |
+|---|---|
+| `GET /api/myworks/{workId}/chapters`, each item; `GET /api/myworks/{workId}/chapters/{chapterId}`; the chapter `POST /api/novel/{novelId}/chapter` returns | the chapter's |
+| `GET /api/myworks`, each item; `GET /api/myworks/{id}` | the novel's: all its chapters, drafts included; `0` without chapters |
+
+- **The rule** (`Application/Chapters/Paragraphs/ChapterWords.cs`): a word is a run of the text a reader sees between
+  whitespace that has at least one letter or digit, in any script. The text a reader sees is the chapter's paragraphs
+  in chapter format v1 (#74): a `text`, `center` or `quote` paragraph's text without its markup (a tag inside a word
+  doesn't split it; a `<br>` or a new paragraph does; `&nbsp;` is a space), an image's `caption` (text the author wrote
+  and readers see), and nothing for a `break`, whose `* * *` only stands for the separator. So punctuation alone isn't a
+  word, punctuation stuck to a word doesn't make another, and tashkeel and tatweel never split a word. A chapter is
+  counted when it is created and with every save of its text, in the same transaction as its paragraphs.
+
+  | Text | Words |
+  |---|---|
+  | `قَالَ الرَّجُلُ: «مَرْحَبًا يَا صَدِيقِي!» — ثُمَّ مَضَى ...` | 7 (the dash and the dots alone aren't words) |
+  | `جمـــيل جدًا ـــ` | 2 (tatweel alone isn't a word) |
+  | `عام ٢٠٢٦ أو 2026، بنسبة 15%` | 6 (numbers are words) |
+  | `كل<strong>مة</strong> واحدة`, `سطر<br>سطر` | 2, 2 |
+  | a `break`; an `image` without a caption; with the caption `خريطة المدينة` | 0; 0; 2 |
+
+- **Chapters from before word counts** are counted by the app itself, once, in the background after the deploy
+  (`ChapterWordsBackfillService`): nothing to run by hand. It counts each chapter's stored paragraphs as the API serves
+  them (paragraphs stored before format v1 included), only chapters without a count (so a save meanwhile keeps its
+  own), resumes after a restart, and finds nothing at later starts. Until a chapter is counted, its `wordsCount` is
+  `null`, and so is its novel's (only the first moments after the deploy).
+
+**Scheduled publishing.** A draft can be scheduled to publish itself with `publishAt`, a time to come in UTC: on
+`POST /api/novel/{novelId}/chapter` and `PATCH /api/novel/{novelId}/chapter/{chapterId}` (JSON), e.g.
+`"publishAt": "2026-10-06T18:00:00Z"` (a time with an offset, `+03:00`, is converted; one with neither is UTC).
+
+- Only a draft: created with `status: "Draft"`, or a chapter that is a draft and stays one in that save (a save that
+  unpublishes a chapter may schedule it).
+- On `PATCH`: leaving `publishAt` out keeps the schedule (every edit does, the web's too), `null` cancels it, a new time
+  moves it. Publishing by hand (`status: "Published"`) clears it. `publishAt` can be sent alone, or with `status`
+  alone, without the title and text (the table below).
+- Refused, before anything is saved, with 400 `{ "code", "message" }` (a dry run, `?dryRun=true`, too):
+  `PublishAtInPast` «موعد النشر يجب أن يكون في المستقبل» (now or past), `ScheduleRequiresDraft` «يمكن تحديد موعد نشر
+  للمسودات فقط» (created published, a published chapter, or a save that publishes it). The chapter is checked as it is
+  when the save runs: one the schedule has just published is no longer a draft.
+- `publishAt` (UTC with `Z`, `null` when not scheduled) is in the author's chapter list and chapter and in what `POST`
+  returns. Readers' payloads don't have it.
+- **When it falls due**, the chapter is published as its author publishes it: held as the author's save holds it
+  (#75), so a scheduled publish and a save of the same chapter run one after the other, each reading what the other
+  stored; then stored by the author's save code (status, `publishedAt` when it actually came out, the schedule
+  cleared), and followed by what a publish by hand does (`ChapterStatusEffects`): sequences, the chapter count, the
+  novel's `lastUpdatedAt`, the privilege window, and readers' notification and push (#33, #39). Its title and text
+  don't change, so neither its `revision` nor its `updatedAt` moves. Once: a run that comes after another run, or after
+  the author published, rescheduled or cancelled it, finds it no longer due. A chapter that came out before
+  (unpublished, then scheduled) doesn't tell readers again. A deleted novel's chapters aren't published.
+- **Who publishes it.** The scheduler in the API (`ScheduledChapterPublishingService`) runs when the app starts and then
+  every minute. The host (runasp.net) stops the app while it is idle, and then nothing runs: a chapter that fell due
+  meanwhile comes out at the scheduler's first run when a request starts the app again, or, if it comes first, before a
+  request reading its novel is answered (the novel page by slug or id, its chapter list, a chapter; the author's work,
+  chapter list and chapter), so that answer has it. Lists of many novels (search, rankings, library, my works) don't
+  publish; they show it after that first run.
+- **Limits.** While the app is stopped, a due chapter waits for the next request, and its readers' notifications with
+  it; `publishedAt` is when it came out, not `publishAt`. To publish on time at quiet hours, keep the app awake: an uptime
+  monitor calling `GET /api/app/config` every 5 minutes is enough. A save that sends `status: "Draft"` right after the
+  chapter was published on schedule turns it back into a draft, as between two saves the last status sent wins (the web
+  editor sends the status it shows); readers were told once, and the counts follow. A save without a status leaves it
+  published, so the app should send `status` only when the author changes it.
+
+**What a `PATCH …/chapter/{chapterId}` body may hold** (#75 and #77). A field left out is not changed; `publishAt: null`
+is sent, and cancels the schedule.
+
+| Body | Saves | `baseRevision` | `revision` |
+|---|---|---|---|
+| `title` and `content`, with or without `status` and `publishAt` | the title and text, and the status and schedule sent | optional; when sent and not the chapter's: 409 `ChapterChanged`, nothing saved | one more when the title or text changed |
+| `status` alone | the status | not needed, not checked | stays |
+| `publishAt` alone (a time, or `null`) | the schedule | not needed, not checked | stays |
+| `status` and `publishAt` | both | not needed, not checked | stays |
+| `title` without `content`, or `content` without `title` | nothing: 400 `ValidationFailed` «اكتب نص الفصل» / «اكتب عنوان الفصل» | | |
+| none of `title`, `content`, `status`, `publishAt` | nothing: 400 `ValidationFailed` «أرسل حالة الفصل أو موعد نشره، أو عنوانه ونصه» | | |
+
+Every successful save moves `updatedAt`, a change of status or schedule alone too; the scheduled publish moves neither
+`updatedAt` nor `revision`.
+
+The migration `AddChapterWordsCountAndPublishAt` adds the nullable columns `Chapters.WordsCount` and
+`Chapters.PublishAt`, and a filtered index on `PublishAt` for the scheduler.

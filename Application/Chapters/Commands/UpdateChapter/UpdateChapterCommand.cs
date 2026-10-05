@@ -12,8 +12,8 @@ public class UpdateChapterCommand(Guid chapterId, Guid novelId, string? title, s
 
     /// <summary>
     /// The chapter's revision the editor's copy was loaded at (#75). Given with a title or text and not the chapter's
-    /// revision: 409 ChapterChanged, nothing saved. Left out: no check, as before. Not checked for a change of status
-    /// alone, which doesn't touch the text.
+    /// revision: 409 ChapterChanged, nothing saved. Left out: no check, as before. Not checked for a save of the status
+    /// or the schedule alone (#77), which doesn't touch the text.
     /// </summary>
     public int? BaseRevision { get; set; }
 
@@ -22,4 +22,10 @@ public class UpdateChapterCommand(Guid chapterId, Guid novelId, string? title, s
     /// answers what the save would delete (<see cref="UpdateChapterResult.Preview"/>).
     /// </summary>
     public bool DryRun { get; set; }
+
+    /// <summary>Whether this save sets or cancels the draft's schedule (#77); false keeps it as it is.</summary>
+    public bool SetsSchedule { get; set; }
+
+    /// <summary>With <see cref="SetsSchedule"/>: when the draft publishes itself, or null to cancel its schedule.</summary>
+    public DateTime? PublishAt { get; set; }
 }

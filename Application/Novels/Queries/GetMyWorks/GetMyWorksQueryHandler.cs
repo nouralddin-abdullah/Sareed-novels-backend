@@ -22,7 +22,10 @@ public class GetMyWorksQueryHandler(ILogger<GetMyWorksQueryHandler> logger, IUse
         // A size of 0 or less used to return every work.
         var (pageNumber, pageSize) = Paging.Clamp(request.PageNumber, request.PageSize, MaxPageSize);
         var (userNovels, totalCount) = await novelsRepository.GetWorks(currentUser.Id, pageNumber, pageSize);
-        var userWorksList = mapper.Map<IEnumerable<MyWorksDTO>>(userNovels);
+        var userWorksList = mapper.Map<List<MyWorksDTO>>(userNovels);
+        // Each novel's words, drafts included (#77), in one query for the page.
+        var words = await novelsRepository.GetWordsCountsAsync(userWorksList.Select(w => w.Id).ToList());
+        userWorksList.ForEach(work => work.WordsCount = words[work.Id]);
         var result = new PagedResult<MyWorksDTO>(userWorksList, totalCount, pageSize, pageNumber);
         return result;
 

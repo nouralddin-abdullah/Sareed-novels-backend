@@ -192,6 +192,13 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         var publishedAt = entry.Property(c => c.PublishedAt);
         var cameOutAt = chapter.Status == ChapterStatuses.Published ? publishedAt.CurrentValue : null;
         publishedAt.IsModified = false;
+        // The published sequence isn't written either (#77): only the recalculation after a publish or unpublish writes
+        // it (RecalculatePublishedSequencesAsync), and a chapter of the same novel published meanwhile, by hand or on
+        // schedule, renumbers this one too without holding it. The word count is written only when this save changed
+        // it: the startup backfill counts older chapters' words without holding them.
+        entry.Property(c => c.PublishedChapterSequence).IsModified = false;
+        var wordsCount = entry.Property(c => c.WordsCount);
+        wordsCount.IsModified = wordsCount.CurrentValue != wordsCount.OriginalValue;
         // The revision moves below, only from the revision this copy was loaded at (#75). (Not modified puts the loaded
         // revision back, so the one the edit gave it is taken first.)
         var revision = entry.Property(c => c.Revision);
@@ -233,5 +240,28 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         revision.OriginalValue = newRevision;
         revision.CurrentValue = newRevision;
         return new ChapterSave(saved, cameOut);
+    }
+
+    public async Task<List<Guid>> GetDueChapterIdsAsync(DateTime now, int max, Guid? novelId = null, string? novelSlug = null)
+    {
+        var due = dbContext.Chapters
+            .AsNoTracking()
+            .Where(c => c.Status == ChapterStatuses.Draft && c.PublishAt != null && c.PublishAt <= now && !c.Novel.IsDeleted);
+        if (novelId is { } id)
+        {
+            due = due.Where(c => c.NovelId == id);
+        }
+        if (novelSlug is not null)
+        {
+            due = due.Where(c => c.Novel.Slug == novelSlug);
+        }
+
+        // In the order they were due, a novel's chapters in reading order: readers are told in that order too.
+        return await due
+            .OrderBy(c => c.PublishAt)
+            .ThenBy(c => c.ChapterIndex)
+            .Take(max)
+            .Select(c => c.Id)
+            .ToListAsync();
     }
 }
