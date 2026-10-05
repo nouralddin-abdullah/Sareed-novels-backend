@@ -24,6 +24,21 @@ public class Chapter
     /// </summary>
     public DateTime? PublishedAt { get; set; }
 
+    /// <summary>
+    /// When the draft publishes itself (UTC, #77), or null when it isn't scheduled. Only a draft has one: publishing the
+    /// chapter, by hand or on schedule, clears it, and an edit that doesn't send one keeps it.
+    /// <c>IChaptersRepository.UpdateChapter</c> never writes it from the copy it saves: only a change the save asks for,
+    /// and only while the chapter is a draft.
+    /// </summary>
+    public DateTime? PublishAt { get; set; }
+
+    /// <summary>
+    /// How many words the chapter's text has (#77), by <c>ChapterWords</c>'s rule (whitespace-separated runs of its
+    /// visible text with at least one letter or digit). Set when the chapter is created and whenever its text is
+    /// saved; null for a chapter from before word counts until the startup backfill counts it.
+    /// </summary>
+    public int? WordsCount { get; set; }
+
     // NEW: Paragraphs
     public ICollection<ChapterParagraph> Paragraphs { get; set; } = new List<ChapterParagraph>();
     

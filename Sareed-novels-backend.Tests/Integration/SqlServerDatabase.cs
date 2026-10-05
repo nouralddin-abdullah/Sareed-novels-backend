@@ -129,6 +129,25 @@ internal static class Seed
         }
     }
 
+    /// <summary>
+    /// Inserts <paramref name="chapters"/> with plain SQL like <see cref="InsertChapterRowsAsync"/>, with
+    /// <see cref="Chapter.PublishedAt"/>: the columns that predate <c>AddChapterWordsCountAndPublishAt</c> (#77), for
+    /// data-fix tests that seed a database migrated to a point between the two.
+    /// </summary>
+    public static async Task InsertChapterRowsWithPublishedAtAsync(ApplicationDbContext db, IEnumerable<Chapter> chapters)
+    {
+        foreach (var c in chapters)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO Chapters (Id, NovelId, Title, Slug, Content, Status, ChapterIndex, PublishedChapterSequence,
+                    CreatedAt, PublishedAt, CommentsCount, TotalCommentsCount, ParagraphsCount, ViewsCount)
+                VALUES ({c.Id}, {c.NovelId}, {c.Title}, {c.Slug}, {c.Content}, {c.Status}, {c.ChapterIndex},
+                    {c.PublishedChapterSequence}, {c.CreatedAt}, {c.PublishedAt}, {c.CommentsCount}, {c.TotalCommentsCount},
+                    {c.ParagraphsCount}, {c.ViewsCount})
+                """);
+        }
+    }
+
     public static UserNovelProgress Progress(User reader, Chapter chapter, int chapterNumber, DateTime lastReadAt) => new()
     {
         UserId = reader.Id,

@@ -150,7 +150,7 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         }
     }
 
-    public async Task<ChapterSave> UpdateChapter(Chapter chapter)
+    public async Task<ChapterSave> UpdateChapter(Chapter chapter, bool withStatus = true)
     {
         var entry = dbContext.Chapters.Update(chapter);
         // Comment and view counters move with atomic SQL (comments, a chapter edit's removed paragraphs, view
@@ -165,22 +165,97 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         var publishedAt = entry.Property(c => c.PublishedAt);
         var cameOutAt = chapter.Status == ChapterStatuses.Published ? publishedAt.CurrentValue : null;
         publishedAt.IsModified = false;
+        // Nor the status, the schedule, the published sequence or the word count (#77): the schedule may have published
+        // the chapter, cleared its schedule and numbered it since this copy was loaded, and the startup backfill may have
+        // counted its words. The status is stored below only by a save that sets one, and only where the chapter has
+        // another, so one save (or the schedule) changes it; the schedule only when this save changes it, and only on a
+        // draft; the sequence only by the recalculation after a publish (RecalculatePublishedSequencesAsync); the word
+        // count only when it changed.
+        entry.Property(c => c.PublishedChapterSequence).IsModified = false;
+        var status = entry.Property(c => c.Status);
+        var newStatus = status.CurrentValue;
+        status.IsModified = false;
+        var publishAt = entry.Property(c => c.PublishAt);
+        var newPublishAt = publishAt.CurrentValue;
+        var reschedules = newPublishAt != publishAt.OriginalValue;
+        publishAt.IsModified = false;
+        var wordsCount = entry.Property(c => c.WordsCount);
+        wordsCount.IsModified = wordsCount.CurrentValue != wordsCount.OriginalValue;
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
         var saved = await dbContext.SaveChangesAsync() > 0;
-        var cameOut = saved
-            && cameOutAt is { } at
-            && await dbContext.Chapters
-                .Where(c => c.Id == chapter.Id && c.PublishedAt == null)
-                .ExecuteUpdateAsync(s => s.SetProperty(c => c.PublishedAt, at)) > 0;
+        var statusChanged = saved && withStatus && await StoreStatusAsync(dbContext.Chapters.Where(c => c.Id == chapter.Id), newStatus);
+        if (saved && reschedules)
+        {
+            await dbContext.Chapters
+                .Where(c => c.Id == chapter.Id && c.Status == ChapterStatuses.Draft)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.PublishAt, newPublishAt));
+        }
+        var cameOut = saved && cameOutAt is { } at && await StampCameOutAsync(chapter.Id, at);
         await transaction.CommitAsync();
 
-        if (cameOut)
-        {
-            // Stored: the tracked chapter has it too, as saved.
-            publishedAt.OriginalValue = cameOutAt;
-            publishedAt.CurrentValue = cameOutAt;
-        }
-        return new ChapterSave(saved, cameOut);
+        // The tracked chapter is the stored one from here: when it came out, its status, schedule and sequence, which
+        // the sequences recalculated after a publish compare with (a value left as loaded would never be written).
+        await entry.ReloadAsync();
+        return new ChapterSave(saved, cameOut, statusChanged);
     }
+
+    public async Task<List<DueChapter>> GetDueChaptersAsync(DateTime now, int max, Guid? novelId = null, string? novelSlug = null)
+    {
+        var due = dbContext.Chapters
+            .AsNoTracking()
+            .Where(c => c.Status == ChapterStatuses.Draft && c.PublishAt != null && c.PublishAt <= now && !c.Novel.IsDeleted);
+        if (novelId is { } id)
+        {
+            due = due.Where(c => c.NovelId == id);
+        }
+        if (novelSlug is not null)
+        {
+            due = due.Where(c => c.Novel.Slug == novelSlug);
+        }
+
+        // In the order they were due, a novel's chapters in reading order: readers are told in that order too.
+        return await due
+            .OrderBy(c => c.PublishAt)
+            .ThenBy(c => c.ChapterIndex)
+            .Take(max)
+            .Select(c => new DueChapter(c.Id, c.NovelId, c.Slug, c.Title))
+            .ToListAsync();
+    }
+
+    public async Task<ChapterSave> PublishDueAsync(Guid chapterId, DateTime now)
+    {
+        // The author's publish (UpdateChapter), only while the chapter is still a draft whose time has come: a run that
+        // lost to another, to the author's own publish, or to a new or cancelled schedule, changes nothing.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        var published = await StoreStatusAsync(
+            dbContext.Chapters.Where(c => c.Id == chapterId && c.Status == ChapterStatuses.Draft && c.PublishAt != null && c.PublishAt <= now),
+            ChapterStatuses.Published);
+        var cameOut = published && await StampCameOutAsync(chapterId, now);
+        await transaction.CommitAsync();
+        return new ChapterSave(published, cameOut, published);
+    }
+
+    /// <summary>
+    /// Stores <paramref name="status"/> on <paramref name="chapter"/> unless it has it already, so of two writers at
+    /// once one changes it; publishing also clears the schedule (#77). True when it changed.
+    /// </summary>
+    private static async Task<bool> StoreStatusAsync(IQueryable<Chapter> chapter, string status)
+    {
+        var other = chapter.Where(c => c.Status != status);
+        return status == ChapterStatuses.Published
+            ? await other.ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.Status, status)
+                .SetProperty(c => c.PublishAt, (DateTime?)null)) > 0
+            : await other.ExecuteUpdateAsync(s => s.SetProperty(c => c.Status, status)) > 0;
+    }
+
+    /// <summary>
+    /// Stores when the chapter came out, <paramref name="at"/>, only while it has none (#39): true when this is its first
+    /// publish.
+    /// </summary>
+    private async Task<bool> StampCameOutAsync(Guid chapterId, DateTime at) =>
+        await dbContext.Chapters
+            .Where(c => c.Id == chapterId && c.PublishedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.PublishedAt, at)) > 0;
 }

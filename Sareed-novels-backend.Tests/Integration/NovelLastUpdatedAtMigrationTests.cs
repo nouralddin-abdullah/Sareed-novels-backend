@@ -33,6 +33,7 @@ public class NovelLastUpdatedAtMigrationTests(EmptySqlServerDatabase database) :
         var author = Seed.User();
         await Seed.InsertUserRowAsync(db, author);
         var day0 = new DateTime(2026, 8, 1, 9, 0, 0, DateTimeKind.Utc);
+        var seeded = new List<Chapter>();
 
         // Chapters created published, the newest on day 3: right under both rules.
         var upToDate = Novel("up to date");
@@ -57,10 +58,12 @@ public class NovelLastUpdatedAtMigrationTests(EmptySqlServerDatabase database) :
         foreach (var novel in novels)
         {
             // What the rule before #39 left: its creation, moved to each chapter's creation.
-            novel.LastUpdatedAt = novel.Chapters.Select(c => c.CreatedAt).Append(novel.CreatedAt).Max();
+            novel.LastUpdatedAt = seeded.Where(c => c.NovelId == novel.Id).Select(c => c.CreatedAt).Append(novel.CreatedAt).Max();
         }
         var ruleBefore = novels.ToDictionary(n => n.Id, n => n.LastUpdatedAt);
         await db.SaveChangesAsync();
+        // In SQL: this point of the schema has none of the chapter columns added since (#77).
+        await Seed.InsertChapterRowsWithPublishedAtAsync(db, seeded);
 
         await migrator.MigrateAsync(Stamp);
 
@@ -112,8 +115,8 @@ public class NovelLastUpdatedAtMigrationTests(EmptySqlServerDatabase database) :
                 rows[i].CreatedAt = chapters[i].Written;
                 rows[i].PublishedAt = chapters[i].Out;
                 rows[i].Status = chapters[i].Out == null ? ChapterStatuses.Draft : ChapterStatuses.Published;
-                novel.Chapters.Add(rows[i]);
             }
+            seeded.AddRange(rows);
             return rows;
         }
     }

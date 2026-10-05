@@ -137,9 +137,11 @@ public class ChapterComesOutTests(SqlServerDatabase database) : IClassFixture<Sq
         staleCopy.SetStatus(ChapterStatuses.Draft, Start.AddMinutes(3));
         var staleSave = await new ChaptersRepository(stale).UpdateChapter(staleCopy);
 
-        Assert.Equal(new ChapterSave(Saved: true, CameOut: true), firstSave);
-        Assert.Equal(new ChapterSave(Saved: true, CameOut: false), secondSave);
-        Assert.Equal(new ChapterSave(Saved: true, CameOut: false), staleSave);
+        // Only the first publish changed the stored status (#77: so only it runs a publish's effects); the draft save
+        // changed it back.
+        Assert.Equal(new ChapterSave(Saved: true, CameOut: true, StatusChanged: true), firstSave);
+        Assert.Equal(new ChapterSave(Saved: true, CameOut: false, StatusChanged: false), secondSave);
+        Assert.Equal(new ChapterSave(Saved: true, CameOut: false, StatusChanged: true), staleSave);
         // The draft save came last, so it is a draft again, but it came out at the first save and keeps that date.
         await using var check = database.CreateContext();
         var stored = await check.Chapters.SingleAsync(c => c.Id == draftId);
