@@ -96,7 +96,9 @@ internal sealed class ProfileListsRepository(ApplicationDbContext db) : IProfile
                         other.NovelId == x.Chapter.NovelId
                         && other.Status == ChapterStatuses.Published
                         && other.ChapterIndex < x.Chapter.ChapterIndex) + 1),
-                    paragraph == null ? null : new ProfileParagraph(paragraph.Id, paragraph.Content)))
+                    paragraph == null
+                        ? null
+                        : new ProfileParagraph(paragraph.Id, paragraph.Content, paragraph.ContentType, paragraph.Caption)))
             .ToListAsync(cancellationToken);
         return (items, totalCount);
     }

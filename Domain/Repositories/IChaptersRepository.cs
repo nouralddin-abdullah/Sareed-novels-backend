@@ -16,6 +16,15 @@ public interface IChaptersRepository
     /// </summary>
     Task<ChapterSave> UpdateChapter(Chapter chapter);
     Task<int> GetNextChapterIndex(Guid novelId);
+
+    /// <summary>Up to <paramref name="take"/> chapter ids after <paramref name="after"/> (all chapters, in id order).</summary>
+    Task<List<Guid>> GetChapterIdsAsync(Guid? after, int take);
+
+    /// <summary>
+    /// Chapters that still hold text in the legacy <c>Chapters.Content</c> column (from before the paragraphs, and from
+    /// edits before #74, which copied the request into it): nothing reads it.
+    /// </summary>
+    Task<LegacyChapterContent> CountLegacyContentAsync();
     Task<bool> DeleteChapter(Chapter chapter);
     Task<IEnumerable<Chapter>> GetChaptersAuthorView(Guid novelId);
     Task<IEnumerable<Chapter>> GetChaptersReaderView(Guid novelId);
@@ -24,6 +33,12 @@ public interface IChaptersRepository
     /// <summary>The current titles of these chapters, by id; chapters that no longer exist are left out.</summary>
     Task<Dictionary<Guid, string>> GetTitlesAsync(IReadOnlyCollection<Guid> chapterIds);
 }
+
+/// <summary>
+/// Chapters with text in the legacy <c>Chapters.Content</c> column (<see cref="IChaptersRepository.CountLegacyContentAsync"/>),
+/// and how many of those have no paragraphs, so that column is their only text.
+/// </summary>
+public readonly record struct LegacyChapterContent(int Chapters, int WithoutParagraphs);
 
 /// <summary>What saving the author's edit of a chapter did (<see cref="IChaptersRepository.UpdateChapter"/>).</summary>
 /// <param name="Saved">The chapter was saved.</param>

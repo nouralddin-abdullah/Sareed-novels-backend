@@ -67,7 +67,8 @@ public class ChapterEditTests(SqlServerDatabase database) : IClassFixture<SqlSer
         Assert.NotEqual(world.ParagraphIds[6], ids[6]);
         Assert.Equal(world.ParagraphIds.Where((_, i) => i != 6), ids.Where((_, i) => i != 6));
         var fixedParagraph = await db.ChapterParagraphs.SingleAsync(p => p.Id == ids[6]);
-        Assert.Equal(edited[6], fixedParagraph.Content);
+        Assert.Equal(V1(edited[6]), fixedParagraph.Content);
+        Assert.Equal(ParagraphText.Hash(fixedParagraph.Content), fixedParagraph.ContentHash);
         Assert.Equal(0, fixedParagraph.CommentsCount);
 
         // Paragraph 6 had a visible comment (liked, notified) and one its author had deleted.
@@ -220,12 +221,24 @@ public class ChapterEditTests(SqlServerDatabase database) : IClassFixture<SqlSer
 
         var bold = await db.ChapterParagraphs.SingleAsync(p => p.Id == world.ParagraphIds[16]);
         Assert.Contains("<strong>نور</strong>", bold.Content);
+        Assert.Equal(V1(edited[16]), bold.Content);
         Assert.Equal(ParagraphText.Hash(bold.Content), bold.ContentHash);
         Assert.NotNull(bold.UpdatedAt);
-        var untouched = await db.ChapterParagraphs.SingleAsync(p => p.Id == world.ParagraphIds[2]);
-        Assert.Equal(ProductionChapter.Paragraphs[2], untouched.Content);
-        Assert.Null(untouched.UpdatedAt);
+        Assert.Equal(V1(edited[28]), (await db.ChapterParagraphs.SingleAsync(p => p.Id == world.ParagraphIds[28])).Content);
+
+        // The first save stores every paragraph in chapter format v1 (#74), the ones the author didn't touch too: the
+        // editor's class goes. Saved again, an untouched paragraph is left as it is.
+        var untouched = await db.ChapterParagraphs.AsNoTracking().SingleAsync(p => p.Id == world.ParagraphIds[2]);
+        Assert.Equal(V1(ProductionChapter.Paragraphs[2]), untouched.Content);
+        Assert.Equal(ParagraphText.Hash(untouched.Content), untouched.ContentHash);
+        await world.Save(edited);
+        var again = await db.ChapterParagraphs.AsNoTracking().SingleAsync(p => p.Id == world.ParagraphIds[2]);
+        Assert.Equal((untouched.Content, untouched.ContentHash, untouched.UpdatedAt), (again.Content, again.ContentHash, again.UpdatedAt));
+        Assert.Equal(world.ParagraphIds, await ParagraphIds(db, world));
     }
+
+    /// <summary>A paragraph as the editor sends it, as chapter format v1 stores it.</summary>
+    private static string V1(string paragraph) => ChapterFormat.Parse(paragraph + "</p>").Single().Content;
 
     [Fact]
     public async Task Repeated_paragraphs_keep_their_own_ids_and_comments()

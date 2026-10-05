@@ -67,7 +67,7 @@ public class GetCommentQueryHandler(
             // The excerpt is chapter text, so only for someone the reader would show this chapter to.
             if (await ChapterAccess.ShowsTextAsync(privilegeService, novel, chapter, currentUser?.Id))
             {
-                context.ParagraphExcerpt = ParagraphExcerpt.Of(paragraph.Content);
+                context.ParagraphExcerpt = ParagraphExcerpt.Of(paragraph.Content, paragraph.ContentType, paragraph.Caption);
             }
         }
         else if (comment.ChapterId.HasValue)

@@ -99,6 +99,21 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         return await dbContext.Chapters.Where(c => c.NovelId == novelId && c.Status == "Published").OrderBy(c => c.ChapterIndex).ToListAsync();
     }
 
+    public async Task<List<Guid>> GetChapterIdsAsync(Guid? after, int take)
+    {
+        var chapters = dbContext.Chapters.AsNoTracking();
+        if (after is { } last)
+        {
+            chapters = chapters.Where(c => c.Id.CompareTo(last) > 0);
+        }
+
+        return await chapters.OrderBy(c => c.Id).Select(c => c.Id).Take(take).ToListAsync();
+    }
+
+    public async Task<LegacyChapterContent> CountLegacyContentAsync() =>
+        new(await dbContext.Chapters.CountAsync(c => c.Content != null),
+            await dbContext.Chapters.CountAsync(c => c.Content != null && !dbContext.ChapterParagraphs.Any(p => p.ChapterId == c.Id)));
+
     public async Task<int> GetNextChapterIndex(Guid novelId)
     {
         var maxIndex = await dbContext.Chapters.Where(c => c.NovelId == novelId).MaxAsync(c => (int?)c.ChapterIndex) ?? 0;
@@ -159,6 +174,9 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         entry.Property(c => c.CommentsCount).IsModified = false;
         entry.Property(c => c.TotalCommentsCount).IsModified = false;
         entry.Property(c => c.ViewsCount).IsModified = false;
+        // The paragraph count is written with the paragraphs, inside the edit of the chapter's text
+        // (ChapterParagraphsRepository.BeginEditAsync); the copy loaded here may be older than that edit.
+        entry.Property(c => c.ParagraphsCount).IsModified = false;
         // When the chapter came out is stored below, only while it has none (#39): the copy loaded for this save may
         // be older than another save that published it, whose date must stay, and only one save can be its first.
         // (Not modified puts the loaded value back, so the date SetStatus gave it is taken first.)

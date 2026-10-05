@@ -13,7 +13,7 @@ public class CommentsRepository(ApplicationDbContext dbContext) : ICommentsRepos
     /// Saves the comment and counts it, in one transaction. A paragraph comment whose paragraph an edit removes at the
     /// same moment is a 404 <see cref="ParagraphGone"/>, not a server error: its insert either finds the paragraph
     /// gone (a foreign key violation) or loses a deadlock to the edit, which runs at a higher deadlock priority
-    /// (ChapterParagraphsRepository.SaveEditedParagraphs).
+    /// (ChapterParagraphsRepository.BeginEditAsync).
     /// </summary>
     public async Task<Comments> CreateComment(Comments Comment)
     {
