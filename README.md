@@ -1450,8 +1450,9 @@ How each row of her ledger (`PointTransactions`) counts:
 - `total` = `gifts` + `privileges` − `reversed`. A novel's is never below zero (a refund takes back at most what is left
   of an earning); a month's can be, when a refund took back earnings of the months before.
 - `totalEarned`, `pendingEarnings` and `nextReleaseAt` are `GET /api/wallet`'s, from the same code: all her earnings less
-  what was taken back, those still on hold, and when the next of those is released (UTC; `null` when none is on hold).
-  `totalEarned` is the sum of the `byNovel` totals.
+  what was taken back, her earnings still on hold less what she spent or was taken back of them (spending comes out of
+  bought points, then held earnings, then released ones: "Wallet: what can be withdrawn" above), and when the next of
+  those is released (UTC; `null` when none is on hold). `totalEarned` is the sum of the `byNovel` totals.
 - `byNovel`: every novel she has earnings from, of all time, highest `total` first; equal totals by `novelId`, with the
   entry without a novel after the novels. Drafts and deleted novels are in it with their title, slug and cover (a
   deleted novel's page answers 404; `GET /api/myworks` lists the ones that still exist).

@@ -57,6 +57,8 @@ public sealed class EarningsBreakdown
     /// <summary>The last <see cref="Months"/> calendar months in UTC, the current one last, months without earnings included.</summary>
     public IReadOnlyList<MonthEarnings> ByMonth { get; }
 
+    /// <param name="groups">Her rows as <see cref="IPointTransactionRepository.GetEarningsGroupsAsync"/> sums them.</param>
+    /// <param name="now">The moment (UTC) whose month is the last of <see cref="ByMonth"/>.</param>
     public static EarningsBreakdown From(IEnumerable<EarningsGroup> groups, DateTime now)
     {
         var counted = groups
