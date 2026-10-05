@@ -1,5 +1,6 @@
 ﻿using Application.Chapters.DTOS;
 using Application.Chapters.Paragraphs;
+using Application.Chapters.Publishing;
 using Application.Chapters.Scheduling;
 using Application.Services;
 using Application.Users;
@@ -84,8 +85,10 @@ public class CreateChapterCommandHandler(
             var privilegeService = serviceProvider.GetRequiredService<IPrivilegeService>();
             await privilegeService.OnChapterPublishedAsync(novel.Id);
             
-            // Fire-and-forget: Send notifications to users who have this novel in their library
-            _ = SendNewChapterNotificationsInBackground(novel.Id, chapter.Id, chapter.Slug, chapter.Title);
+            // Readers with the novel in their library are told, as when a draft is published (none while the novel is
+            // hidden, #80).
+            await new ChapterStatusEffects(sequenceService, novelsRepository, serviceProvider, logger)
+                .AnnounceNewChapterAsync(novel.Id, chapter);
         }
 
         var chapterDto = mapper.Map<ChapterSingleAuthorDTO>(chapter);
@@ -94,43 +97,5 @@ public class CreateChapterCommandHandler(
             chapter.Id, paragraphs.Count, novel.Id);
         
         return chapterDto;
-    }
-    
-    private async Task SendNewChapterNotificationsInBackground(Guid novelId, Guid chapterId, string chapterSlug, string chapterTitle)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var backgroundLibraryRepository = scope.ServiceProvider.GetRequiredService<ILibraryRepository>();
-            var backgroundNotificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-            var backgroundNovelsRepository = scope.ServiceProvider.GetRequiredService<INovelsRepository>();
-            
-            var novel = await backgroundNovelsRepository.GetOne(novelId);
-            if (novel == null) return;
-            
-            var chapter = new Chapter 
-            { 
-                Id = chapterId, 
-                Slug = chapterSlug, 
-                Title = chapterTitle,
-                NovelId = novelId 
-            };
-            
-            var userIds = await backgroundLibraryRepository.GetUsersWithNovelInLibrary(novelId);
-            
-            if (userIds.Any())
-            {
-                await backgroundNotificationService.SendNewChapterInLibraryNotification(userIds, novel, chapter);
-                logger.LogDebug("Sent NewChapterInLibrary notifications to {Count} users", userIds.Count);
-            }
-            else
-            {
-                logger.LogDebug("No users have novel {NovelId} in their library", novelId);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to send NewChapterInLibrary notifications for chapter {ChapterId}", chapterId);
-        }
     }
 }

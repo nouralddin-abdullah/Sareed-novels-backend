@@ -1749,3 +1749,7 @@ Every successful save moves `updatedAt`, a change of status or schedule alone to
 
 The migration `AddChapterWordsCountAndPublishAt` adds the nullable columns `Chapters.WordsCount` and
 `Chapters.PublishAt`, and a filtered index on `PublishAt` for the scheduler.
+
+### Writer studio follow-ups (#80)
+
+While a novel is hidden (a draft), a chapter of it that comes out (created published, published by its author, or on schedule) sends no `NewChapterInLibrary` notification or push: its readers can't open it. Publishing the novel later doesn't announce the chapters that came out meanwhile, since a chapter is announced once, when it comes out. The novel page (`GET /api/novel/{slug}`, `GET /api/novel/by-id/{id}`) has `isDraft`, `true` only on the author's own hidden novel (readers never get one); `GET /api/myworks` orders by `lastUpdatedAt`, then `id`, so its pages never repeat or skip a work; and `DELETE /api/novel/{novelId}/chapter/{chapterId}` for a chapter that isn't there answers 404 `ChapterNotFound` «الفصل غير موجود».

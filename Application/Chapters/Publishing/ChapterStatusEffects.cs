@@ -11,8 +11,9 @@ namespace Application.Chapters.Publishing;
 /// What publishing or unpublishing a chapter does beyond its row, once the save that changed its status is committed:
 /// the novel's published sequences and readers' progress, its chapter count, and its last update when the chapter comes
 /// out (#39); publishing also extends the privilege window, and readers are told when the chapter comes out for the
-/// first time. The author's save (UpdateChapterCommandHandler) and the schedule (<c>ScheduledChapterPublisher</c>, #77)
-/// both run it, so a chapter published on schedule comes out exactly as one published by hand.
+/// first time, unless the novel is hidden (<see cref="AnnounceNewChapterAsync"/>, #80). The author's save
+/// (UpdateChapterCommandHandler) and the schedule (<c>ScheduledChapterPublisher</c>, #77) both run it, so a chapter
+/// published on schedule comes out exactly as one published by hand; a chapter created published is announced by it too.
 /// </summary>
 public sealed class ChapterStatusEffects(
     IChapterSequenceService sequenceService,
@@ -57,11 +58,29 @@ public sealed class ChapterStatusEffects(
         await privilegeService.OnChapterPublishedAsync(novelId);
 
         // Readers are told once, when the chapter comes out (#39): published again, it isn't new, as the library's
-        // «فصول جديدة» doesn't show it again either. Fire-and-forget.
+        // «فصول جديدة» doesn't show it again either.
         if (save.CameOut)
         {
-            _ = SendNewChapterNotificationsInBackground(novelId, chapter.Id, chapter.Slug, chapter.Title);
+            await AnnounceNewChapterAsync(novelId, chapter);
         }
+    }
+
+    /// <summary>
+    /// Tells the readers who have the novel in their library that <paramref name="chapter"/> came out (#39): their
+    /// notification and push, sent in the background (fire-and-forget). Nobody while the novel is hidden (a draft, #80):
+    /// its readers can't open it. A chapter is announced when it comes out, once, so publishing the novel later doesn't
+    /// announce the chapters that came out while it was hidden.
+    /// </summary>
+    public async Task AnnounceNewChapterAsync(Guid novelId, Chapter chapter)
+    {
+        if (await novelsRepository.IsDraftAsync(novelId))
+        {
+            logger.LogInformation(
+                "Chapter {ChapterId} came out while novel {NovelId} is hidden: its readers aren't told", chapter.Id, novelId);
+            return;
+        }
+
+        _ = SendNewChapterNotificationsInBackground(novelId, chapter.Id, chapter.Slug, chapter.Title);
     }
 
     private async Task SendNewChapterNotificationsInBackground(Guid novelId, Guid chapterId, string chapterSlug, string chapterTitle)
