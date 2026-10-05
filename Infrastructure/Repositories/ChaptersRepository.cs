@@ -99,6 +99,21 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         return await dbContext.Chapters.Where(c => c.NovelId == novelId && c.Status == "Published").OrderBy(c => c.ChapterIndex).ToListAsync();
     }
 
+    public async Task<List<Guid>> GetChapterIdsAsync(Guid? after, int take)
+    {
+        var chapters = dbContext.Chapters.AsNoTracking();
+        if (after is { } last)
+        {
+            chapters = chapters.Where(c => c.Id.CompareTo(last) > 0);
+        }
+
+        return await chapters.OrderBy(c => c.Id).Select(c => c.Id).Take(take).ToListAsync();
+    }
+
+    public async Task<LegacyChapterContent> CountLegacyContentAsync() =>
+        new(await dbContext.Chapters.CountAsync(c => c.Content != null),
+            await dbContext.Chapters.CountAsync(c => c.Content != null && !dbContext.ChapterParagraphs.Any(p => p.ChapterId == c.Id)));
+
     public async Task<int> GetNextChapterIndex(Guid novelId)
     {
         var maxIndex = await dbContext.Chapters.Where(c => c.NovelId == novelId).MaxAsync(c => (int?)c.ChapterIndex) ?? 0;

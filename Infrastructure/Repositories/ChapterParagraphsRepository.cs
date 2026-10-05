@@ -24,6 +24,20 @@ public class ChapterParagraphsRepository(ApplicationDbContext dbContext) : IChap
             .FirstOrDefaultAsync(p => p.Id == paragraphId);
     }
 
+    public async Task<Dictionary<Guid, List<ChapterParagraph>>> GetParagraphsOfChaptersAsync(IReadOnlyCollection<Guid> chapterIds)
+    {
+        var ids = chapterIds.ToList();
+        var paragraphs = await dbContext.ChapterParagraphs
+            .AsNoTracking()
+            .Where(p => ids.Contains(p.ChapterId))
+            .OrderBy(p => p.ChapterId).ThenBy(p => p.OrderIndex)
+            .ToListAsync();
+        return ids.ToDictionary(id => id, id => paragraphs.Where(p => p.ChapterId == id).ToList());
+    }
+
+    public Task<HashSet<Guid>> GetCommentedAsync(IReadOnlyCollection<Guid> paragraphIds) =>
+        Commented(dbContext, paragraphIds, holdLock: false);
+
     public async Task<IChapterTextEdit> BeginEditAsync(Guid chapterId)
     {
         var transaction = await dbContext.Database.BeginTransactionAsync();
@@ -80,6 +94,27 @@ public class ChapterParagraphsRepository(ApplicationDbContext dbContext) : IChap
     /// <summary>How long an edit waits for another edit of the same chapter to end (within the command timeout).</summary>
     private static readonly TimeSpan TextLockTimeout = TimeSpan.FromSeconds(20);
 
+    /// <summary>
+    /// The paragraphs among <paramref name="paragraphIds"/> with any comment row. With <paramref name="holdLock"/>,
+    /// inside a transaction, the rows read and the gaps around them stay locked until it ends, so no comment can be
+    /// added to these paragraphs meanwhile.
+    /// </summary>
+    private static async Task<HashSet<Guid>> Commented(ApplicationDbContext db, IReadOnlyCollection<Guid> paragraphIds, bool holdLock)
+    {
+        if (paragraphIds.Count == 0)
+        {
+            return [];
+        }
+
+        var parameters = paragraphIds.Distinct().Select((id, i) => new SqlParameter($"@p{i}", id)).ToArray();
+        var hints = holdLock ? " WITH (UPDLOCK, HOLDLOCK)" : string.Empty;
+        // Built from constant parts: the ids are only ever parameters.
+        var sql = $"SELECT DISTINCT c.ParagraphId AS Value FROM Comments c{hints} " +
+                  $"WHERE c.ParagraphId IN ({string.Join(", ", parameters.Select(p => p.ParameterName))})";
+        var commented = await db.Database.SqlQueryRaw<Guid>(sql, parameters.Cast<object>().ToArray()).ToListAsync();
+        return commented.ToHashSet();
+    }
+
     private sealed class ChapterTextEdit(
         ApplicationDbContext db, IDbContextTransaction transaction, Guid chapterId, List<ChapterParagraph> paragraphs)
         : IChapterTextEdit
@@ -87,6 +122,9 @@ public class ChapterParagraphsRepository(ApplicationDbContext dbContext) : IChap
         private bool saved;
 
         public IReadOnlyList<ChapterParagraph> Paragraphs => paragraphs;
+
+        public Task<HashSet<Guid>> GetCommentedAsync(IReadOnlyCollection<Guid> paragraphIds) =>
+            Commented(db, paragraphIds, holdLock: true);
 
         public async Task<RemovedParagraphComments> SaveAsync(
             IReadOnlyList<ChapterParagraph> edited, IReadOnlyList<ChapterParagraph> removed)

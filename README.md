@@ -1464,9 +1464,44 @@ editor's output needs no change, and loading paragraphs into it as `<p>` blocks 
 (`cloudflare-worker/seo-worker.js`) keeps only paragraphs with `contentType` `text`, so center and quote paragraphs are
 missing from the pages it renders until it learns the kinds.
 
+#### Paragraphs stored before the format: the maintenance
+
+`POST /api/admin/chapters/clean-format` (admins) runs the same cleaning over the stored paragraphs. **It is a dry run
+unless `dryRun=false`.**
+
+1. `POST /api/admin/chapters/clean-format`: nothing changes; the report says what the real pass would do.
+2. Look at the report: the counts, `examples` (before and after), `skipped` (and why), `pictures`.
+3. `POST /api/admin/chapters/clean-format?dryRun=false`: the real pass. A call works about 20 seconds; while
+   `nextCursor` isn't `null`, call again with `&after=<nextCursor>` (the dry run too, on a large database). Add up the
+   counts of the calls. Running it again changes nothing that is already converted.
+
+`batchSize` (default 50, at most 200) is how many chapters it reads at a time. The report:
+
+| Field | |
+|---|---|
+| `chaptersChecked`, `chaptersChanged`, `paragraphsChecked`, `paragraphsUnchanged` | what it went through, and what is already format v1 |
+| `paragraphsChanged` | the sum of the next four |
+| `paragraphsRewritten` | stored again in the format (the editor's `class`, markup, kind, a picture's address), same id and comments |
+| `paragraphsSplit`, `paragraphsAdded` | a picture among a paragraph's text split out (or blocks inside one paragraph): the paragraph keeps its first part with words, with its id and comments; the other parts are new paragraphs |
+| `emptyParagraphsRemoved` | paragraphs without words or picture and without comments, removed as empty paragraphs are |
+| `hashesFixed` | content already in the format whose stored `ContentHash` didn't match it |
+| `paragraphsSkipped`, `skipped` | left as they are, with `reason`: `VisibleTextChanged` (the cleaning would change the words a reader sees: `wordsBefore`, `wordsAfter`), `PictureDropped` (a picture without an http(s) address), `EmptyWithComments` |
+| `pictures` | paragraphs holding pictures, how many pictures are `kept` (as image paragraphs) and `notKept` (their paragraphs are skipped), and those paragraphs |
+| `legacyChapterContent` | chapters still holding text in the old `Chapters.Content` column, and how many of them have no paragraphs |
+| `failures` | chapters whose conversion failed (nothing of them was saved): run again |
+| `nextCursor` | where to continue; `null` at the end |
+
+It never changes the words a reader sees: a paragraph whose words or picture the cleaning would lose is skipped and
+reported, so nothing disappears unseen. It keeps `ContentHash` (SHA-256 of the stored content) right, and leaves the
+paragraphs' `updatedAt` (the author didn't change them). Each chapter is converted in its own transaction, holding the
+chapter's text as an author's save does: a save of that chapter waits for it, or it for the save, and it reads the
+paragraphs again inside. Readers already get every paragraph in the format before it runs; the pass makes the stored
+text match. Until it runs, a stored paragraph with a picture among its text is served as its text alone.
+
 **The old `Chapters.Content` column.** Chapters kept their text there before paragraphs; nothing reads it. Until now,
 every save copied the request's raw HTML into it; it is no longer written, and a save of the chapter's text clears it.
-Dropping it is a later decision.
+The maintenance reports how many chapters still hold text there (`legacyChapterContent`), and how many of those have
+no paragraphs (readers see none of that text); it doesn't change the column. Dropping it is a later decision.
 
 The migration `AddChapterParagraphCaption` adds the nullable column `ChapterParagraphs.Caption`. The cleaning is
 `Application/Chapters/Paragraphs/ChapterFormat.cs`; the wiki's articles (parked) are to go through it when they come

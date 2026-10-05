@@ -14,6 +14,12 @@ public interface IChapterParagraphsRepository
     /// <see cref="IChapterTextEdit.SaveAsync"/>; disposing the edit without saving rolls it back.
     /// </summary>
     Task<IChapterTextEdit> BeginEditAsync(Guid chapterId);
+
+    /// <summary>The paragraphs of these chapters, by chapter id and in order, read without tracking them.</summary>
+    Task<Dictionary<Guid, List<ChapterParagraph>>> GetParagraphsOfChaptersAsync(IReadOnlyCollection<Guid> chapterIds);
+
+    /// <summary>Which of these paragraphs have comments: any, replies and comments their authors deleted included.</summary>
+    Task<HashSet<Guid>> GetCommentedAsync(IReadOnlyCollection<Guid> paragraphIds);
 }
 
 /// <summary>An edit of one chapter's text in progress (<see cref="IChapterParagraphsRepository.BeginEditAsync"/>).</summary>
@@ -21,6 +27,12 @@ public interface IChapterTextEdit : IAsyncDisposable
 {
     /// <summary>The chapter's paragraphs when the edit began, in order. Kept ones are changed in place.</summary>
     IReadOnlyList<ChapterParagraph> Paragraphs { get; }
+
+    /// <summary>
+    /// Which of these paragraphs have comments (as <see cref="IChapterParagraphsRepository.GetCommentedAsync"/>); until
+    /// the edit ends, no comment can be added to those that have none.
+    /// </summary>
+    Task<HashSet<Guid>> GetCommentedAsync(IReadOnlyCollection<Guid> paragraphIds);
 
     /// <summary>
     /// Saves the edit and commits it: <paramref name="paragraphs"/> is the chapter after the edit, paragraphs it keeps
