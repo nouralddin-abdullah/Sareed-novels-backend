@@ -8,15 +8,15 @@ namespace Application.Novels.Commands.UpdateNovel
         private static readonly string[] AllowedStatuses = { "Ongoing", "Completed" };
         public UpdateNovelCommandValidator()
         {
+            // A field sent follows the rules of creating a novel, with the same messages (#76): a title or summary of
+            // spaces only was saved as is, and an empty genre list had another message. A field left out stays as it is.
             RuleFor(x => x.Title)
-                .Length(4, 40)
-                .When(x => x.Title != null)
-                .WithMessage("يجب أن يكون عنوان الرواية من 4 إلى 40 حرفًا");
+                .NovelTitle()
+                .When(x => x.Title != null);
 
             RuleFor(x => x.Summary)
-            .Length(4, 2000)
-            .When(x => x.Summary != null)
-            .WithMessage("يجب أن تكون نبذة الرواية من 4 إلى 2000 حرف");
+                .NovelSummary()
+                .When(x => x.Summary != null);
 
             RuleFor(x => x.Status)
                 .Must(status => AllowedStatuses.Contains(status))
@@ -24,12 +24,8 @@ namespace Application.Novels.Commands.UpdateNovel
                 .WithMessage("حالة الرواية يجب أن تكون «مستمرة» أو «مكتملة»");
 
             RuleFor(x => x.GenreIds)
-                .Must(genres => genres!.Count >= 1 && genres.Count <= 4)
-                .When(x => x.GenreIds != null)
-                .WithMessage("اختر من 1 إلى 4 تصنيفات")
-                .Must(genres => genres!.Distinct().Count() == genres!.Count)
-                .When(x => x.GenreIds != null)
-                .WithMessage("اختر كل تصنيف مرة واحدة فقط");
+                .NovelGenres()
+                .When(x => x.GenreIds != null);
 
         }
     }

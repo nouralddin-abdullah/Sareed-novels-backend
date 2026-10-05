@@ -33,8 +33,8 @@ public class CreateNovelCommandHandler(
             return new CreateNovelResult
             {
                 Success = false,
-                Code = "InvalidGenres",
-                Message = "أحد التصنيفات المختارة غير موجود"
+                Code = NovelRules.InvalidGenresCode,
+                Message = NovelRules.UnknownGenreMessage
             };
         }
 
