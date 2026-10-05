@@ -28,7 +28,7 @@ public sealed record ProcessedCover(
 /// image (<see cref="ShareImageRenderer"/>), with no metadata (no EXIF, GPS or ICC) in any file.
 /// </summary>
 /// <remarks>
-/// Opening, decoding, reducing and encoding are the shared image steps (<see cref="SourceImage"/>,
+/// Opening, decoding, reducing and encoding are the steps chapter pictures share (<see cref="SourceImage"/>,
 /// <see cref="ImagePipeline"/>), with their memory bounds: the decoded image is halved before the final resample, and
 /// callers run one image at a time.
 /// </remarks>

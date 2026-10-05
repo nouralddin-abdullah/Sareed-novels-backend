@@ -3,7 +3,7 @@ using SkiaSharp;
 
 namespace Sareed_novels_backend.Tests.Unit;
 
-/// <summary>EXIF orientation, as the image pipeline applies it to every picture.</summary>
+/// <summary>EXIF orientation, which covers and chapter pictures apply alike.</summary>
 public class ImageOrientationTests
 {
     [Theory]

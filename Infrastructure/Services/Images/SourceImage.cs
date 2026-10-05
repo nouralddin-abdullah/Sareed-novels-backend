@@ -4,8 +4,8 @@ using SkiaSharp;
 namespace Infrastructure.Services.Images;
 
 /// <summary>
-/// An uploaded picture opened for processing, the first steps of <see cref="Covers.CoverImageProcessor"/> kept apart
-/// from the cover's rules so other pictures can share them. Opening checks that the bytes are a JPEG,
+/// An uploaded picture opened for processing: the first steps covers (<see cref="Covers.CoverImageProcessor"/>) and
+/// chapter pictures (<see cref="ChapterImageProcessor"/>) share. Opening checks that the bytes are a JPEG,
 /// PNG or WebP image (by content, whatever the file name or declared type says) of at most
 /// <see cref="MaxSourcePixels"/> and reads its EXIF orientation; <see cref="Decode"/> decodes it to sRGB at the scale
 /// the result needs.
@@ -48,7 +48,8 @@ public sealed class SourceImage : IDisposable
     public SKSizeI Upright { get; }
 
     /// <summary>
-    /// Opens an upload. <paramref name="refusals"/> words the refusals that name what is uploaded (a cover).
+    /// Opens an upload. <paramref name="refusals"/> words the refusals that name what is uploaded (a cover, a chapter
+    /// picture).
     /// </summary>
     /// <exception cref="CoverImageException">The bytes aren't a JPEG, PNG or WebP image, or it has too many pixels.</exception>
     public static SourceImage Open(byte[] bytes, ImageRefusalMessages refusals)

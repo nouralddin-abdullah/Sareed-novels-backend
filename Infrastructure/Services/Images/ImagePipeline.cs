@@ -4,8 +4,8 @@ using SkiaSharp;
 namespace Infrastructure.Services.Images;
 
 /// <summary>
-/// The image steps of <see cref="Covers.CoverImageProcessor"/> that aren't about covers, after
-/// <see cref="SourceImage"/>, so other pictures can share them: reducing with good
+/// The image steps covers (<see cref="Covers.CoverImageProcessor"/>) and chapter pictures
+/// (<see cref="ChapterImageProcessor"/>) share after <see cref="SourceImage"/>: reducing with good
 /// quality, drawing turned upright, flattening onto white, and encoding with no metadata (no EXIF, GPS or ICC); with
 /// reading an upload within its limit, the one-image-at-a-time gate, and whether the native library works here.
 /// </summary>
@@ -19,8 +19,14 @@ public static class ImagePipeline
     /// <summary>The last step of a reduction: bicubic (Mitchell).</summary>
     public static readonly SKSamplingOptions Final = new(SKCubicResampler.Mitchell);
 
-    // One image at a time per process, whatever the picture is for: decoding is the only large allocation in the API,
-    // and the host is small.
+    /// <summary>
+    /// Drawing at the same size (turned upright at most): each pixel copied as it is. Mitchell doesn't interpolate, so
+    /// at 1:1 it would soften the picture.
+    /// </summary>
+    public static readonly SKSamplingOptions Exact = new(SKFilterMode.Nearest);
+
+    // One image at a time per process, covers and chapter pictures together: decoding is the only large allocation in
+    // the API, and the host is small.
     private static readonly SemaphoreSlim OneAtATime = new(1, 1);
 
     private static readonly Lazy<Exception?> LoadFailure = new(ProbeNativeLibrary);
