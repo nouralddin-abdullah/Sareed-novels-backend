@@ -1,6 +1,7 @@
 using System.Text;
 using Application.Covers;
 using Infrastructure.Services.Covers;
+using Infrastructure.Services.Images;
 using Sareed_novels_backend.Tests.Integration;
 using SkiaSharp;
 
@@ -17,7 +18,7 @@ public class CoverImageProcessorTests
     [Fact]
     public void The_native_library_loads_on_this_machine()
     {
-        Assert.True(CoverImageProcessor.IsAvailable, CoverImageProcessor.AvailabilityError?.ToString());
+        Assert.True(ImagePipeline.IsAvailable, ImagePipeline.AvailabilityError?.ToString());
     }
 
     [Fact]

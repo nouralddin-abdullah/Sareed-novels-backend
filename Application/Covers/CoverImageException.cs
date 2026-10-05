@@ -27,3 +27,15 @@ public static class CoverErrorCodes
     /// <summary>The file is over the upload limit.</summary>
     public const string FileTooLarge = "cover_file_too_large";
 }
+
+/// <summary>
+/// The refusal messages that name what is uploaded: «الغلاف» for a cover (<see cref="NovelCovers.Refusals"/>). The
+/// other refusals (unreadable, too many pixels) speak of «الصورة» and are the same for every picture.
+/// </summary>
+/// <param name="NotAnImage">Not a JPEG, PNG or WebP image (<see cref="CoverErrorCodes.UnsupportedFormat"/>); a sentence ending in a full stop.</param>
+/// <param name="FileTooLarge">The file is over the upload limit (<see cref="CoverErrorCodes.FileTooLarge"/>).</param>
+public sealed record ImageRefusalMessages(string NotAnImage, string FileTooLarge)
+{
+    /// <summary><see cref="NotAnImage"/>, saying which format the file is in (a GIF, say).</summary>
+    public string NotAnImageOf(string format) => $"{NotAnImage.TrimEnd('.')} (هذا الملف بصيغة {format}).";
+}

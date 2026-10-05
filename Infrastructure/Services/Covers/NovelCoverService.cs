@@ -1,5 +1,6 @@
 using Application.Covers;
 using Application.Services;
+using Infrastructure.Services.Images;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Services.Covers;
@@ -16,26 +17,23 @@ public sealed class NovelCoverService(
     /// <summary>Legacy covers up to this size are converted (the largest in production was 3.5 MB).</summary>
     public const long MaxExistingCoverBytes = 25 * 1024 * 1024;
 
-    // One image at a time per process: decoding is the only large allocation in the API, and the host is small.
-    private static readonly SemaphoreSlim OneAtATime = new(1, 1);
-
     private readonly CoverImageProcessor processor = new();
 
-    public bool ProcessorAvailable => CoverImageProcessor.IsAvailable;
+    public bool ProcessorAvailable => ImagePipeline.IsAvailable;
 
     public async Task<string> StoreUploadAsync(Guid novelId, Stream upload, CancellationToken cancellationToken = default)
     {
-        var bytes = await ReadAllAsync(upload, NovelCovers.MaxUploadBytes, cancellationToken);
+        var bytes = await ImagePipeline.ReadUploadAsync(upload, NovelCovers.MaxUploadBytes, NovelCovers.Refusals, cancellationToken);
 
-        if (!CoverImageProcessor.IsAvailable)
+        if (!ImagePipeline.IsAvailable)
         {
             // Degraded mode, loudly: the native image library didn't load on this host. The cover is kept as uploaded
             // (after checking it really is an image) so authors aren't blocked, and the admin cover status and the
             // backfill show it as not converted. Fix the host, then run the backfill.
-            logger.LogError(CoverImageProcessor.AvailabilityError,
+            logger.LogError(ImagePipeline.AvailabilityError,
                 "Cover processing is unavailable; storing the cover for novel {NovelId} unprocessed", novelId);
             var contentType = SniffImageType(bytes)
-                ?? throw new CoverImageException(CoverErrorCodes.UnsupportedFormat, "يجب أن يكون الغلاف صورة بصيغة JPEG أو PNG أو WebP.");
+                ?? throw new CoverImageException(CoverErrorCodes.UnsupportedFormat, NovelCovers.Refusals.NotAnImage);
             using var original = new MemoryStream(bytes, writable: false);
             return await legacyUploads.UploadNovelImageAsync(original, contentType, novelId.ToString());
         }
@@ -49,8 +47,8 @@ public sealed class NovelCoverService(
 
     public async Task<CoverConversion> ConvertExistingAsync(Guid novelId, string coverUrl, bool dryRun, CancellationToken cancellationToken = default)
     {
-        if (!CoverImageProcessor.IsAvailable)
-            throw new InvalidOperationException("Cover processing is unavailable on this host.", CoverImageProcessor.AvailabilityError);
+        if (!ImagePipeline.IsAvailable)
+            throw new InvalidOperationException("Cover processing is unavailable on this host.", ImagePipeline.AvailabilityError);
 
         if (storage.KeyOf(coverUrl) is null)
         {
@@ -94,18 +92,8 @@ public sealed class NovelCoverService(
         await storage.DeleteAsync(NovelCovers.ShareImageKey(prefix), cancellationToken);
     }
 
-    private async Task<ProcessedCover> ProcessAsync(byte[] bytes, bool enforceMinimumSize, CancellationToken cancellationToken)
-    {
-        await OneAtATime.WaitAsync(cancellationToken);
-        try
-        {
-            return processor.Process(bytes, enforceMinimumSize);
-        }
-        finally
-        {
-            OneAtATime.Release();
-        }
-    }
+    private Task<ProcessedCover> ProcessAsync(byte[] bytes, bool enforceMinimumSize, CancellationToken cancellationToken) =>
+        ImagePipeline.OneAtATimeAsync(() => processor.Process(bytes, enforceMinimumSize), cancellationToken);
 
     /// <summary>Uploads the smaller files first, so the URL that gets saved only exists once everything it implies does.</summary>
     private async Task<string> SaveAsync(Guid novelId, ProcessedCover cover, CancellationToken cancellationToken)
@@ -119,22 +107,6 @@ public sealed class NovelCoverService(
             if (file == cover.Full) fullUrl = url;
         }
         return fullUrl!;
-    }
-
-    private static async Task<byte[]> ReadAllAsync(Stream stream, long maxBytes, CancellationToken cancellationToken)
-    {
-        using var buffer = new MemoryStream();
-        var chunk = new byte[81920];
-        int read;
-        while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
-        {
-            if (buffer.Length + read > maxBytes)
-            {
-                throw new CoverImageException(CoverErrorCodes.FileTooLarge, $"يجب ألا يتجاوز حجم ملف الغلاف {maxBytes / (1024 * 1024)} ميغابايت.");
-            }
-            buffer.Write(chunk, 0, read);
-        }
-        return buffer.ToArray();
     }
 
     /// <summary>The image type from the file's first bytes (never from the client's declared type).</summary>
