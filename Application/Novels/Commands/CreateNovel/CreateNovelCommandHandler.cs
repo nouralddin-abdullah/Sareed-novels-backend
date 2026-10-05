@@ -46,6 +46,9 @@ public class CreateNovelCommandHandler(
         novel.LastUpdatedAt = DateTime.UtcNow;
         novel.TotalViews = 0;
         novel.AuthorId = currentUser.Id;
+        // A draft (#76) is what PATCH .../draft makes of a novel: hidden from every public list and out of the rankings.
+        novel.IsDraft = request.IsDraft;
+        novel.IsEligibleForRanking = !request.IsDraft;
         novel.RecalculateAverageScores();
         if (request.CoverImageUrl != null)
         {
@@ -88,7 +91,8 @@ public class CreateNovelCommandHandler(
         {
             Message = "أُنشئت الرواية",
             Success = true,
-            NovelId = novel.Id
+            NovelId = novel.Id,
+            IsDraft = novel.IsDraft
         };
     }
 }
