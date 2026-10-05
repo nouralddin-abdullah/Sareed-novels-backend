@@ -8,34 +8,41 @@ public interface IChaptersRepository
     Task<Chapter?> GetChapterById(Guid chapterId);
     Task<Chapter?> GetChapterBySlug(string slug);
     /// <summary>
-    /// Saves the author's edit of a chapter loaded with <see cref="GetChapterById"/>, in one transaction. When the
-    /// chapter came out (<see cref="Chapter.PublishedAt"/>) is stored once, and never from the loaded copy: this save
-    /// stores it only while the chapter has none, so a save made from an older copy can neither erase nor move it, and
-    /// of two saves that publish a new chapter at once, only one is its first publish. The comment and view counters
-    /// aren't written either; they move with their own atomic updates.
-    /// The status is stored only by a save that sets one (<paramref name="withStatus"/>; one that doesn't keeps the stored
-    /// status), and only where it differs from the stored one, so of two saves (or a save and the schedule,
-    /// <see cref="PublishDueAsync"/>) changing it at once, one does (<see cref="ChapterSave.StatusChanged"/>); publishing
-    /// clears the schedule. The schedule (<see cref="Chapter.PublishAt"/>) is stored only when the save changes it, and
-    /// only on a draft; the published sequence never (the recalculation after a publish keeps it); the word count only
-    /// when it changed (#77). Afterwards the tracked chapter is the stored one.
+    /// Saves the author's edit of a chapter loaded with <see cref="GetChapterById"/>, in one transaction: the edit of the
+    /// chapter's text it is part of (<see cref="IChapterParagraphsRepository.BeginEditAsync"/>, committed with it), or
+    /// one of its own. When the chapter came out (<see cref="Chapter.PublishedAt"/>) is stored once, and never from the
+    /// loaded copy: this save stores it only while the chapter has none, so a save made from an older copy can neither
+    /// erase nor move it, and of two saves that publish a new chapter at once, only one is its first publish. The
+    /// comment and view counters and the paragraph count aren't written either; they move with their own atomic
+    /// updates. Nor is the published sequence, which only the recalculation after a publish or unpublish writes (a
+    /// chapter of the same novel published meanwhile, by hand or on schedule, renumbers this one too), and the word
+    /// count only when the save changed it (#77: the startup backfill counts older chapters meanwhile).
+    /// <see cref="Chapter.Revision"/> is written only when the edit moved it, and only over the revision it was loaded
+    /// at (#75): if the stored one isn't that any more, nothing is saved and
+    /// <see cref="Exceptions.ChapterChangedException"/> is thrown.
     /// </summary>
-    Task<ChapterSave> UpdateChapter(Chapter chapter, bool withStatus = true);
+    Task<ChapterSave> UpdateChapter(Chapter chapter);
+
+    /// <summary>Reads the chapter again into the tracked <paramref name="chapter"/>, as it is now; false when it is gone.</summary>
+    Task<bool> ReloadAsync(Chapter chapter);
 
     /// <summary>
-    /// Drafts whose <see cref="Chapter.PublishAt"/> has come (at or before <paramref name="now"/>), soonest first, at
-    /// most <paramref name="max"/>; of one novel when it is given by id or slug. Chapters of deleted novels are left out.
+    /// The drafts whose scheduled time (<see cref="Chapter.PublishAt"/>, #77) has come, at or before
+    /// <paramref name="now"/>: at most <paramref name="max"/> ids, the soonest due first and a novel's chapters in reading
+    /// order; of one novel when it is given by id or slug. Chapters of deleted novels are left out.
     /// </summary>
-    Task<List<DueChapter>> GetDueChaptersAsync(DateTime now, int max, Guid? novelId = null, string? novelSlug = null);
+    Task<List<Guid>> GetDueChapterIdsAsync(DateTime now, int max, Guid? novelId = null, string? novelSlug = null);
 
-    /// <summary>
-    /// Publishes a chapter on schedule (#77), in one transaction, only while it is still a draft whose
-    /// <see cref="Chapter.PublishAt"/> has come: its status, its schedule cleared, and, if it never came out, when it
-    /// did (<paramref name="now"/>), as <see cref="UpdateChapter"/> stores a publish. Of two runs, or a run and the
-    /// author's own publish, at the same moment, one publishes it (<see cref="ChapterSave.StatusChanged"/>).
-    /// </summary>
-    Task<ChapterSave> PublishDueAsync(Guid chapterId, DateTime now);
     Task<int> GetNextChapterIndex(Guid novelId);
+
+    /// <summary>Up to <paramref name="take"/> chapter ids after <paramref name="after"/> (all chapters, in id order).</summary>
+    Task<List<Guid>> GetChapterIdsAsync(Guid? after, int take);
+
+    /// <summary>
+    /// Chapters that still hold text in the legacy <c>Chapters.Content</c> column (from before the paragraphs, and from
+    /// edits before #74, which copied the request into it): nothing reads it.
+    /// </summary>
+    Task<LegacyChapterContent> CountLegacyContentAsync();
     Task<bool> DeleteChapter(Chapter chapter);
     Task<IEnumerable<Chapter>> GetChaptersAuthorView(Guid novelId);
     Task<IEnumerable<Chapter>> GetChaptersReaderView(Guid novelId);
@@ -46,20 +53,18 @@ public interface IChaptersRepository
 }
 
 /// <summary>
+/// Chapters with text in the legacy <c>Chapters.Content</c> column (<see cref="IChaptersRepository.CountLegacyContentAsync"/>),
+/// and how many of those have no paragraphs, so that column is their only text.
+/// </summary>
+public readonly record struct LegacyChapterContent(int Chapters, int WithoutParagraphs);
+
+/// <summary>
 /// What saving the author's edit of a chapter did (<see cref="IChaptersRepository.UpdateChapter"/>), or publishing it on
-/// schedule (<see cref="IChaptersRepository.PublishDueAsync"/>).
+/// schedule (#77, through the same save).
 /// </summary>
 /// <param name="Saved">The chapter was saved.</param>
 /// <param name="CameOut">
 /// This save stored when the chapter came out: it published a chapter that had never been published (#39). Only then
 /// is the chapter new to readers: they are told, and the novel's last update moves.
 /// </param>
-/// <param name="StatusChanged">
-/// This save changed the stored status (#77): the chapter was published or unpublished by it, and not by another save
-/// or the schedule at the same moment. Only then do the chapter's sequences, the novel's chapter count and the
-/// privilege window follow.
-/// </param>
-public readonly record struct ChapterSave(bool Saved, bool CameOut, bool StatusChanged);
-
-/// <summary>A draft whose scheduled publish time has come (<see cref="IChaptersRepository.GetDueChaptersAsync"/>).</summary>
-public sealed record DueChapter(Guid Id, Guid NovelId, string Slug, string Title);
+public readonly record struct ChapterSave(bool Saved, bool CameOut);

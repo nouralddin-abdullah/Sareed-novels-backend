@@ -1,4 +1,4 @@
-using System.Data.Common;
+﻿using System.Data.Common;
 using Application.Chapters.Commands.CreateChapter;
 using Application.Chapters.Commands.UpdateChapter;
 using Application.Chapters.DTOS;
@@ -51,6 +51,7 @@ internal sealed class ScheduleDesk : IAsyncDisposable
             .AddLogging()
             .AddDbContext<ApplicationDbContext>(o => o.UseSqlServer(database.ConnectionString).AddInterceptors(ScheduleCommands))
             .AddScoped<IChaptersRepository, ChaptersRepository>()
+            .AddScoped<IChapterParagraphsRepository, ChapterParagraphsRepository>()
             .AddScoped<INovelsRepository, NovelsRepository>()
             .AddScoped<IChapterSequenceService, ChapterSequenceService>()
             .AddScoped<ScheduledChapterPublisher>()
@@ -101,12 +102,14 @@ internal sealed class ScheduleDesk : IAsyncDisposable
     }
 
     /// <summary>
-    /// PATCH /api/novel/{novelId}/chapter/{chapterId} as the author, now: the title and text as the editor sends them,
-    /// <paramref name="status"/> (null leaves it), and, with <paramref name="setsSchedule"/>, <c>publishAt</c>
+    /// PATCH /api/novel/{novelId}/chapter/{chapterId} as the author, now: the title and text as the editor sends them
+    /// (<paramref name="title"/> and <paramref name="content"/>, both null for a save of the status or the schedule
+    /// alone), <paramref name="status"/> (null leaves it), and, with <paramref name="setsSchedule"/>, <c>publishAt</c>
     /// (<paramref name="publishAt"/>, null cancelling). The request's context has <paramref name="interceptors"/>.
     /// </summary>
-    public async Task<OperationResult> Save(User author, Novel novel, Guid chapterId, string? status, bool setsSchedule = false,
-        DateTime? publishAt = null, string content = "<p>نص الفصل</p>", params IInterceptor[] interceptors)
+    public async Task<UpdateChapterResult> Save(User author, Novel novel, Guid chapterId, string? status, bool setsSchedule = false,
+        DateTime? publishAt = null, string? content = "<p>نص الفصل</p>", string? title = "فصل", int? baseRevision = null,
+        params IInterceptor[] interceptors)
     {
         await using var db = database.CreateContext(interceptors);
         var (chapters, novels) = (new ChaptersRepository(db), new NovelsRepository(db));
@@ -116,7 +119,10 @@ internal sealed class ScheduleDesk : IAsyncDisposable
             new ChapterSequenceService(NullLogger<ChapterSequenceService>.Instance, novels, chapters), services, Clock);
 
         return await handler.Handle(
-            new UpdateChapterCommand(chapterId, novel.Id, "فصل", status, content) { SetsSchedule = setsSchedule, PublishAt = publishAt },
+            new UpdateChapterCommand(chapterId, novel.Id, title, status, content)
+            {
+                SetsSchedule = setsSchedule, PublishAt = publishAt, BaseRevision = baseRevision
+            },
             CancellationToken.None);
     }
 
@@ -194,24 +200,48 @@ internal sealed class ScheduleDesk : IAsyncDisposable
     }
 }
 
-/// <summary>Runs an action once, just before the first command that matches.</summary>
+/// <summary>Runs an action once, just before or just after the first command that matches.</summary>
 internal sealed class CommandHook : DbCommandInterceptor
 {
     private Func<DbCommand, bool>? matches;
     private Func<Task>? action;
+    private bool after;
 
     /// <summary>Before the first command whose SQL matches.</summary>
     public void Before(Func<string, bool> sqlMatches, Func<Task> run) => Before(command => sqlMatches(command.CommandText), run);
 
-    public void Before(Func<DbCommand, bool> commandMatches, Func<Task> run)
+    public void Before(Func<DbCommand, bool> commandMatches, Func<Task> run) => Hook(commandMatches, run, after: false);
+
+    /// <summary>
+    /// Holds the context that runs the first matching command, just after the command ran (with
+    /// <paramref name="afterIt"/>) or just before, until the returned gate is released.
+    /// </summary>
+    public Gate Hold(Func<DbCommand, bool> commandMatches, bool afterIt)
+    {
+        var gate = new Gate();
+        Hook(commandMatches, gate.HoldAsync, afterIt);
+        return gate;
+    }
+
+    /// <summary>
+    /// Holds the context that takes this chapter's text lock (ChapterParagraphsRepository.BeginEditAsync, #75), once it
+    /// has it: an author's save, or the scheduled publish, holding the chapter.
+    /// </summary>
+    public Gate HoldWithChapter(Guid chapterId) => Hold(command =>
+        command.CommandText.Contains("sp_getapplock")
+        && command.Parameters.Cast<DbParameter>().Any(p => p.ParameterName == "@resource" && Equals(p.Value, $"chapter-text:{chapterId:N}")),
+        afterIt: true);
+
+    private void Hook(Func<DbCommand, bool> commandMatches, Func<Task> run, bool after)
     {
         matches = commandMatches;
+        this.after = after;
         action = run;
     }
 
-    private async Task Run(DbCommand command)
+    private async Task Run(DbCommand command, bool afterIt)
     {
-        if (matches is { } match && match(command) && Interlocked.Exchange(ref action, null) is { } run)
+        if (afterIt == after && matches is { } match && match(command) && Interlocked.Exchange(ref action, null) is { } run)
         {
             await run();
         }
@@ -220,14 +250,46 @@ internal sealed class CommandHook : DbCommandInterceptor
     public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
         InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
     {
-        await Run(command);
+        await Run(command, afterIt: false);
+        return result;
+    }
+
+    public override async ValueTask<DbDataReader> ReaderExecutedAsync(DbCommand command, CommandExecutedEventData eventData,
+        DbDataReader result, CancellationToken cancellationToken = default)
+    {
+        await Run(command, afterIt: true);
         return result;
     }
 
     public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
         InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
-        await Run(command);
+        await Run(command, afterIt: false);
         return result;
+    }
+
+    public override async ValueTask<int> NonQueryExecutedAsync(DbCommand command, CommandExecutedEventData eventData, int result,
+        CancellationToken cancellationToken = default)
+    {
+        await Run(command, afterIt: true);
+        return result;
+    }
+
+    /// <summary>Where a <see cref="Hold"/> stops its command's connection, until released.</summary>
+    internal sealed class Gate
+    {
+        private readonly TaskCompletionSource held = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Completes when the command is held (up to 30 s, or the test fails).</summary>
+        public Task Held => held.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+        public void Release() => released.TrySetResult();
+
+        internal Task HoldAsync()
+        {
+            held.TrySetResult();
+            return released.Task;
+        }
     }
 }

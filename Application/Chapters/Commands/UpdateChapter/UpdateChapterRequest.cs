@@ -8,6 +8,9 @@ public class UpdateChapterRequest
     public string? Status { get; set; }
     public string? Content { get; set; }
 
+    /// <summary>The chapter's revision the editor's copy was loaded at (#75); optional.</summary>
+    public int? BaseRevision { get; set; }
+
     /// <summary>
     /// The draft's schedule (#77): a time to come (UTC, as <c>CreateChapterRequest.PublishAt</c>) schedules it or moves
     /// its schedule, <c>null</c> cancels it, and leaving the field out keeps the schedule as it is, as every edit does.

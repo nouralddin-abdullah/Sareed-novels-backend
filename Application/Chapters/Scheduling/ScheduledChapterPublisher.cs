@@ -10,13 +10,16 @@ namespace Application.Chapters.Scheduling;
 
 /// <summary>
 /// Publishes the drafts whose scheduled time has come (<see cref="Chapter.PublishAt"/>, #77), each the way its author's
-/// publish does: the chapter is stored published (<see cref="IChaptersRepository.PublishDueAsync"/>, which also clears
-/// its schedule and stamps when it came out), then <see cref="ChapterStatusEffects"/> runs, as after the author's save,
-/// each chapter in a scope of its own as a request has. Every chapter is published once: a run that loses to another
-/// run, or to the author publishing, rescheduling or cancelling it at the same moment, does nothing for it. Run by the
-/// scheduler every minute (<c>ScheduledChapterPublishingService</c>) and, for one novel, before each request that reads
-/// it or its chapters (<see cref="PublishDueChaptersBehavior{TRequest,TResponse}"/>), since the host may stop the app
-/// while it is idle.
+/// publish does: with the chapter held as for the author's save (<see cref="IChapterParagraphsRepository.BeginEditAsync"/>,
+/// #75), so the two run one after the other, the chapter is read, given its new status (<see cref="Chapter.SetStatus"/>:
+/// when it came out, the first time, and its schedule cleared) and stored by the author's save
+/// (<see cref="IChaptersRepository.UpdateChapter"/>); then <see cref="ChapterStatusEffects"/> runs, as after the author's
+/// save. Its title and text aren't touched, so neither its revision nor its <see cref="Chapter.UpdatedAt"/> moves. Each
+/// chapter is published in a scope of its own, as a request has, and once: a run that comes after another run, or after
+/// the author published, rescheduled or cancelled it, finds it no longer due and does nothing. Run by the scheduler
+/// every minute (<c>ScheduledChapterPublishingService</c>) and, for one novel, before each request that reads it or its
+/// chapters (<see cref="PublishDueChaptersBehavior{TRequest,TResponse}"/>), since the host may stop the app while it is
+/// idle.
 /// </summary>
 public sealed class ScheduledChapterPublisher(
     IChaptersRepository chaptersRepository,
@@ -41,9 +44,9 @@ public sealed class ScheduledChapterPublisher(
         var published = 0;
         while (true)
         {
-            var due = await chaptersRepository.GetDueChaptersAsync(time.GetUtcNow().UtcDateTime, BatchSize, novelId, novelSlug);
+            var due = await chaptersRepository.GetDueChapterIdsAsync(time.GetUtcNow().UtcDateTime, BatchSize, novelId, novelSlug);
             var publishedNow = 0;
-            foreach (var chapter in due)
+            foreach (var chapterId in due)
             {
                 // Stopping is checked between chapters only: a chapter stored published gets everything a publish does.
                 if (cancellationToken.IsCancellationRequested)
@@ -51,7 +54,7 @@ public sealed class ScheduledChapterPublisher(
                     return published + publishedNow;
                 }
 
-                if (await PublishAsync(chapter))
+                if (await PublishAsync(chapterId))
                 {
                     publishedNow++;
                 }
@@ -71,30 +74,37 @@ public sealed class ScheduledChapterPublisher(
     /// Publishes one due chapter, with its own repositories: the sequences recalculated after a publish read the chapters
     /// a context tracks, which would hold the status a chapter published earlier in this run had before.
     /// </summary>
-    private async Task<bool> PublishAsync(DueChapter chapter)
+    private async Task<bool> PublishAsync(Guid chapterId)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var services = scope.ServiceProvider;
-        var now = time.GetUtcNow().UtcDateTime;
+        var chapters = services.GetRequiredService<IChaptersRepository>();
 
-        var save = await services.GetRequiredService<IChaptersRepository>().PublishDueAsync(chapter.Id, now);
-        if (!save.StatusChanged)
+        Chapter? chapter;
+        ChapterSave save;
+        await using (var edit = await services.GetRequiredService<IChapterParagraphsRepository>().BeginEditAsync(chapterId))
         {
-            return false; // published, rescheduled or cancelled meanwhile
+            // Read with the chapter held: as the author's last save left it.
+            chapter = await chapters.GetChapterById(chapterId);
+            var now = time.GetUtcNow().UtcDateTime;
+            if (chapter is not { Status: ChapterStatuses.Draft, PublishAt: { } publishAt } || publishAt > now)
+            {
+                return false; // published, rescheduled, cancelled or deleted meanwhile
+            }
+
+            chapter.SetStatus(ChapterStatuses.Published, now);
+            save = await chapters.UpdateChapter(chapter);
+            if (!save.Saved)
+            {
+                return false;
+            }
+
+            await edit.CommitAsync();
         }
 
-        var stored = new Chapter
-        {
-            Id = chapter.Id,
-            NovelId = chapter.NovelId,
-            Slug = chapter.Slug,
-            Title = chapter.Title,
-            Status = ChapterStatuses.Published,
-            PublishedAt = save.CameOut ? now : null
-        };
         var effects = new ChapterStatusEffects(
             services.GetRequiredService<IChapterSequenceService>(), services.GetRequiredService<INovelsRepository>(), services, logger);
-        await effects.ApplyAsync(chapter.NovelId, stored, save);
+        await effects.ApplyAsync(chapter.NovelId, chapter, ChapterStatuses.Draft, save);
 
         logger.LogInformation("Published scheduled chapter {ChapterId} of novel {NovelId}{Again}", chapter.Id, chapter.NovelId,
             save.CameOut ? "" : " (it was published before, so readers aren't told again)");

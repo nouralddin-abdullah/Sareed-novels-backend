@@ -33,7 +33,7 @@ public class NovelLastUpdatedAtMigrationTests(EmptySqlServerDatabase database) :
         var author = Seed.User();
         await Seed.InsertUserRowAsync(db, author);
         var day0 = new DateTime(2026, 8, 1, 9, 0, 0, DateTimeKind.Utc);
-        var seeded = new List<Chapter>();
+        var chaptersOf = new Dictionary<Novel, List<Chapter>>();
 
         // Chapters created published, the newest on day 3: right under both rules.
         var upToDate = Novel("up to date");
@@ -58,12 +58,12 @@ public class NovelLastUpdatedAtMigrationTests(EmptySqlServerDatabase database) :
         foreach (var novel in novels)
         {
             // What the rule before #39 left: its creation, moved to each chapter's creation.
-            novel.LastUpdatedAt = seeded.Where(c => c.NovelId == novel.Id).Select(c => c.CreatedAt).Append(novel.CreatedAt).Max();
+            novel.LastUpdatedAt = chaptersOf[novel].Select(c => c.CreatedAt).Append(novel.CreatedAt).Max();
         }
         var ruleBefore = novels.ToDictionary(n => n.Id, n => n.LastUpdatedAt);
         await db.SaveChangesAsync();
-        // In SQL: this point of the schema has none of the chapter columns added since (#77).
-        await Seed.InsertChapterRowsWithPublishedAtAsync(db, seeded);
+        // The chapters as the schema at that point has them (the model's later columns aren't there yet).
+        await Seed.InsertChapterRowsAsync(db, chaptersOf.Values.SelectMany(c => c), withPublishedAt: true);
 
         await migrator.MigrateAsync(Stamp);
 
@@ -103,6 +103,7 @@ public class NovelLastUpdatedAtMigrationTests(EmptySqlServerDatabase database) :
         {
             var novel = Seed.Novel(author, title, createdAt: day0);
             db.Novels.Add(novel);
+            chaptersOf[novel] = [];
             return novel;
         }
 
@@ -116,7 +117,7 @@ public class NovelLastUpdatedAtMigrationTests(EmptySqlServerDatabase database) :
                 rows[i].PublishedAt = chapters[i].Out;
                 rows[i].Status = chapters[i].Out == null ? ChapterStatuses.Draft : ChapterStatuses.Published;
             }
-            seeded.AddRange(rows);
+            chaptersOf[novel].AddRange(rows);
             return rows;
         }
     }

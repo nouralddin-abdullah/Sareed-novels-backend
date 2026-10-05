@@ -7,7 +7,7 @@ namespace Infrastructure.Migrations
 {
     /// <summary>
     /// #77: a chapter's word count and a draft's scheduled publish time, both null for existing chapters. The words are
-    /// counted from the stored paragraphs' HTML, which SQL can't read as a reader does, so existing chapters are counted
+    /// counted from the stored paragraphs as the API serves them, which SQL can't do, so existing chapters are counted
     /// by the app after the deploy (ChapterWordsBackfillService), not here. The filtered index holds scheduled drafts only.
     /// </summary>
     public partial class AddChapterWordsCountAndPublishAt : Migration

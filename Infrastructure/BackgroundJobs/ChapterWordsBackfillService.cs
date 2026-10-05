@@ -1,4 +1,4 @@
-using Application.Chapters.Paragraphs;
+﻿using Application.Chapters.Paragraphs;
 using Domain.Entities;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -11,8 +11,9 @@ namespace Infrastructure.BackgroundJobs;
 /// <summary>
 /// Counts the words of the chapters that have no count (#77: <see cref="Chapter.WordsCount"/> null, chapters from before
 /// word counts), once, in the background after the app starts. A batch of chapters at a time, each counted from its
-/// stored paragraphs as creating and saving count (<see cref="ChapterWords"/>), and stored only while the chapter still
-/// has no count, so a save meanwhile keeps its own. Running it again changes nothing; it stops when every chapter has
+/// stored paragraphs (their content, kind and caption) as the API serves them, as creating and saving count
+/// (<see cref="ChapterWords"/>), and stored only while the chapter still has no count, so a save meanwhile keeps its
+/// own: a save of the text writes its new count, and one that doesn't touch the text writes none. Running it again changes nothing; it stops when every chapter has
 /// a count. A failure is logged and the backfill starts again a minute later; one cut short by a restart goes on at the
 /// next start. Until a chapter is counted, the author's list shows its <c>wordsCount</c> as null, and its novel's too.
 /// </summary>
@@ -82,7 +83,10 @@ public sealed class ChapterWordsBackfillService(
             var paragraphs = (await db.ChapterParagraphs
                     .AsNoTracking()
                     .Where(p => ids.Contains(p.ChapterId))
-                    .Select(p => new ChapterParagraph { ChapterId = p.ChapterId, Content = p.Content, ContentType = p.ContentType })
+                    .Select(p => new ChapterParagraph
+                    {
+                        ChapterId = p.ChapterId, Content = p.Content, ContentType = p.ContentType, Caption = p.Caption
+                    })
                     .ToListAsync(cancellationToken))
                 .ToLookup(p => p.ChapterId);
 

@@ -1,4 +1,4 @@
-using Application.Services;
+﻿using Application.Services;
 using Domain.Constants;
 using Domain.Entities;
 using Domain.Repositories;
@@ -8,11 +8,11 @@ using Microsoft.Extensions.Logging;
 namespace Application.Chapters.Publishing;
 
 /// <summary>
-/// What publishing or unpublishing a chapter does beyond its row, once the save that changed its status is stored: the
-/// novel's published sequences and readers' progress, its chapter count, and its last update when the chapter comes out
-/// (#39); publishing also extends the privilege window, and readers are told when the chapter comes out for the first
-/// time. The author's save (UpdateChapterCommandHandler) and the schedule (<c>ScheduledChapterPublisher</c>, #77) both
-/// run it, so a chapter published on schedule comes out exactly as one published by hand.
+/// What publishing or unpublishing a chapter does beyond its row, once the save that changed its status is committed:
+/// the novel's published sequences and readers' progress, its chapter count, and its last update when the chapter comes
+/// out (#39); publishing also extends the privilege window, and readers are told when the chapter comes out for the
+/// first time. The author's save (UpdateChapterCommandHandler) and the schedule (<c>ScheduledChapterPublisher</c>, #77)
+/// both run it, so a chapter published on schedule comes out exactly as one published by hand.
 /// </summary>
 public sealed class ChapterStatusEffects(
     IChapterSequenceService sequenceService,
@@ -22,19 +22,22 @@ public sealed class ChapterStatusEffects(
 {
     /// <summary>
     /// Runs the effects of <paramref name="save"/> for <paramref name="chapter"/>, as that save stored it (its status,
-    /// slug and title; and <see cref="Chapter.PublishedAt"/>, read when it came out). Nothing unless the save changed the
-    /// stored status (<see cref="ChapterSave.StatusChanged"/>): of two saves, or a save and the schedule, changing it at
-    /// the same moment, the one that did runs them, once.
+    /// slug and title, and <see cref="Chapter.PublishedAt"/>, read when it came out). Nothing unless the save published
+    /// or unpublished it: its status before the save, <paramref name="statusBefore"/>, read with the chapter held for the
+    /// save (ChapterParagraphsRepository.BeginEditAsync), so of two saves, or a save and the schedule, publishing it at
+    /// the same moment, only the one that changed the status runs them.
     /// </summary>
-    public async Task ApplyAsync(Guid novelId, Chapter chapter, ChapterSave save)
+    public async Task ApplyAsync(Guid novelId, Chapter chapter, string statusBefore, ChapterSave save)
     {
-        if (!save.StatusChanged)
+        var published = chapter.Status == ChapterStatuses.Published;
+        if (chapter.Status == statusBefore || (!published && statusBefore != ChapterStatuses.Published))
         {
             return;
         }
 
         logger.LogInformation(
-            "Chapter {ChapterId} status changed to {NewStatus}, triggering sequence recalculation", chapter.Id, chapter.Status);
+            "Chapter {ChapterId} status changed from {OldStatus} to {NewStatus}, triggering sequence recalculation",
+            chapter.Id, statusBefore, chapter.Status);
 
         await sequenceService.RecalculateSequencesForNovelAsync(novelId);
         await sequenceService.UpdateReadingProgressForNovelAsync(novelId);
@@ -44,7 +47,7 @@ public sealed class ChapterStatusEffects(
         // publishing it again after that, isn't an update to readers.
         await novelsRepository.RefreshChapterCountAsync(novelId, lastUpdatedAt: save.CameOut ? chapter.PublishedAt : null);
 
-        if (chapter.Status != ChapterStatuses.Published)
+        if (!published)
         {
             return;
         }

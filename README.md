@@ -1388,6 +1388,201 @@ The first refusal is the answer:
 
 `POST /api/myworks` takes an optional form field `isDraft` (default `false`, so the web is unchanged): `true` creates the novel as a draft, as `PATCH /api/myworks/{id}/draft` makes one (hidden from every public list and the rankings, listed with `isDraft: true` in `GET /api/myworks` and `/api/myworks/{id}`, published with `PATCH /api/myworks/{id}/publish`); the response has `isDraft` (`null` when refused), and an edit (`PATCH /api/myworks/{id}`) now refuses a title, summary or genre list with creating's rules and messages.
 
+### Chapter format v1: the chapter's text, for the app and the web (#74)
+
+The server stores and serves a chapter's text in one format, whoever sends it: the app's editor, the web's, or any
+client. The app's editor leads; the web follows. Anything else in what is sent is dropped, and paragraphs stored
+before this are served in the format too.
+
+**A chapter is a list of paragraphs**, each with a kind (`contentType`) and content. On the wire, the `content` of
+`POST /api/novel/{novelId}/chapter` and `PATCH /api/novel/{novelId}/chapter/{chapterId}` is HTML:
+
+| `contentType` | What it is | On the wire | Stored and served `content` |
+|---|---|---|---|
+| `text` | a normal paragraph (the default) | `<p>…</p>` | inline content |
+| `center` | a centered paragraph: a poem, a title inside the chapter, a sign | `<p data-kind="center">…</p>` | inline content |
+| `quote` | a set-off block: a letter, a message, a memory, a voice from elsewhere | `<p data-kind="quote">…</p>` | inline content |
+| `break` | a scene break | `<hr>` or `<p data-kind="break"></p>` | `* * *` |
+| `image` | a picture | `<img src="https://…">` alone in its `<p>`, or bare; with a caption, `<p data-kind="image"><img src="https://…">the caption</p>` | the picture's address; the caption in `caption` |
+
+**Inline content** (text, center, quote): text, `<strong>`, `<em>`, `<u>`, `<s>`, and `<br>` for a line break inside
+the paragraph (a poem's lines, a list of messages). Text is HTML-escaped: `&amp;`, `&lt;`, `&gt;`, and `&nbsp;` for a
+no-break space. A `"` stays as it is.
+
+**What the server drops or rewrites**, so that what is stored is only the above, written one way:
+
+- Every attribute. On `<p>` only `data-kind` is read (any letter case; an unknown kind is `text`), on `<img>` only
+  `src`. So the web editor's `class="min-h-[1em]"`, `style`, `dir`, `on…` handlers and links' `href` all go.
+- `<b>` becomes `<strong>` and `<i>` becomes `<em>`. Nested marks are written in one order (`strong`, `em`, `u`, `s`),
+  and a mark around no text is dropped.
+- Every other tag is unwrapped and its text kept: `span`, `a`, `font`, `sup`, ... Blocks (`div`, headings, list items,
+  table cells, `blockquote`, ...) end a paragraph: their text becomes paragraphs of its own (of the kind of the `<p>`
+  around them, if any).
+- Elements whose content isn't text go with all of it: `script`, `style`, `iframe`, `object`, `embed`, `svg`, `math`,
+  `video`, `audio`, `canvas`, `noscript`, `template`, form fields (`input`, `select`, `textarea`, `button`), and
+  comments.
+- Pictures: only an absolute `http`/`https` address is kept (normalized and escaped, so `HTTPS://Host/a b.png` becomes
+  `https://host/a%20b.png`); any other picture (relative, `data:`, `javascript:`) is dropped. A picture among a
+  paragraph's text becomes an `image` paragraph of its own, the text before and after it staying paragraphs of the
+  `<p>`'s kind. In `<p data-kind="image">` with one picture, the rest of the `<p>` is the caption, stored as plain text
+  (its formatting dropped, on one line). A `<p data-kind="image">` without exactly one picture is read as text.
+- A break's content is ignored: it is always stored as `* * *`, so a reader that doesn't know kinds shows a line.
+- Spaces a reader can't see: runs of spaces and tabs become one space; spaces at a paragraph's start or end, or next to
+  a `<br>`, go, and so do `<br>`s at a paragraph's start or end. A no-break space is kept.
+- Empty paragraphs (only spaces, `&nbsp;` or `<br>`) are dropped. A break never is.
+- Plain text (no `<p>`) works as it always did: each block between blank lines is a `text` paragraph. A single line
+  break in the text is a `<br>`, and a blank line ends the paragraph, inside a `<p>` too.
+
+The format is canonical: sending back exactly what was read changes nothing, and cleaning it again gives the same.
+
+**Reading back.** The author's chapter, `GET /api/myworks/{workId}/chapters/{chapterId}` (what an editor loads), the
+reader's, `GET /api/novel/{novelId}/chapter/{chapterId}`, and the answer of `POST /api/novel/{novelId}/chapter`
+list the paragraphs in order, each:
+
+```json
+{ "id": "…", "content": "كان <strong>الليل</strong> طويلاً<br>والريح تعوي.", "contentType": "text",
+  "caption": null, "orderIndex": 0, "commentsCount": 2 }
+{ "id": "…", "content": "https://files.example/map.png", "contentType": "image", "caption": "خريطة المدينة",
+  "orderIndex": 1, "commentsCount": 0 }
+{ "id": "…", "content": "* * *", "contentType": "break", "caption": null, "orderIndex": 2, "commentsCount": 0 }
+```
+
+`caption` is new: an image's caption as plain text (show it as text, not HTML), `null` for every other paragraph.
+A paragraph's quote next to a comment on it, `paragraphExcerpt` (the comment context,
+`GET /api/notifications/comment/{id}`, and a member's comment list, `GET /api/User/{userName}/comments`), is plain
+text: its words, an image's caption, `null` for a break.
+
+**Saving keeps a paragraph by its words.** A saved paragraph keeps its id and its comments when the edited chapter
+has a paragraph with the same words (#15), wherever it moved. Its kind and inline formatting are not part of its words:
+changing a `text` paragraph to `center`, or making a word bold, keeps it, and the stored content and kind are updated.
+A picture is kept by its address and caption, a break as a break. A changed word makes a new paragraph, and the old
+one goes with its comments, as before.
+
+**Limits.** The 100,000-character limit counts the text readers see (a break and the markup count nothing), so
+formatting doesn't take a writer's room: «يجب ألا يتجاوز نص الفصل 100000 حرف». As sent, formatting included, the text
+may be up to 400,000 characters: «يجب ألا يتجاوز نص الفصل مع تنسيقه 400000 حرف». Both are 400 `ValidationFailed`.
+
+**For the web.** It renders `content` as HTML today: it should show each paragraph by `contentType` (center, quote,
+a separator for `break`, a picture and its `caption` for `image`, whose `content` is an address, not HTML). The
+editor's output needs no change, and loading paragraphs into it as `<p>` blocks works as before. The SEO worker
+(`cloudflare-worker/seo-worker.js`) keeps only paragraphs with `contentType` `text`, so center and quote paragraphs are
+missing from the pages it renders until it learns the kinds.
+
+#### Paragraphs stored before the format: the maintenance
+
+`POST /api/admin/chapters/clean-format` (admins) runs the same cleaning over the stored paragraphs. **It is a dry run
+unless `dryRun=false`.**
+
+1. `POST /api/admin/chapters/clean-format`: nothing changes; the report says what the real pass would do.
+2. Look at the report: the counts, `examples` (before and after), `skipped` (and why), `pictures`.
+3. `POST /api/admin/chapters/clean-format?dryRun=false`: the real pass. A call works about 20 seconds; while
+   `nextCursor` isn't `null`, call again with `&after=<nextCursor>` (the dry run too, on a large database). Add up the
+   counts of the calls. Running it again changes nothing that is already converted.
+
+`batchSize` (default 50, at most 200) is how many chapters it reads at a time. The report:
+
+| Field | |
+|---|---|
+| `chaptersChecked`, `chaptersChanged`, `paragraphsChecked`, `paragraphsUnchanged` | what it went through, and what is already format v1 |
+| `paragraphsChanged` | the sum of the next four |
+| `paragraphsRewritten` | stored again in the format (the editor's `class`, markup, kind, a picture's address), same id and comments |
+| `paragraphsSplit`, `paragraphsAdded` | a picture among a paragraph's text split out (or blocks inside one paragraph): the paragraph keeps its first part with words, with its id and comments; the other parts are new paragraphs |
+| `emptyParagraphsRemoved` | paragraphs without words or picture and without comments, removed as empty paragraphs are |
+| `hashesFixed` | content already in the format whose stored `ContentHash` didn't match it |
+| `paragraphsSkipped`, `skipped` | left as they are, with `reason`: `VisibleTextChanged` (the cleaning would change the words a reader sees: `wordsBefore`, `wordsAfter`), `PictureDropped` (a picture without an http(s) address), `EmptyWithComments` |
+| `pictures` | paragraphs holding pictures, how many pictures are `kept` (as image paragraphs) and `notKept` (their paragraphs are skipped), and those paragraphs |
+| `legacyChapterContent` | chapters still holding text in the old `Chapters.Content` column, and how many of them have no paragraphs |
+| `failures` | chapters whose conversion failed (nothing of them was saved): run again |
+| `nextCursor` | where to continue; `null` at the end |
+
+It never changes the words a reader sees: a paragraph whose words or picture the cleaning would lose is skipped and
+reported, so nothing disappears unseen. It keeps `ContentHash` (SHA-256 of the stored content) right, and leaves the
+paragraphs' `updatedAt` (the author didn't change them). Each chapter is converted in its own transaction, holding the
+chapter's text as an author's save does: a save of that chapter waits for it, or it for the save, and it reads the
+paragraphs again inside. Readers already get every paragraph in the format before it runs; the pass makes the stored
+text match. Until it runs, a stored paragraph with a picture among its text is served as its text alone.
+
+**The old `Chapters.Content` column.** Chapters kept their text there before paragraphs; nothing reads it. Until now,
+every save copied the request's raw HTML into it; it is no longer written, and a save of the chapter's text clears it.
+The maintenance reports how many chapters still hold text there (`legacyChapterContent`), and how many of those have
+no paragraphs (readers see none of that text); it doesn't change the column. Dropping it is a later decision.
+
+The migration `AddChapterParagraphCaption` adds the nullable column `ChapterParagraphs.Caption`. The cleaning is
+`Application/Chapters/Paragraphs/ChapterFormat.cs`; the wiki's articles (parked) are to go through it when they come
+back.
+
+### Editing a chapter from two places: the revision, the dry run, and a status alone (#75)
+
+The app's editor keeps a chapter on the phone while the author writes, offline too, and sends it when she saves; she may
+also edit it on the web or on another phone. A save from an older copy no longer overwrites newer text silently.
+
+**The revision.** A chapter has a `revision` (1 when created) and an `updatedAt` (UTC, with `Z`), in the author's
+chapter (`GET /api/myworks/{workId}/chapters/{chapterId}`), the author's chapter list
+(`GET /api/myworks/{workId}/chapters`) and the answer of `POST /api/novel/{novelId}/chapter`. Readers' payloads don't
+have them.
+
+- The revision goes up by one with every save that changes the chapter's title or text: words, a paragraph's kind or
+  formatting, the order. A change of status alone doesn't move it, and nor does a save that sends the title and text
+  exactly as they are (the web sends both with every save, also when only the status changed).
+- `updatedAt` is when the chapter was last saved: created, or any successful `PATCH`, a status change included (not
+  the scheduled publish, #77). Chapters from before this have revision 1 and `updatedAt` = when they were created.
+
+**Saving.** `PATCH /api/novel/{novelId}/chapter/{chapterId}` takes an optional `baseRevision`, the revision the editor's
+copy was loaded at:
+
+```json
+{ "title": "الفصل الأول", "content": "<p>…</p>", "status": "Published", "baseRevision": 7 }
+```
+
+- `baseRevision` given with a title or text, and not the chapter's revision (someone saved it since): **409**, and
+  nothing is saved, not even the status:
+
+  ```json
+  { "code": "ChapterChanged", "message": "حُفظ هذا الفصل من مكان آخر بعد أن فتحته. حمّل آخر نسخة منه قبل أن تحفظ.", "revision": 8 }
+  ```
+
+  Reload the chapter (its `revision` is the one in the answer), let the author merge, and save with the new one.
+- `baseRevision` left out: no check, as before, so the current web keeps working.
+- A success answers `{ "success": true, "message": "حُفظ الفصل", "revision": 8 }`, the revision after the save; keep it
+  as the copy's new `baseRevision`.
+- The check and the save are one step: saves of one chapter run one at a time (the format maintenance's too), each
+  reading the chapter inside, and the revision is written only over the one it read. Of two saves from the same
+  revision, one is saved and the other gets the 409.
+
+**A status alone.** `title` and `content` can be left out together to change only the status:
+`PATCH …/chapter/{chapterId}` with `{ "status": "Published" }` publishes the chapter (or `"Draft"` unpublishes it)
+without sending its text. It needs no `baseRevision` (one sent is not checked: it doesn't touch the text), and the
+revision stays. Sent, the title and the text are both needed, with their limits (50 characters; 100,000 visible
+characters, 400,000 as sent). Neither a status, a schedule (`publishAt`, #77) nor a title and text: 400
+«أرسل حالة الفصل أو موعد نشره، أو عنوانه ونصه». Every combination is in #77's table below.
+
+**Know before saving what a save would delete.** `PATCH …/chapter/{chapterId}?dryRun=true`, with the body the save
+would send, runs everything the save runs (the checks above, the revision included, and the matching of paragraphs)
+and saves nothing:
+
+```json
+{ "paragraphsRemoved": 2, "commentsDeleted": 3,
+  "removed": [ { "paragraphId": "…", "commentsCount": 2 }, { "paragraphId": "…", "commentsCount": 1 } ] }
+```
+
+`removed` lists every paragraph the save would remove (its words changed or it was deleted), in the chapter's order,
+those without comments too. A paragraph's `commentsCount` is the comments on it with all the replies below them that
+readers see: comments their authors deleted aren't counted, as the comment counters don't count them (#66).
+`commentsDeleted` is their sum. Use it to warn before a save that deletes comments, e.g. «سيُحذف ٣ تعليقات لأنك غيّرت
+فقرات عليها تعليقات», and to point at those paragraphs.
+
+| HTTP | `code` | When |
+|---|---|---|
+| 200 | | saved (`{ success, message, revision }`), or the dry run's answer |
+| 400 | `ValidationFailed` | a rule above; the messages are the validators' |
+| 400 | `PublishAtInPast`, `ScheduleRequiresDraft` | a schedule refused (#77) |
+| 403 | `NotOwner` | not the novel's author |
+| 404 | `NovelNotFound`, `ChapterNotFound` | no such novel, or the chapter isn't one of its chapters |
+| 409 | `ChapterChanged` | `baseRevision` isn't the chapter's revision; `revision` is the one it has |
+
+The migration `AddChapterRevision` adds `Chapters.Revision` (1 for every existing chapter) and `Chapters.UpdatedAt`
+(set to when each was created).
+
 ### Writer extras: word counts and scheduled publishing (#77)
 
 **Word counts.** `wordsCount` (a number, or `null`) is in what only the author sees:
@@ -1397,12 +1592,13 @@ The first refusal is the answer:
 | `GET /api/myworks/{workId}/chapters`, each item; `GET /api/myworks/{workId}/chapters/{chapterId}`; the chapter `POST /api/novel/{novelId}/chapter` returns | the chapter's |
 | `GET /api/myworks`, each item; `GET /api/myworks/{id}` | the novel's: all its chapters, drafts included; `0` without chapters |
 
-- **The rule** (`Application/Chapters/Paragraphs/ChapterWords.cs`): a word is a run of the chapter's visible text between
-  whitespace that has at least one letter or digit, in any script. The visible text is what a reader sees: markup
-  dropped (a tag inside a word doesn't split it; a line break or a paragraph does), character references read
-  (`&nbsp;` is a space). So punctuation alone isn't a word, punctuation stuck to a word doesn't make another, tashkeel
-  and tatweel never split a word, and a picture has none. A chapter is counted from its paragraphs as stored, when it is
-  created and whenever its text is saved.
+- **The rule** (`Application/Chapters/Paragraphs/ChapterWords.cs`): a word is a run of the text a reader sees between
+  whitespace that has at least one letter or digit, in any script. The text a reader sees is the chapter's paragraphs
+  in chapter format v1 (#74): a `text`, `center` or `quote` paragraph's text without its markup (a tag inside a word
+  doesn't split it; a `<br>` or a new paragraph does; `&nbsp;` is a space), an image's `caption` (text the author wrote
+  and readers see), and nothing for a `break`, whose `* * *` only stands for the separator. So punctuation alone isn't a
+  word, punctuation stuck to a word doesn't make another, and tashkeel and tatweel never split a word. A chapter is
+  counted when it is created and with every save of its text, in the same transaction as its paragraphs.
 
   | Text | Words |
   |---|---|
@@ -1410,12 +1606,13 @@ The first refusal is the answer:
   | `جمـــيل جدًا ـــ` | 2 (tatweel alone isn't a word) |
   | `عام ٢٠٢٦ أو 2026، بنسبة 15%` | 6 (numbers are words) |
   | `كل<strong>مة</strong> واحدة`, `سطر<br>سطر` | 2, 2 |
-  | a scene break `* * *`, a picture | 0 |
+  | a `break`; an `image` without a caption; with the caption `خريطة المدينة` | 0; 0; 2 |
 
 - **Chapters from before word counts** are counted by the app itself, once, in the background after the deploy
-  (`ChapterWordsBackfillService`): nothing to run by hand. It counts only chapters without a count (so a save meanwhile
-  keeps its own), resumes after a restart, and finds nothing at later starts. Until a chapter is counted, its
-  `wordsCount` is `null`, and so is its novel's (only the first moments after the deploy).
+  (`ChapterWordsBackfillService`): nothing to run by hand. It counts each chapter's stored paragraphs as the API serves
+  them (paragraphs stored before format v1 included), only chapters without a count (so a save meanwhile keeps its
+  own), resumes after a restart, and finds nothing at later starts. Until a chapter is counted, its `wordsCount` is
+  `null`, and so is its novel's (only the first moments after the deploy).
 
 **Scheduled publishing.** A draft can be scheduled to publish itself with `publishAt`, a time to come in UTC: on
 `POST /api/novel/{novelId}/chapter` and `PATCH /api/novel/{novelId}/chapter/{chapterId}` (JSON), e.g.
@@ -1424,17 +1621,22 @@ The first refusal is the answer:
 - Only a draft: created with `status: "Draft"`, or a chapter that is a draft and stays one in that save (a save that
   unpublishes a chapter may schedule it).
 - On `PATCH`: leaving `publishAt` out keeps the schedule (every edit does, the web's too), `null` cancels it, a new time
-  moves it. Publishing by hand (`status: "Published"`) clears it. `PATCH` still needs `title` and `content`.
-- Refused, before anything is saved, with 400: `PublishAtInPast` «موعد النشر يجب أن يكون في المستقبل» (now or past),
-  `ScheduleRequiresDraft` «يمكن تحديد موعد نشر للمسودات فقط» (created published, a published chapter, or a save that
-  publishes it). `POST` answers `{ "code", "message" }`, `PATCH` `{ "success": false, "code", "message" }`.
+  moves it. Publishing by hand (`status: "Published"`) clears it. `publishAt` can be sent alone, or with `status`
+  alone, without the title and text (the table below).
+- Refused, before anything is saved, with 400 `{ "code", "message" }` (a dry run, `?dryRun=true`, too):
+  `PublishAtInPast` «موعد النشر يجب أن يكون في المستقبل» (now or past), `ScheduleRequiresDraft` «يمكن تحديد موعد نشر
+  للمسودات فقط» (created published, a published chapter, or a save that publishes it). The chapter is checked as it is
+  when the save runs: one the schedule has just published is no longer a draft.
 - `publishAt` (UTC with `Z`, `null` when not scheduled) is in the author's chapter list and chapter and in what `POST`
   returns. Readers' payloads don't have it.
-- **When it falls due**, the chapter is published by the code that publishes it by hand (`ChapterStatusEffects`, after
-  the save): status, `publishedAt` (when it actually came out), sequences, the chapter count, the novel's
-  `lastUpdatedAt`, the privilege window, and readers' notification and push (#33, #39). Once: of two runs, or a run and
-  the author publishing it, at the same moment, one publishes it. A chapter that came out before (unpublished, then
-  scheduled) doesn't tell readers again. A deleted novel's chapters aren't published.
+- **When it falls due**, the chapter is published as its author publishes it: held as the author's save holds it
+  (#75), so a scheduled publish and a save of the same chapter run one after the other, each reading what the other
+  stored; then stored by the author's save code (status, `publishedAt` when it actually came out, the schedule
+  cleared), and followed by what a publish by hand does (`ChapterStatusEffects`): sequences, the chapter count, the
+  novel's `lastUpdatedAt`, the privilege window, and readers' notification and push (#33, #39). Its title and text
+  don't change, so neither its `revision` nor its `updatedAt` moves. Once: a run that comes after another run, or after
+  the author published, rescheduled or cancelled it, finds it no longer due. A chapter that came out before
+  (unpublished, then scheduled) doesn't tell readers again. A deleted novel's chapters aren't published.
 - **Who publishes it.** The scheduler in the API (`ScheduledChapterPublishingService`) runs when the app starts and then
   every minute. The host (runasp.net) stops the app while it is idle, and then nothing runs: a chapter that fell due
   meanwhile comes out at the scheduler's first run when a request starts the app again, or, if it comes first, before a
@@ -1443,7 +1645,25 @@ The first refusal is the answer:
   publish; they show it after that first run.
 - **Limits.** While the app is stopped, a due chapter waits for the next request, and its readers' notifications with
   it; `publishedAt` is when it came out, not `publishAt`. To publish on time at quiet hours, keep the app awake: an uptime
-  monitor calling `GET /api/app/config` every 5 minutes is enough. A save that sends `status: "Draft"` in the very moment
-  the chapter is published turns it back into a draft, as between two saves the last status sent wins (the web editor
-  sends the status it shows); readers were told once, and the counts follow. A save without a status leaves it
+  monitor calling `GET /api/app/config` every 5 minutes is enough. A save that sends `status: "Draft"` right after the
+  chapter was published on schedule turns it back into a draft, as between two saves the last status sent wins (the web
+  editor sends the status it shows); readers were told once, and the counts follow. A save without a status leaves it
   published, so the app should send `status` only when the author changes it.
+
+**What a `PATCH …/chapter/{chapterId}` body may hold** (#75 and #77). A field left out is not changed; `publishAt: null`
+is sent, and cancels the schedule.
+
+| Body | Saves | `baseRevision` | `revision` |
+|---|---|---|---|
+| `title` and `content`, with or without `status` and `publishAt` | the title and text, and the status and schedule sent | optional; when sent and not the chapter's: 409 `ChapterChanged`, nothing saved | one more when the title or text changed |
+| `status` alone | the status | not needed, not checked | stays |
+| `publishAt` alone (a time, or `null`) | the schedule | not needed, not checked | stays |
+| `status` and `publishAt` | both | not needed, not checked | stays |
+| `title` without `content`, or `content` without `title` | nothing: 400 `ValidationFailed` «اكتب نص الفصل» / «اكتب عنوان الفصل» | | |
+| none of `title`, `content`, `status`, `publishAt` | nothing: 400 `ValidationFailed` «أرسل حالة الفصل أو موعد نشره، أو عنوانه ونصه» | | |
+
+Every successful save moves `updatedAt`, a change of status or schedule alone too; the scheduled publish moves neither
+`updatedAt` nor `revision`.
+
+The migration `AddChapterWordsCountAndPublishAt` adds the nullable columns `Chapters.WordsCount` and
+`Chapters.PublishAt`, and a filtered index on `PublishAt` for the scheduler.

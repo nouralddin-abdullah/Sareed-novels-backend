@@ -1,4 +1,5 @@
-using System.Data.Common;
+﻿using System.Data.Common;
+using Domain.Constants;
 using Domain.Entities;
 using Infrastructure.BackgroundJobs;
 using Infrastructure.Persistence;
@@ -11,8 +12,9 @@ namespace Sareed_novels_backend.Tests.Integration;
 
 /// <summary>
 /// #77: chapters from before word counts (WordsCount null) are counted once, in the background after the app starts
-/// (<see cref="ChapterWordsBackfillService"/>), from their stored paragraphs by the rule creating and saving use; a
-/// chapter that has a count keeps it, a count a save stores meanwhile wins, and running it again changes nothing.
+/// (<see cref="ChapterWordsBackfillService"/>), from their stored paragraphs as the API serves them, by the rule creating
+/// and saving use (an image's caption counts, a break doesn't; paragraphs from before chapter format v1 too); a chapter
+/// that has a count keeps it, a count a save stores meanwhile wins, and running it again changes nothing.
 /// </summary>
 public class ChapterWordsBackfillTests(SqlServerDatabase database) : IClassFixture<SqlServerDatabase>
 {
@@ -22,20 +24,24 @@ public class ChapterWordsBackfillTests(SqlServerDatabase database) : IClassFixtu
     public async Task Chapters_without_a_count_are_counted_from_their_stored_paragraphs_once()
     {
         var novel = await SeedNovel();
-        var tashkeel = await SeedChapter(novel, null, ("<p>قَالَ الرَّجُلُ: «مَرْحَبًا!»</p>", "text"), ("* * *", "text"), ("<p>ثُمَّ مَضَى ...</p>", "text"));
-        var picture = await SeedChapter(novel, null, ("https://files.test/novel-images/a.png", "image"), ("<p>تعليق<br>الصورة</p>", "text"));
+        var tashkeel = await SeedChapter(novel, null, Text("<p>قَالَ الرَّجُلُ: «مَرْحَبًا!»</p>"), Text("* * *"), Text("<p>ثُمَّ مَضَى ...</p>"));
+        var pictures = await SeedChapter(novel, null, Picture("https://files.test/novel-images/a.png"),
+            Picture("https://files.test/novel-images/map.png", "خريطة المدينة"), Text("<p>تعليق<br>الصورة</p>"), Break());
+        // Stored before chapter format v1: the web editor's markup, and a picture among the text.
+        var legacy = await SeedChapter(novel, null, Text("<p class=\"min-h-[1em]\">قبل <img src=\"https://files.test/a.png\"> بعد</p>"));
         var empty = await SeedChapter(novel, null);
-        var counted = await SeedChapter(novel, 999, ("<p>كلمة</p>", "text"));
+        var counted = await SeedChapter(novel, 999, Text("<p>كلمة</p>"));
         // More than a batch.
         var many = new List<Guid>();
         for (var i = 0; i < ChapterWordsBackfillService.BatchSize + 5; i++)
         {
-            many.Add(await SeedChapter(novel, null, ("<p>كلمة واحدة</p>", "text"), ("<p>وثانية</p>", "text")));
+            many.Add(await SeedChapter(novel, null, Text("<p>كلمة واحدة</p>"), Text("<p>وثانية</p>")));
         }
 
-        Assert.True(await Backfill().BackfillAsync(CancellationToken.None) >= 3 + many.Count);
+        Assert.True(await Backfill().BackfillAsync(CancellationToken.None) >= 4 + many.Count);
 
-        Assert.Equal((5, 2, 0, 999), (await Words(tashkeel), await Words(picture), await Words(empty), await Words(counted)));
+        Assert.Equal((5, 4, 2, 0, 999),
+            (await Words(tashkeel), await Words(pictures), await Words(legacy), await Words(empty), await Words(counted)));
         foreach (var chapter in many)
         {
             Assert.Equal(3, await Words(chapter));
@@ -50,7 +56,7 @@ public class ChapterWordsBackfillTests(SqlServerDatabase database) : IClassFixtu
     public async Task A_count_a_save_stores_meanwhile_is_kept()
     {
         var novel = await SeedNovel();
-        var chapter = await SeedChapter(novel, null, ("<p>نص قديم من كلمات أربع</p>", "text"));
+        var chapter = await SeedChapter(novel, null, Text("<p>نص قديم من كلمات أربع</p>"));
 
         // The backfill has read the old text; just before it stores its count, the author saves new text with its count.
         var save = new CommandHook();
@@ -69,7 +75,7 @@ public class ChapterWordsBackfillTests(SqlServerDatabase database) : IClassFixtu
     public async Task It_runs_by_itself_after_the_app_starts_and_says_how_many_it_counted()
     {
         var novel = await SeedNovel();
-        var chapter = await SeedChapter(novel, null, ("<p>فصل قديم</p>", "text"));
+        var chapter = await SeedChapter(novel, null, Text("<p>فصل قديم</p>"));
         var service = Backfill();
 
         await service.StartAsync(CancellationToken.None);
@@ -101,7 +107,7 @@ public class ChapterWordsBackfillTests(SqlServerDatabase database) : IClassFixtu
     }
 
     /// <summary>A chapter as stored before word counts (<paramref name="wordsCount"/> null), with these paragraphs.</summary>
-    private async Task<Guid> SeedChapter(Novel novel, int? wordsCount, params (string Content, string Kind)[] paragraphs)
+    private async Task<Guid> SeedChapter(Novel novel, int? wordsCount, params ChapterParagraph[] paragraphs)
     {
         await using var db = database.CreateContext();
         var index = await db.Chapters.CountAsync(c => c.NovelId == novel.Id) + 1;
@@ -109,13 +115,22 @@ public class ChapterWordsBackfillTests(SqlServerDatabase database) : IClassFixtu
         chapter.WordsCount = wordsCount;
         chapter.ParagraphsCount = paragraphs.Length;
         db.Chapters.Add(chapter);
-        db.ChapterParagraphs.AddRange(paragraphs.Select((p, i) => new ChapterParagraph
+        for (var i = 0; i < paragraphs.Length; i++)
         {
-            Id = Guid.NewGuid(), ChapterId = chapter.Id, Content = p.Content, ContentType = p.Kind, ContentHash = Guid.NewGuid().ToString("N"), OrderIndex = i
-        }));
+            (paragraphs[i].Id, paragraphs[i].ChapterId, paragraphs[i].OrderIndex) = (Guid.NewGuid(), chapter.Id, i);
+            paragraphs[i].ContentHash = Guid.NewGuid().ToString("N");
+        }
+        db.ChapterParagraphs.AddRange(paragraphs);
         await db.SaveChangesAsync();
         return chapter.Id;
     }
+
+    private static ChapterParagraph Text(string content) => new() { Content = content, ContentType = ParagraphKinds.Text };
+
+    private static ChapterParagraph Break() => new() { Content = "* * *", ContentType = ParagraphKinds.Break };
+
+    private static ChapterParagraph Picture(string address, string? caption = null) =>
+        new() { Content = address, ContentType = ParagraphKinds.Image, Caption = caption };
 
     private async Task<int?> Words(Guid chapterId)
     {

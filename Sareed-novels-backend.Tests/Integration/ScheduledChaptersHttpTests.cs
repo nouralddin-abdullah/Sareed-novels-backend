@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -87,8 +87,8 @@ public class ScheduledChaptersHttpTests(SardApiFactory api)
         var past = await Save(author, novel, chapterId,
             new { title = "فصل", status = ChapterStatuses.Draft, content = "<p>نص لا يحفظ</p>", publishAt = DateTime.UtcNow.AddMinutes(-1) });
         var refused = await past.Error(HttpStatusCode.BadRequest);
-        Assert.Equal((false, ChapterSchedule.InPastCode, "موعد النشر يجب أن يكون في المستقبل"),
-            (refused.GetProperty("success").GetBoolean(), refused.GetProperty("code").GetString(), refused.GetProperty("message").GetString()));
+        Assert.Equal((ChapterSchedule.InPastCode, "موعد النشر يجب أن يكون في المستقبل"),
+            (refused.GetProperty("code").GetString(), refused.GetProperty("message").GetString()));
         Assert.Equal((publishAt, (int?)2), ((await Stored(chapterId)).PublishAt, (await Stored(chapterId)).WordsCount));
 
         // An offset is read as the same moment in UTC.
@@ -110,6 +110,45 @@ public class ScheduledChaptersHttpTests(SardApiFactory api)
             (createdPublished.GetProperty("code").GetString(), createdPublished.GetProperty("message").GetString()));
         await using var db = api.Db();
         Assert.Equal(1, await db.Chapters.CountAsync(c => c.NovelId == novel.Id));
+    }
+
+    [Fact]
+    public async Task A_patch_may_hold_publishAt_alone_or_with_a_status_without_the_text_or_a_revision()
+    {
+        var author = await api.SignUp();
+        var novel = await api.AddNovel(author);
+        var chapterId = (await (await Create(author, novel, ChapterStatuses.Draft, "<p>نص الفصل</p>")).OkJson()).GetProperty("id").GetGuid();
+        var publishAt = Truncated(DateTime.UtcNow.AddDays(2));
+
+        // publishAt alone, set and then cancelled; a baseRevision sent with it isn't checked, and the revision stays.
+        Assert.Equal(1, await Revision(await Save(author, novel, chapterId, new { publishAt = publishAt.ToString("yyyy-MM-ddTHH:mm:ssZ") })));
+        var scheduled = await Stored(chapterId);
+        Assert.Equal((ChapterStatuses.Draft, (DateTime?)publishAt, 1), (scheduled.Status, scheduled.PublishAt, scheduled.Revision));
+        Assert.Equal(1, await Revision(await Save(author, novel, chapterId, new { publishAt = (DateTime?)null, baseRevision = 99 })));
+        Assert.Null((await Stored(chapterId)).PublishAt);
+
+        // With a status alone: unpublished and scheduled in one save.
+        Assert.Equal(1, await Revision(await Save(author, novel, chapterId, new { status = ChapterStatuses.Published })));
+        Assert.Equal(1, await Revision(await Save(author, novel, chapterId,
+            new { status = ChapterStatuses.Draft, publishAt = publishAt.ToString("yyyy-MM-ddTHH:mm:ssZ") })));
+        var rescheduled = await Stored(chapterId);
+        Assert.Equal((ChapterStatuses.Draft, (DateTime?)publishAt, 1), (rescheduled.Status, rescheduled.PublishAt, rescheduled.Revision));
+
+        // A title or text still needs both; and a body with nothing to save is refused.
+        await AssertInvalid(await Save(author, novel, chapterId, new { title = "فصل", publishAt = (DateTime?)null }), "اكتب نص الفصل");
+        await AssertInvalid(await Save(author, novel, chapterId, new { baseRevision = 1 }),
+            "أرسل حالة الفصل أو موعد نشره، أو عنوانه ونصه");
+
+        // A dry run checks the schedule as the save would, and saves nothing.
+        var dryRun = await api.Send(HttpMethod.Patch, $"/api/novel/{novel.Id}/chapter/{chapterId}?dryRun=true", author,
+            JsonContent.Create(new { publishAt = DateTime.UtcNow.AddMinutes(-1) }));
+        Assert.Equal(ChapterSchedule.InPastCode, (await dryRun.Error(HttpStatusCode.BadRequest)).GetProperty("code").GetString());
+        Assert.Equal(publishAt, (await Stored(chapterId)).PublishAt);
+
+        // The title and text with it move the revision as any text save does.
+        Assert.Equal(2, await Revision(await Save(author, novel, chapterId,
+            new { title = "فصل", content = "<p>نص جديد</p>", publishAt = (DateTime?)null, baseRevision = 1 })));
+        Assert.Null((await Stored(chapterId)).PublishAt);
     }
 
     [Fact]
@@ -142,6 +181,20 @@ public class ScheduledChaptersHttpTests(SardApiFactory api)
 
     private Task<HttpResponseMessage> Save(ApiUser author, Novel novel, Guid chapterId, object body) =>
         api.Send(HttpMethod.Patch, $"/api/novel/{novel.Id}/chapter/{chapterId}", author, JsonContent.Create(body));
+
+    /// <summary>A save's answer, which must be a success: the chapter's revision after it.</summary>
+    private static async Task<int> Revision(HttpResponseMessage saved)
+    {
+        var body = await saved.OkJson();
+        Assert.True(body.GetProperty("success").GetBoolean());
+        return body.GetProperty("revision").GetInt32();
+    }
+
+    private static async Task AssertInvalid(HttpResponseMessage response, string message)
+    {
+        var error = await response.Error(HttpStatusCode.BadRequest);
+        Assert.Equal(("ValidationFailed", message), (error.GetProperty("code").GetString(), error.GetProperty("message").GetString()));
+    }
 
     private async Task<Chapter> Stored(Guid chapterId)
     {

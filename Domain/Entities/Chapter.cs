@@ -14,6 +14,17 @@ public class Chapter
     public int ChapterIndex { get; set; }
     public int? PublishedChapterSequence { get; set; } // NEW: For efficient querying
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// The version of the chapter's title and text (#75): 1 when created, one more with every save that changes the
+    /// title or the text, never with a change of status alone. An editor sends the revision its copy was loaded at
+    /// (baseRevision), and a save from an older copy is refused instead of overwriting newer text. Written only with
+    /// the chapter's text held (ChapterParagraphsRepository.BeginEditAsync), from the revision read there.
+    /// </summary>
+    public int Revision { get; set; } = 1;
+
+    /// <summary>When the chapter was last saved (UTC): created, or edited in any way, its status included (#75).</summary>
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     
     /// <summary>
     /// When the chapter first came out to readers (UTC): stamped the first time it is published and kept from then on,
@@ -26,16 +37,17 @@ public class Chapter
 
     /// <summary>
     /// When the draft publishes itself (UTC, #77), or null when it isn't scheduled. Only a draft has one: publishing the
-    /// chapter, by hand or on schedule, clears it, and an edit that doesn't send one keeps it.
-    /// <c>IChaptersRepository.UpdateChapter</c> never writes it from the copy it saves: only a change the save asks for,
-    /// and only while the chapter is a draft.
+    /// chapter, by hand or on schedule, clears it (<see cref="SetStatus"/>), and an edit that doesn't send one keeps it.
+    /// Set with the chapter held as for a save of its text (ChapterParagraphsRepository.BeginEditAsync), so a save and
+    /// the scheduled publish run one after the other.
     /// </summary>
     public DateTime? PublishAt { get; set; }
 
     /// <summary>
-    /// How many words the chapter's text has (#77), by <c>ChapterWords</c>'s rule (whitespace-separated runs of its
-    /// visible text with at least one letter or digit). Set when the chapter is created and whenever its text is
-    /// saved; null for a chapter from before word counts until the startup backfill counts it.
+    /// How many words the chapter's text has (#77), by <c>ChapterWords</c>'s rule (whitespace-separated runs of what
+    /// readers see, image captions included, with at least one letter or digit). Set when the chapter is created and
+    /// with every save of its text, in the same transaction as its paragraphs; null for a chapter from before word
+    /// counts until the startup backfill counts it.
     /// </summary>
     public int? WordsCount { get; set; }
 
@@ -51,6 +63,7 @@ public class Chapter
     /// <summary>
     /// Sets the chapter's <see cref="Status"/>. Publishing it stamps <see cref="PublishedAt"/> with
     /// <paramref name="now"/> if it has never been published; unpublishing and publishing again keep the first stamp.
+    /// Publishing also clears its schedule (<see cref="PublishAt"/>, #77): only a draft has one.
     /// </summary>
     public void SetStatus(string status, DateTime now)
     {
@@ -58,6 +71,7 @@ public class Chapter
         if (status == ChapterStatuses.Published)
         {
             PublishedAt ??= now;
+            PublishAt = null;
         }
     }
 

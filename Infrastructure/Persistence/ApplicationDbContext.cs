@@ -418,6 +418,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(c => c.ParagraphsCount)
                   .HasDefaultValue(0);
 
+            // The version of the chapter's title and text (#75); existing chapters start at 1.
+            entity.Property(c => c.Revision)
+                  .HasDefaultValue(1);
+
             entity.HasOne(c => c.Novel)
                   .WithMany(n => n.Chapters)
                   .HasForeignKey(c => c.NovelId)
@@ -464,6 +468,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(cp => cp.ContentType)
                   .HasMaxLength(20)
                   .HasDefaultValue("text");
+
+            // An image paragraph's caption, plain text (chapter format v1, #74); null otherwise.
+            entity.Property(cp => cp.Caption);
             
             entity.Property(cp => cp.CommentsCount)
                   .HasDefaultValue(0);

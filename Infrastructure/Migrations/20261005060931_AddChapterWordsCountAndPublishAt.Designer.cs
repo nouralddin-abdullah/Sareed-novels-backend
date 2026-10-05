@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261005043450_AddChapterWordsCountAndPublishAt")]
+    [Migration("20261005060931_AddChapterWordsCountAndPublishAt")]
     partial class AddChapterWordsCountAndPublishAt
     {
         /// <inheritdoc />
@@ -101,6 +101,11 @@ namespace Infrastructure.Migrations
                     b.Property<int?>("PublishedChapterSequence")
                         .HasColumnType("int");
 
+                    b.Property<int>("Revision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -121,6 +126,9 @@ namespace Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasDefaultValue(0);
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<int>("ViewsCount")
                         .HasColumnType("int");
@@ -156,6 +164,9 @@ namespace Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Caption")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<Guid>("ChapterId")
                         .HasColumnType("uniqueidentifier");
