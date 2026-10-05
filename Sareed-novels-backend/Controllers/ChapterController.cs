@@ -21,7 +21,10 @@ namespace Sareed_novels_backend.Controllers
         [Authorize]
         public async Task<IActionResult> CreateChapter([FromRoute] Guid novelId, CreateChapterRequest request)
         {
-            var command = new CreateChapterCommand(novelId, request.Status, request.Title, request.Content);
+            var command = new CreateChapterCommand(novelId, request.Status, request.Title, request.Content)
+            {
+                PublishAt = request.PublishAt
+            };
             var result = await mediator.Send(command);
             return Ok(result);
         }
@@ -39,8 +42,9 @@ namespace Sareed_novels_backend.Controllers
         }
         /// <summary>
         /// Saves the author's chapter: its title and text (chapter format v1, #74), its status, or its status alone (#75:
-        /// title and content left out together). With baseRevision, the chapter's revision the editor's copy was loaded
-        /// at, a title or text save from an older copy is refused, 409 ChapterChanged with the chapter's revision, and
+        /// title and content left out together); a draft's schedule (#77: publishAt, a time to come or null to cancel)
+        /// with any of these or alone. With baseRevision, the chapter's revision the editor's copy was loaded at, a
+        /// title or text save from an older copy is refused, 409 ChapterChanged with the chapter's revision, and
         /// nothing is saved. Answers { success, message, revision }. With ?dryRun=true it checks and matches everything
         /// a save would, saves nothing, and answers what the save would delete:
         /// { paragraphsRemoved, commentsDeleted, removed: [{ paragraphId, commentsCount }] }.
@@ -53,7 +57,9 @@ namespace Sareed_novels_backend.Controllers
             var command = new UpdateChapterCommand(chapterId, novelId, request.Title, request.Status, request.Content)
             {
                 BaseRevision = request.BaseRevision,
-                DryRun = dryRun
+                DryRun = dryRun,
+                SetsSchedule = request.PublishAtSent,
+                PublishAt = request.PublishAt
             };
             var result = await mediator.Send(command);
             if (dryRun)

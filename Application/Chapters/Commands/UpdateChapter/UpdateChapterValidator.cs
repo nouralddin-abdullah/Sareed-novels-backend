@@ -5,13 +5,13 @@ namespace Application.Chapters.Commands.UpdateChapter
 {
     public class UpdateChapterValidator : AbstractValidator<UpdateChapterRequest>
     {
-        /// <summary>A request with neither a status nor a title and text: nothing to save.</summary>
-        public const string StatusMissingMessage = "أرسل حالة الفصل، أو عنوانه ونصه";
+        /// <summary>A request with neither a status, a schedule (publishAt), nor a title and text: nothing to save.</summary>
+        public const string StatusMissingMessage = "أرسل حالة الفصل أو موعد نشره، أو عنوانه ونصه";
 
         public UpdateChapterValidator()
         {
-            // A change of status alone leaves the title and the text out together (#75); either one sent needs the
-            // other, as before, and both keep their limits.
+            // A change of status (#75) or of the schedule (#77, publishAt: a time or null), alone or together, leaves the
+            // title and the text out together; either one sent needs the other, as before, and both keep their limits.
             RuleFor(c => c.Title)
                 .NotNull()
                 .WithMessage(ChapterTextRules.TitleMissingMessage)
@@ -27,7 +27,7 @@ namespace Application.Chapters.Commands.UpdateChapter
             RuleFor(c => c.Status)
                 .NotNull()
                 .WithMessage(StatusMissingMessage)
-                .When(c => c.Title == null && c.Content == null);
+                .When(c => c.Title == null && c.Content == null && !c.PublishAtSent);
 
             RuleFor(c => c.Status)
                 .Must(status => ChapterStatuses.All.Contains(status))

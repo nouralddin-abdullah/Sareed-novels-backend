@@ -26,7 +26,10 @@ public class ChaptersDTO
     public bool IsLocked { get; set; } = false; // Is this chapter locked by privilege?
 }
 
-/// <summary>A chapter in the author's chapter list (GET /api/myworks/{workId}/chapters), with what an editor needs (#75).</summary>
+/// <summary>
+/// A chapter in its author's list (<c>GET /api/myworks/{workId}/chapters</c>): the novel's list item, and what only the
+/// author sees: what an editor needs (#75) and the writer extras (#77).
+/// </summary>
 public class ChaptersAuthorDTO : ChaptersDTO
 {
     /// <summary>The chapter's revision (#75): sent back as baseRevision when the editor saves this chapter.</summary>
@@ -34,6 +37,15 @@ public class ChaptersAuthorDTO : ChaptersDTO
 
     /// <summary>When the chapter was last saved, UTC with "Z": created, or edited in any way, its status included.</summary>
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// The chapter's words (#77, <c>ChapterWords</c>); null for a chapter from before word counts that the startup
+    /// backfill hasn't counted yet.
+    /// </summary>
+    public int? WordsCount { get; set; }
+
+    /// <summary>When the draft publishes itself (#77, UTC with "Z"); null when it isn't scheduled (always, once published).</summary>
+    public DateTime? PublishAt { get; set; }
 }
 
 public class ChapterSingleAuthorDTO
@@ -60,6 +72,13 @@ public class ChapterSingleAuthorDTO
 
     /// <summary>When the chapter was last saved, UTC with "Z": created, or edited in any way, its status included.</summary>
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>When the draft publishes itself (#77, UTC with "Z"); null when it isn't scheduled.</summary>
+    public DateTime? PublishAt { get; set; }
+
+    /// <summary>The chapter's words (#77, <see cref="ChaptersAuthorDTO.WordsCount"/>).</summary>
+    public int? WordsCount { get; set; }
+
     public List<ChapterParagraphDTO> Paragraphs { get; set; } = new();
 }
 

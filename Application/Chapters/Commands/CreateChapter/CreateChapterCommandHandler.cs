@@ -1,5 +1,6 @@
 ﻿using Application.Chapters.DTOS;
 using Application.Chapters.Paragraphs;
+using Application.Chapters.Scheduling;
 using Application.Services;
 using Application.Users;
 using Application.Users.Commands.FollowUser;
@@ -36,7 +37,11 @@ public class CreateChapterCommandHandler(
             throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         
         var now = time.GetUtcNow().UtcDateTime;
+        // A schedule (#77) is for a draft, at a time to come: refused before anything is stored.
+        if (ChapterSchedule.Refusal(request.PublishAt, request.Status, now) is { } refusal)
+            throw new BadRequestException(refusal.Message, refusal.Code);
         var chapter = mapper.Map<Chapter>(request);
+        chapter.PublishAt = ChapterSchedule.ToUtc(request.PublishAt);
         chapter.ChapterIndex = await chaptersRepository.GetNextChapterIndex(novel.Id);
         chapter.Id = Guid.NewGuid();
         chapter.Slug = Slugs.For(chapter.Id, request.Title);
@@ -46,13 +51,15 @@ public class CreateChapterCommandHandler(
         chapter.Revision = 1;
         chapter.SetStatus(request.Status, now);
         
-        // The text as chapter format v1 stores it (#74), one row per paragraph.
-        var paragraphs = ChapterFormat.Parse(request.Content)
+        // The text as chapter format v1 stores it (#74), one row per paragraph, and its words (#77).
+        var text = ChapterFormat.Parse(request.Content);
+        var paragraphs = text
             .Select((paragraph, index) => ParagraphRows.New(chapter.Id, paragraph, index, now))
             .ToList();
         
         chapter.Paragraphs = paragraphs;
         chapter.ParagraphsCount = paragraphs.Count;
+        chapter.WordsCount = ChapterWords.Count(text);
         
         var result = await chaptersRepository.CreateChapter(chapter);
         if (!result)

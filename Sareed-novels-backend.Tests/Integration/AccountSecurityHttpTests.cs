@@ -61,9 +61,14 @@ public sealed class SardApiFactory : WebApplicationFactory<Program>, IAsyncLifet
             services.RemoveAll<IObjectStorage>();
             services.AddSingleton<IObjectStorage>(Storage);
 
-            // Scheduled jobs aren't under test here.
-            foreach (var job in services.Where(d => d.ServiceType == typeof(IHostedService)
-                         && (d.ImplementationType == typeof(RankingRecalculationService) || d.ImplementationType == typeof(DailyPrivilegeUnlockService))).ToList())
+            // Scheduled jobs aren't under test here (scheduled chapters and the word count backfill have tests that run
+            // them, #77).
+            Type[] jobs =
+            [
+                typeof(RankingRecalculationService), typeof(DailyPrivilegeUnlockService),
+                typeof(ScheduledChapterPublishingService), typeof(ChapterWordsBackfillService)
+            ];
+            foreach (var job in services.Where(d => d.ServiceType == typeof(IHostedService) && jobs.Contains(d.ImplementationType)).ToList())
             {
                 services.Remove(job);
             }

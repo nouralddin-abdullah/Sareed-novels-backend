@@ -1,10 +1,11 @@
-using Application.Chapters.Commands.UpdateChapter;
+﻿using Application.Chapters.Commands.UpdateChapter;
 
 namespace Sareed_novels_backend.Tests.Unit;
 
 /// <summary>
-/// #75: a chapter's status can be changed alone, without its title and text; when either is sent both are needed and
-/// keep their limits (the text's counted as readers see it, #74).
+/// #75: a chapter's status can be changed alone, without its title and text; #77: so can its schedule (publishAt, a
+/// time or null), alone or with the status. When the title or the text is sent both are needed and keep their limits
+/// (the text's counted as readers see it, #74).
 /// </summary>
 public class UpdateChapterValidatorTests
 {
@@ -27,7 +28,33 @@ public class UpdateChapterValidatorTests
     public void Nothing_to_save_is_refused()
     {
         Assert.Equal([UpdateChapterValidator.StatusMissingMessage], Errors(null, null, null));
+        Assert.Equal([UpdateChapterValidator.StatusMissingMessage], Errors(null, null, null, baseRevision: 3));
+        Assert.Equal("أرسل حالة الفصل أو موعد نشره، أو عنوانه ونصه", UpdateChapterValidator.StatusMissingMessage);
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Draft")]
+    [InlineData("Published")]
+    public void A_schedule_set_or_cancelled_is_a_save_alone_or_with_a_status(string? status)
+    {
+        var at = new DateTime(2026, 10, 6, 8, 0, 0, DateTimeKind.Utc);
+        Assert.Empty(Scheduled(new UpdateChapterRequest { Status = status, PublishAt = at }));
+        Assert.Empty(Scheduled(new UpdateChapterRequest { Status = status, PublishAt = null }));
+        Assert.Empty(Scheduled(new UpdateChapterRequest { Status = status, PublishAt = at, BaseRevision = 3 }));
+    }
+
+    [Fact]
+    public void A_schedule_with_a_title_or_the_text_still_needs_both()
+    {
+        var at = new DateTime(2026, 10, 6, 8, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(["اكتب نص الفصل"], Scheduled(new UpdateChapterRequest { Title = "فصل", PublishAt = at }));
+        Assert.Equal(["اكتب عنوان الفصل"], Scheduled(new UpdateChapterRequest { Content = "<p>نص</p>", PublishAt = null }));
+        Assert.Empty(Scheduled(new UpdateChapterRequest { Title = "فصل", Content = "<p>نص</p>", PublishAt = at }));
+    }
+
+    private static List<string> Scheduled(UpdateChapterRequest request) =>
+        Validator.Validate(request).Errors.Select(e => e.ErrorMessage).ToList();
 
     [Fact]
     public void A_title_needs_the_text_and_the_text_a_title()

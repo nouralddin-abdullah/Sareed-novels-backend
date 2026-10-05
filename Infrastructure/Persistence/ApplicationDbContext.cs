@@ -441,6 +441,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.HasIndex(c => c.CreatedAt)
                   .HasDatabaseName("IX_Chapters_CreatedAt");
+
+            // Scheduled drafts only (#77): what is due, for the scheduler every minute and for each read of a novel or
+            // its chapters, is a seek here, nearly always finding nothing.
+            entity.HasIndex(c => c.PublishAt)
+                  .HasFilter("[PublishAt] IS NOT NULL")
+                  .IncludeProperties(c => new { c.NovelId, c.Status })
+                  .HasDatabaseName("IX_Chapters_PublishAt");
         });
 
         // NEW: ChapterParagraph configuration
