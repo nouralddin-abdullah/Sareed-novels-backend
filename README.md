@@ -1425,7 +1425,9 @@ no-break space. A `"` stays as it is.
   `https://host/a%20b.png`); any other picture (relative, `data:`, `javascript:`) is dropped. A picture among a
   paragraph's text becomes an `image` paragraph of its own, the text before and after it staying paragraphs of the
   `<p>`'s kind. In `<p data-kind="image">` with one picture, the rest of the `<p>` is the caption, stored as plain text
-  (its formatting dropped, on one line). A `<p data-kind="image">` without exactly one picture is read as text.
+  (its formatting dropped, on one line). A `<p data-kind="image">` without exactly one picture is read as text. The
+  editor uploads a new picture with [`POST /api/novel/{novelId}/chapter-images`](#chapter-pictures-uploading-one-86)
+  and puts the address it answers in `src`.
 - A break's content is ignored: it is always stored as `* * *`, so a reader that doesn't know kinds shows a line.
 - Spaces a reader can't see: runs of spaces and tabs become one space; spaces at a paragraph's start or end, or next to
   a `<br>`, go, and so do `<br>`s at a paragraph's start or end. A no-break space is kept.
@@ -1510,6 +1512,59 @@ no paragraphs (readers see none of that text); it doesn't change the column. Dro
 The migration `AddChapterParagraphCaption` adds the nullable column `ChapterParagraphs.Caption`. The cleaning is
 `Application/Chapters/Paragraphs/ChapterFormat.cs`; the wiki's articles (parked) are to go through it when they come
 back.
+
+### Chapter pictures: uploading one (#86)
+
+The app's chapter editor adds a picture (a map, character art, a letter) by uploading it, then saving its address in
+the chapter as format v1's `image` paragraph.
+
+`POST /api/novel/{novelId}/chapter-images`, signed in, by the novel's author (a draft novel's too): multipart
+form-data with one file in `image`, whose part declares `Content-Type` `image/jpeg`, `image/png` or `image/webp`
+(`image/jpg` is accepted too). 200:
+
+```json
+{ "url": "https://…/chapter-images/8bbea80e-6f4c-4ea5-9042-d0ee665e89a3/244e2a84059448e8914fcb2544fbd84a.webp" }
+```
+
+Put `url` as it is in the chapter's `<img src>` (`<p><img src="…"></p>`, or `<p data-kind="image"><img src="…">the
+caption</p>`) and save the chapter (`POST`/`PATCH .../chapter`): it is read back as an `image` paragraph whose
+`content` is exactly `url`. The upload saves nothing else; a picture no chapter uses just stays in storage.
+
+**What is stored.** The cover's checks and processing (the same code, `Infrastructure/Services/Images`), without the
+cover's 2:3 rules:
+
+- JPEG, PNG or WebP by content, whatever the name or declared type; at most 50 megapixels, and a PNG at most 16.8
+  (4096×4096: a PNG can't be decoded at a reduced size);
+- turned upright by its EXIF orientation, in sRGB;
+- the whole picture at its aspect ratio, its long side at most 2000 px: a larger one is reduced (4000×3000 becomes
+  2000×1500), a smaller one is kept at its size, never enlarged;
+- transparency flattened onto white, as covers are;
+- lossy WebP at quality 80, as covers are, with no metadata: no EXIF, GPS or ICC.
+
+Each upload is a new file, `chapter-images/{novelId}/{random}.webp` in the public bucket, never overwritten (cached as
+immutable). A novel's pictures share its folder, so they can be found by the novel; nothing removes them yet (deleting
+a novel is soft).
+
+**Refusals**, JSON `{ code, message }` with an Arabic message, in the order they are checked:
+
+| Status | `code` | When |
+|---|---|---|
+| 429 | `TooManyRequests` | more than 30 uploads in 10 minutes from one address, signed-out attempts included (`Retry-After` says when to try again) |
+| 401 | (no body) | signed out |
+| 415 | (no body) | not multipart form-data |
+| 400 | `ValidationFailed` | no file in `image`: «الصورة مطلوبة (JPEG أو PNG أو WebP، بحد أقصى 5 ميغابايت).»; a declared type other than those (or none), or a file over 5 MB (5,242,880 bytes): «يجب أن تكون الصورة JPEG أو PNG أو WebP لا يتجاوز حجمها 5 ميغابايت.» (the validation problem, with `errors`) |
+| 404 | `NovelNotFound` | no such novel, or a deleted one |
+| 403 | `NotOwner` | not the novel's author |
+| 400 | `cover_unsupported_format` | the bytes aren't a JPEG, PNG or WebP image (a GIF named `.png`, an empty file): «يجب أن تكون الصورة بصيغة JPEG أو PNG أو WebP.» |
+| 400 | `cover_unreadable` | a truncated or corrupt image |
+| 400 | `cover_too_many_pixels` | over the pixel limits above |
+| 400 | `UploadFailed` | it couldn't be processed or stored: «تعذّر رفع الصورة، حاول مرة أخرى.»; try again |
+
+The codes for the bytes are the cover's (`Application/Covers/CoverImageException.cs`), so one mapping serves the cover
+upload and this one; `cover_too_small` never comes (a picture has no minimum size), nor in practice
+`cover_file_too_large` (a file over 5 MB is `ValidationFailed` first). Their messages say «الصورة» where a cover's say
+«الغلاف». The limit of 30 per 10 minutes per address is new for this route (`RateLimitPolicies.Uploads`); covers,
+posts and profile pictures have none.
 
 ### Editing a chapter from two places: the revision, the dry run, and a status alone (#75)
 

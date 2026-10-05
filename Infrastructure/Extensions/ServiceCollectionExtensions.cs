@@ -19,6 +19,7 @@ using Microsoft.Extensions.Logging;
 using Infrastructure.BackgroundJobs;
 using Infrastructure.Services.Search;
 using Infrastructure.Services.Covers;
+using Infrastructure.Services.Images;
 using Infrastructure.PlayBilling;
 
 namespace Infrastructure.Extensions;
@@ -171,6 +172,9 @@ public static class ServiceCollectionExtensions
 
         // Novel covers: normalized to the 2:3 WebP standard on upload (Application.Covers.NovelCovers).
         services.AddScoped<INovelCoverService, NovelCoverService>();
+
+        // Chapter pictures (#86): the cover's pipeline, the whole picture at most 2000 px (Application.Chapters.ChapterImages).
+        services.AddScoped<IChapterImageService, ChapterImageService>();
 
         // Configure SMTP settings
         services.Configure<SmtpSettings>(
