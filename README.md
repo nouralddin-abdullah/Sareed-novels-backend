@@ -1583,6 +1583,88 @@ readers see: comments their authors deleted aren't counted, as the comment count
 The migration `AddChapterRevision` adds `Chapters.Revision` (1 for every existing chapter) and `Chapters.UpdatedAt`
 (set to when each was created).
 
+### Writer mode: notifications by type, and an author's earnings (#78)
+
+Two read routes for the app's writer mode. Both are for the signed-in member (401 without a token) and never take a
+user id.
+
+**Notifications of some types.** `GET /api/notifications` and `GET /api/notifications/unread-count` take an optional
+`types`: `NotificationType` names, comma-separated. «على رواياتي», what happens on her novels apart from the social
+notifications:
+
+```
+GET /api/notifications?types=CommentOnChapter,ReviewOnNovel,GiftReceived,PrivilegeSubscribed&pageNumber=1&pageSize=20
+GET /api/notifications/unread-count?types=CommentOnChapter,ReviewOnNovel,GiftReceived,PrivilegeSubscribed
+```
+
+- The names (each item's `type`): `NewFollower`, `CommentOnChapter`, `CommentOnPost`, `ReplyToComment`,
+  `NewChapterInLibrary`, `ReviewOnNovel`, `GiftReceived`, `PrivilegeSubscribed`, `LikeOnReview`, `LikeOnComment`,
+  `LikeOnPost`, `ReadingListFollowed`. They match whatever their letter case and the spaces around them; repeating the
+  parameter (`types=A&types=B`) works too.
+- **Unknown names are ignored**, so an app that knows a type this server doesn't still gets the others. A `types` that
+  names no known type, an empty one included (`types=`, `types=Foo`), filters nothing: every type, as without it.
+- It is applied in SQL, with `unreadOnly` and paging as before. With it, `totalCount` and `totalPages` count those types
+  only, and so does the list's `unreadCount`: the same number as `unread-count` with the same `types`. The count of
+  every type (the bell) is `unread-count` without `types`.
+- Pages are newest first, and notifications of the same instant follow their id, so paging never repeats or skips one.
+- Blocks are unchanged: a block stops a notification when it would be created (#52), so it is in no list, filtered or
+  not.
+
+**An author's earnings: `GET /api/wallet/earnings`.** What her novels earned her, in **points only**: no money, no
+withdrawable amount, nothing about payouts (store policy, the owner's decision).
+
+```json
+{
+  "totalEarned": 1050,
+  "pendingEarnings": 600,
+  "nextReleaseAt": "2026-11-02T18:40:12.5Z",
+  "byNovel": [
+    { "novelId": "6f0c2a…", "novelSlug": "6f0c2-رواية", "novelTitle": "رواية", "coverImageUrl": "https://…",
+      "gifts": 600, "privileges": 300, "reversed": 200, "total": 700, "supportersCount": 4 },
+    { "novelId": null, "novelSlug": null, "novelTitle": "أرباح بلا رواية محددة", "coverImageUrl": null,
+      "gifts": 350, "privileges": 0, "reversed": 0, "total": 350, "supportersCount": 0 }
+  ],
+  "byMonth": [
+    { "month": "2025-11", "gifts": 0, "privileges": 0, "reversed": 0, "total": 0 },
+    …
+    { "month": "2026-10", "gifts": 600, "privileges": 300, "reversed": 200, "total": 700 }
+  ]
+}
+```
+
+How each row of her ledger (`PointTransactions`) counts:
+
+| Her ledger row | Adds to | Its novel | Its month (UTC) |
+|---|---|---|---|
+| `GiftReceived` | `gifts` | the one the row records (`NovelId`) | its date |
+| `PrivilegeRevenue` | `privileges` | the one the row records | its date |
+| `EarningReversed`, negative: a refund took back an earning of hers | `reversed`, as a positive number | the novel of the earning it took back | its own date: the month it happened |
+| `EarningReversed`, positive: points given back to her because a buyer's refund took back an earning she had paid another author | nothing: her own payment back, not an earning | | |
+| anything else (spending, top-ups, Play packs and refunds, withdrawals) | nothing | | |
+
+- `total` = `gifts` + `privileges` − `reversed`. A novel's is never below zero (a refund takes back at most what is left
+  of an earning); a month's can be, when a refund took back earnings of the months before.
+- `totalEarned`, `pendingEarnings` and `nextReleaseAt` are `GET /api/wallet`'s, from the same code: all her earnings less
+  what was taken back, her earnings still on hold less what she spent or was taken back of them (spending comes out of
+  bought points, then held earnings, then released ones: "Wallet: what can be withdrawn" above), and when the next of
+  those is released (UTC; `null` when none is on hold). `totalEarned` is the sum of the `byNovel` totals.
+- `byNovel`: every novel she has earnings from, of all time, highest `total` first; equal totals by `novelId`, with the
+  entry without a novel after the novels. Drafts and deleted novels are in it with their title, slug and cover (a
+  deleted novel's page answers 404; `GET /api/myworks` lists the ones that still exist).
+- **The entry without a novel**: ledger rows written before #17 (2026-09-28) don't say which novel they were for. They
+  share one entry: `novelId`, `novelSlug` and `coverImageUrl` `null`, `novelTitle` «أرباح بلا رواية محددة», sorted like
+  the others.
+- `supportersCount`: how many members paid for the novel's earnings, by a gift or a subscription, each once, accounts
+  deleted since included. Each earning finds its payment by the link #22 added (2026-09-28): earlier ones count no one,
+  so the entry without a novel has 0.
+- `byMonth`: the last 12 calendar months in UTC, the current one included, **oldest first** (the current month last),
+  months without earnings as zeros; `month` is `yyyy-MM`. Over months that hold all her rows, the months add up to the
+  novels; older rows count in `byNovel` only.
+- Summed in SQL, in at most six queries whatever she has earned.
+
+**`GET /api/wallet`'s `totalEarned`** was always 0: it was read from a column nothing ever wrote. It is now the figure
+above. `totalRecharged`, `totalWithdrawn` and `totalSpent` are still read from columns nothing writes: don't show them.
+
 ### Writer extras: word counts and scheduled publishing (#77)
 
 **Word counts.** `wordsCount` (a number, or `null`) is in what only the author sees:

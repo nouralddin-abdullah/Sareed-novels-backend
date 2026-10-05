@@ -8,8 +8,10 @@ public class WalletProfile : Profile
 {
     public WalletProfile()
     {
-        // What is withdrawable comes from the wallet service (GetMyWalletQueryHandler).
+        // What is withdrawable and what was earned come from the wallet service (GetMyWalletQueryHandler). The wallet's
+        // TotalEarned column was never written (always 0); the ledger says what was earned (#78).
         CreateMap<UserWallet, WalletDto>()
+            .ForMember(dest => dest.TotalEarned, opt => opt.Ignore())
             .ForMember(dest => dest.Withdrawable, opt => opt.Ignore())
             .ForMember(dest => dest.PendingEarnings, opt => opt.Ignore())
             .ForMember(dest => dest.NextReleaseAt, opt => opt.Ignore());

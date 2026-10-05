@@ -362,6 +362,21 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
             .ToDictionaryAsync(n => n.Id, n => (n.Slug, n.Title));
     }
 
+    public async Task<Dictionary<Guid, NovelCard>> GetCardsIncludingDeletedAsync(IReadOnlyCollection<Guid> novelIds)
+    {
+        if (novelIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await dbContext.Novels
+            .IgnoreQueryFilters() // deleted novels too
+            .AsNoTracking()
+            .Where(n => novelIds.Contains(n.Id))
+            .Select(n => new NovelCard(n.Id, n.Slug, n.Title, n.CoverImageUrl))
+            .ToDictionaryAsync(n => n.Id);
+    }
+
     public async Task<List<Novel>> GetNovelsBySharedGenresAsync(
         List<int> genreIds,
         Guid excludeNovelId,

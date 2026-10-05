@@ -182,7 +182,8 @@ public class WalletService(
     {
         var pools = WalletPools.Fold(balance, ledger, now);
         var pendingWithdrawals = await withdrawalRepository.GetPendingPointsAsync(userId);
-        return WithdrawableBalance.From(balance, pools, pendingWithdrawals, HoldDays, now);
+        // What was earned comes from the same ledger read as what is pending, so the wallet's figures agree (#78).
+        return WithdrawableBalance.From(balance, pools, pendingWithdrawals, HoldDays, now, Earnings.Net(ledger));
     }
 
     /// <summary>
