@@ -1506,3 +1506,73 @@ no paragraphs (readers see none of that text); it doesn't change the column. Dro
 The migration `AddChapterParagraphCaption` adds the nullable column `ChapterParagraphs.Caption`. The cleaning is
 `Application/Chapters/Paragraphs/ChapterFormat.cs`; the wiki's articles (parked) are to go through it when they come
 back.
+
+### Editing a chapter from two places: the revision, the dry run, and a status alone (#75)
+
+The app's editor keeps a chapter on the phone while the author writes, offline too, and sends it when she saves; she may
+also edit it on the web or on another phone. A save from an older copy no longer overwrites newer text silently.
+
+**The revision.** A chapter has a `revision` (1 when created) and an `updatedAt` (UTC, with `Z`), in the author's
+chapter (`GET /api/myworks/{workId}/chapters/{chapterId}`), the author's chapter list
+(`GET /api/myworks/{workId}/chapters`) and the answer of `POST /api/novel/{novelId}/chapter`. Readers' payloads don't
+have them.
+
+- The revision goes up by one with every save that changes the chapter's title or text: words, a paragraph's kind or
+  formatting, the order. A change of status alone doesn't move it, and nor does a save that sends the title and text
+  exactly as they are (the web sends both with every save, also when only the status changed).
+- `updatedAt` is when the chapter was last saved: created, or any successful `PATCH`, a status change included.
+  Chapters from before this have revision 1 and `updatedAt` = when they were created.
+
+**Saving.** `PATCH /api/novel/{novelId}/chapter/{chapterId}` takes an optional `baseRevision`, the revision the editor's
+copy was loaded at:
+
+```json
+{ "title": "الفصل الأول", "content": "<p>…</p>", "status": "Published", "baseRevision": 7 }
+```
+
+- `baseRevision` given with a title or text, and not the chapter's revision (someone saved it since): **409**, and
+  nothing is saved, not even the status:
+
+  ```json
+  { "code": "ChapterChanged", "message": "حُفظ هذا الفصل من مكان آخر بعد أن فتحته. حمّل آخر نسخة منه قبل أن تحفظ.", "revision": 8 }
+  ```
+
+  Reload the chapter (its `revision` is the one in the answer), let the author merge, and save with the new one.
+- `baseRevision` left out: no check, as before, so the current web keeps working.
+- A success answers `{ "success": true, "message": "حُفظ الفصل", "revision": 8 }`, the revision after the save; keep it
+  as the copy's new `baseRevision`.
+- The check and the save are one step: saves of one chapter run one at a time (the format maintenance's too), each
+  reading the chapter inside, and the revision is written only over the one it read. Of two saves from the same
+  revision, one is saved and the other gets the 409.
+
+**A status alone.** `title` and `content` can be left out together to change only the status:
+`PATCH …/chapter/{chapterId}` with `{ "status": "Published" }` publishes the chapter (or `"Draft"` unpublishes it)
+without sending its text. It needs no `baseRevision` (one sent is not checked: it doesn't touch the text), and the
+revision stays. Sent, the title and the text are both needed, with their limits (50 characters; 100,000 visible
+characters, 400,000 as sent). Neither a status nor a title and text: 400 «أرسل حالة الفصل، أو عنوانه ونصه».
+
+**Know before saving what a save would delete.** `PATCH …/chapter/{chapterId}?dryRun=true`, with the body the save
+would send, runs everything the save runs (the checks above, the revision included, and the matching of paragraphs)
+and saves nothing:
+
+```json
+{ "paragraphsRemoved": 2, "commentsDeleted": 3,
+  "removed": [ { "paragraphId": "…", "commentsCount": 2 }, { "paragraphId": "…", "commentsCount": 1 } ] }
+```
+
+`removed` lists every paragraph the save would remove (its words changed or it was deleted), in the chapter's order,
+those without comments too. A paragraph's `commentsCount` is the comments on it with all the replies below them that
+readers see: comments their authors deleted aren't counted, as the comment counters don't count them (#66).
+`commentsDeleted` is their sum. Use it to warn before a save that deletes comments, e.g. «سيُحذف ٣ تعليقات لأنك غيّرت
+فقرات عليها تعليقات», and to point at those paragraphs.
+
+| HTTP | `code` | When |
+|---|---|---|
+| 200 | | saved (`{ success, message, revision }`), or the dry run's answer |
+| 400 | `ValidationFailed` | a rule above; the messages are the validators' |
+| 403 | `NotOwner` | not the novel's author |
+| 404 | `NovelNotFound`, `ChapterNotFound` | no such novel, or the chapter isn't one of its chapters |
+| 409 | `ChapterChanged` | `baseRevision` isn't the chapter's revision; `revision` is the one it has |
+
+The migration `AddChapterRevision` adds `Chapters.Revision` (1 for every existing chapter) and `Chapters.UpdatedAt`
+(set to when each was created).

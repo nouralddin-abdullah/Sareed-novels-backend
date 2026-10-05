@@ -39,6 +39,9 @@ public class ChapterTextEditTests(SqlServerDatabase database) : IClassFixture<Sq
         ParagraphRows.Store(paragraph, new FormattedParagraph("center", "أول", null));
         var added = ParagraphRows.New(chapter, new FormattedParagraph("text", "جديد", null), 1, DateTime.UtcNow);
         await first.SaveAsync([paragraph, added], []);
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+        Assert.False(second.IsCompleted);
+        await first.CommitAsync();
         await first.DisposeAsync();
 
         Assert.Same(second, await Task.WhenAny(second, Task.Delay(TimeSpan.FromSeconds(30))));

@@ -14,6 +14,17 @@ public class Chapter
     public int ChapterIndex { get; set; }
     public int? PublishedChapterSequence { get; set; } // NEW: For efficient querying
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// The version of the chapter's title and text (#75): 1 when created, one more with every save that changes the
+    /// title or the text, never with a change of status alone. An editor sends the revision its copy was loaded at
+    /// (baseRevision), and a save from an older copy is refused instead of overwriting newer text. Written only with
+    /// the chapter's text held (ChapterParagraphsRepository.BeginEditAsync), from the revision read there.
+    /// </summary>
+    public int Revision { get; set; } = 1;
+
+    /// <summary>When the chapter was last saved (UTC): created, or edited in any way, its status included (#75).</summary>
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     
     /// <summary>
     /// When the chapter first came out to readers (UTC): stamped the first time it is published and kept from then on,

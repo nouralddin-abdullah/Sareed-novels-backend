@@ -37,12 +37,29 @@ namespace Sareed_novels_backend.Controllers
             }
             return BadRequest(new ApiError("OperationFailed", "تعذّر حذف الفصل. حاول مرة أخرى."));
         }
+        /// <summary>
+        /// Saves the author's chapter: its title and text (chapter format v1, #74), its status, or its status alone (#75:
+        /// title and content left out together). With baseRevision, the chapter's revision the editor's copy was loaded
+        /// at, a title or text save from an older copy is refused, 409 ChapterChanged with the chapter's revision, and
+        /// nothing is saved. Answers { success, message, revision }. With ?dryRun=true it checks and matches everything
+        /// a save would, saves nothing, and answers what the save would delete:
+        /// { paragraphsRemoved, commentsDeleted, removed: [{ paragraphId, commentsCount }] }.
+        /// </summary>
         [HttpPatch("{chapterId}")]
         [Authorize]
-        public async Task<IActionResult> UpdateChapter([FromRoute] Guid novelId, [FromRoute] Guid chapterId, UpdateChapterRequest request)
+        public async Task<IActionResult> UpdateChapter([FromRoute] Guid novelId, [FromRoute] Guid chapterId, UpdateChapterRequest request,
+            [FromQuery] bool dryRun = false)
         {
-            var command = new UpdateChapterCommand(chapterId, novelId, request.Title, request.Status, request.Content);
+            var command = new UpdateChapterCommand(chapterId, novelId, request.Title, request.Status, request.Content)
+            {
+                BaseRevision = request.BaseRevision,
+                DryRun = dryRun
+            };
             var result = await mediator.Send(command);
+            if (dryRun)
+            {
+                return Ok(result.Preview);
+            }
             if (result.Success)
             {
                 return Ok(result);
