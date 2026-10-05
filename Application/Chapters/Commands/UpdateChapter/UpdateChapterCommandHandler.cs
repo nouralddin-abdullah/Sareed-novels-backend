@@ -2,7 +2,6 @@
 using Application.Chapters.Paragraphs;
 using Application.Services;
 using Application.Users;
-using Application.Users.Commands.FollowUser;
 using AutoMapper;
 using Domain.Constants;
 using Domain.Entities;
@@ -24,9 +23,9 @@ public class UpdateChapterCommandHandler(
     IMapper mapper,
     IChapterSequenceService sequenceService,
     IServiceProvider serviceProvider,
-    TimeProvider time) : IRequestHandler<UpdateChapterCommand, OperationResult>
+    TimeProvider time) : IRequestHandler<UpdateChapterCommand, UpdateChapterResult>
 {
-    public async Task<OperationResult> Handle(UpdateChapterCommand request, CancellationToken cancellationToken)
+    public async Task<UpdateChapterResult> Handle(UpdateChapterCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Updating chapter {ChapterId} of novel {NovelId}", request.ChapterId, request.NovelId);
         
@@ -38,24 +37,57 @@ public class UpdateChapterCommandHandler(
 
         // The chapter must belong to the novel the caller owns; otherwise any author could edit any chapter.
         if (chapter.NovelId != novel.Id) throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
-        
+
+        // The text as chapter format v1 stores it (#74), parsed before the chapter's text is held. A save with neither
+        // a title nor text changes the status alone (#75).
+        var edited = string.IsNullOrEmpty(request.Content) ? null : ChapterFormat.Parse(request.Content);
+        var savesText = request.Title != null || edited != null;
+
+        // One save of a chapter at a time, from any device (and the format maintenance): the chapter is read again
+        // inside the edit, so the revision checked here is the one this save writes over (#75).
+        await using var edit = await paragraphsRepository.BeginEditAsync(chapter.Id);
+        if (!await chaptersRepository.ReloadAsync(chapter))
+        {
+            throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
+        }
+
+        // A copy older than the chapter mustn't overwrite newer text (#75): the editor reloads it first. Nothing is saved.
+        if (savesText && request.BaseRevision is { } baseRevision && baseRevision != chapter.Revision)
+        {
+            throw new ChapterChangedException(chapter.Revision);
+        }
+
+        var match = edited is null ? null : ParagraphMatcher.Match(edit.Paragraphs.Select(ParagraphRows.Read).ToList(), edited);
+        if (request.DryRun)
+        {
+            // Everything checked and matched; disposing the edit lets it go with nothing written.
+            return new UpdateChapterResult
+            {
+                Success = true, Message = "لم يُحفظ شيء", Revision = chapter.Revision,
+                Preview = await Preview(edit, match)
+            };
+        }
+
         // Track if status is changing to/from Published
         var oldStatus = chapter.Status;
         var statusChanging = !string.IsNullOrEmpty(request.Status) && request.Status != oldStatus;
         var needsSequenceRecalculation = statusChanging && 
             (oldStatus == "Published" || request.Status == "Published");
+        var now = time.GetUtcNow().UtcDateTime;
         
-        // Paragraphs first, while the chapter entity is unchanged: the paragraph transaction then holds the chapter
-        // row only for its counter update at the end, not from its first write, while readers may be commenting.
-        if (!string.IsNullOrEmpty(request.Content))
+        // Paragraphs first, while the chapter entity is unchanged: the edit then holds the chapter row only from its
+        // updates at the end, not from its first write, while readers may be commenting.
+        var textChanged = false;
+        if (edited != null)
         {
-            chapter.ParagraphsCount = await SaveParagraphs(chapter.Id, request.Content);
+            (chapter.ParagraphsCount, textChanged) = await SaveParagraphs(edit, chapter.Id, edited, match!, now);
             // The text is its paragraphs now; a copy left in the legacy Chapters.Content column is stale.
             chapter.Content = null;
         }
         
         if (request.Title != null)
         {
+            textChanged |= request.Title != chapter.Title;
             // The editor resends the unchanged title on every save; only a real rename may change the slug.
             var newSlug = Slugs.For(chapter.Id, request.Title);
             if (newSlug != Slugs.For(chapter.Id, chapter.Title))
@@ -70,13 +102,33 @@ public class UpdateChapterCommandHandler(
         mapper.Map(request, chapter);
         if (request.Status != null)
         {
-            chapter.SetStatus(request.Status, time.GetUtcNow().UtcDateTime);
+            chapter.SetStatus(request.Status, now);
         }
+
+        // The revision counts the saves that change the title or the text; a change of status alone, or the title and
+        // text sent back as they are, leaves it (#75). Saved in the edit, over the revision read in it.
+        if (textChanged)
+        {
+            chapter.Revision++;
+        }
+
+        chapter.UpdatedAt = now;
         
         var saved = await chaptersRepository.UpdateChapter(chapter);
+        if (!saved.Saved)
+        {
+            return new UpdateChapterResult
+            {
+                Success = false,
+                Code = "OperationFailed",
+                Message = "تعذّر حفظ الفصل. حاول مرة أخرى."
+            };
+        }
+
+        await edit.CommitAsync();
 
         // Recalculate sequences if status changed to/from Published
-        if (saved.Saved && needsSequenceRecalculation)
+        if (needsSequenceRecalculation)
         {
             logger.LogInformation(
                 "Chapter {ChapterId} status changed from {OldStatus} to {NewStatus}, triggering sequence recalculation",
@@ -106,20 +158,27 @@ public class UpdateChapterCommandHandler(
             }
         }
 
-        if (saved.Saved)
+        return new UpdateChapterResult
         {
-            return new OperationResult
-            {
-                Success = true,
-                Message = "حُفظ الفصل"
-            };
-        }
-        
-        return new OperationResult
+            Success = true,
+            Message = "حُفظ الفصل",
+            Revision = chapter.Revision
+        };
+    }
+
+    /// <summary>
+    /// What saving the match would delete (#75, a dry run): the saved paragraphs it removes, in order, with the comments
+    /// that would go with each.
+    /// </summary>
+    private static async Task<ChapterSavePreview> Preview(IChapterTextEdit edit, ParagraphMatch? match)
+    {
+        var removed = match?.RemovedSaved.Select(i => edit.Paragraphs[i]).ToList() ?? [];
+        var comments = await edit.CountCommentsToDeleteAsync(removed.Select(p => p.Id).ToList());
+        return new ChapterSavePreview
         {
-            Success = false,
-            Code = "OperationFailed",
-            Message = "تعذّر حفظ الفصل. حاول مرة أخرى."
+            ParagraphsRemoved = removed.Count,
+            CommentsDeleted = comments.Values.Sum(),
+            Removed = removed.Select(p => new RemovedParagraphPreview { ParagraphId = p.Id, CommentsCount = comments[p.Id] }).ToList()
         };
     }
     
@@ -162,21 +221,18 @@ public class UpdateChapterCommandHandler(
     }
     
     /// <summary>
-    /// Replaces the chapter's paragraphs with the edited content, in chapter format v1 (#74), and returns how many
-    /// there are now. A paragraph whose words are unchanged (<see cref="FormattedParagraph.MatchKey"/>) keeps its id and
-    /// its comments, wherever it moved and whatever its kind or formatting, which are updated; a changed or deleted
-    /// paragraph goes, and its comments with it.
+    /// Replaces the chapter's paragraphs with the edited ones, in chapter format v1 (#74), as <paramref name="match"/>
+    /// paired them, and returns how many there are now and whether anything changed. A paragraph whose words are
+    /// unchanged (<see cref="FormattedParagraph.MatchKey"/>) keeps its id and its comments, wherever it moved and
+    /// whatever its kind or formatting, which are updated; a changed or deleted paragraph goes, and its comments with it.
     /// </summary>
-    private async Task<int> SaveParagraphs(Guid chapterId, string content)
+    private async Task<(int Count, bool Changed)> SaveParagraphs(
+        IChapterTextEdit edit, Guid chapterId, IReadOnlyList<FormattedParagraph> edited, ParagraphMatch match, DateTime now)
     {
         var stopwatch = Stopwatch.StartNew();
-        var edited = ChapterFormat.Parse(content);
-        await using var edit = await paragraphsRepository.BeginEditAsync(chapterId);
         var saved = edit.Paragraphs;
-        var match = ParagraphMatcher.Match(saved.Select(ParagraphRows.Read).ToList(), edited);
-
-        var now = DateTime.UtcNow;
         var reformatted = 0;
+        var reordered = false;
         var paragraphs = new List<ChapterParagraph>(edited.Count);
         for (var index = 0; index < edited.Count; index++)
         {
@@ -199,6 +255,7 @@ public class UpdateChapterCommandHandler(
             if (paragraph.OrderIndex != index)
             {
                 paragraph.OrderIndex = index;
+                reordered = true;
                 changed = true;
             }
 
@@ -220,6 +277,6 @@ public class UpdateChapterCommandHandler(
             chapterId, match.Kept, match.Moved, match.Created, match.Removed, reformatted,
             deleted.Comments, deleted.Visible, stopwatch.ElapsedMilliseconds);
 
-        return paragraphs.Count;
+        return (paragraphs.Count, match.Created > 0 || match.Removed > 0 || reformatted > 0 || reordered);
     }
 }

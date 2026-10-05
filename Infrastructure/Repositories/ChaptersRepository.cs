@@ -1,5 +1,6 @@
 ﻿using Domain.Constants;
 using Domain.Entities;
+using Domain.Exceptions;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -165,6 +166,14 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         }
     }
 
+    public async Task<bool> ReloadAsync(Chapter chapter)
+    {
+        var entry = dbContext.Entry(chapter);
+        await entry.ReloadAsync();
+        // A chapter deleted since it was loaded is detached by the reload.
+        return entry.State != EntityState.Detached;
+    }
+
     public async Task<ChapterSave> UpdateChapter(Chapter chapter)
     {
         var entry = dbContext.Chapters.Update(chapter);
@@ -183,15 +192,35 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
         var publishedAt = entry.Property(c => c.PublishedAt);
         var cameOutAt = chapter.Status == ChapterStatuses.Published ? publishedAt.CurrentValue : null;
         publishedAt.IsModified = false;
+        // The revision moves below, only from the revision this copy was loaded at (#75). (Not modified puts the loaded
+        // revision back, so the one the edit gave it is taken first.)
+        var revision = entry.Property(c => c.Revision);
+        var (loadedRevision, newRevision) = (revision.OriginalValue, revision.CurrentValue);
+        revision.IsModified = false;
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        // Part of an edit of the chapter's text, it commits with the edit; otherwise in a transaction of its own.
+        await using var ownTransaction = dbContext.Database.CurrentTransaction is null
+            ? await dbContext.Database.BeginTransactionAsync()
+            : null;
+        if (newRevision != loadedRevision
+            && await dbContext.Chapters
+                .Where(c => c.Id == chapter.Id && c.Revision == loadedRevision)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.Revision, newRevision)) == 0)
+        {
+            var stored = await dbContext.Chapters.Where(c => c.Id == chapter.Id).Select(c => c.Revision).SingleAsync();
+            throw new ChapterChangedException(stored);
+        }
+
         var saved = await dbContext.SaveChangesAsync() > 0;
         var cameOut = saved
             && cameOutAt is { } at
             && await dbContext.Chapters
                 .Where(c => c.Id == chapter.Id && c.PublishedAt == null)
                 .ExecuteUpdateAsync(s => s.SetProperty(c => c.PublishedAt, at)) > 0;
-        await transaction.CommitAsync();
+        if (ownTransaction != null)
+        {
+            await ownTransaction.CommitAsync();
+        }
 
         if (cameOut)
         {
@@ -199,6 +228,10 @@ public class ChaptersRepository(ApplicationDbContext dbContext) : IChaptersRepos
             publishedAt.OriginalValue = cameOutAt;
             publishedAt.CurrentValue = cameOutAt;
         }
+
+        // Stored (or unchanged): the tracked chapter has it too.
+        revision.OriginalValue = newRevision;
+        revision.CurrentValue = newRevision;
         return new ChapterSave(saved, cameOut);
     }
 }

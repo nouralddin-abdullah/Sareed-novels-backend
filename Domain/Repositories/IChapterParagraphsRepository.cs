@@ -10,8 +10,9 @@ public interface IChapterParagraphsRepository
     /// <summary>
     /// Starts an edit of a chapter's text (the author's save, the format maintenance): a transaction that holds the
     /// chapter's text for this edit alone, so another edit of the same chapter waits until this one ends, with the
-    /// chapter's paragraphs read inside it (<see cref="IChapterTextEdit.Paragraphs"/>). Nothing is written until
-    /// <see cref="IChapterTextEdit.SaveAsync"/>; disposing the edit without saving rolls it back.
+    /// chapter's paragraphs read inside it (<see cref="IChapterTextEdit.Paragraphs"/>). What the edit writes is kept
+    /// only once <see cref="IChapterTextEdit.CommitAsync"/> commits it; disposing the edit without committing rolls it
+    /// all back. The chapter's own row may be saved in it too (IChaptersRepository.UpdateChapter joins it).
     /// </summary>
     Task<IChapterTextEdit> BeginEditAsync(Guid chapterId);
 
@@ -35,13 +36,23 @@ public interface IChapterTextEdit : IAsyncDisposable
     Task<HashSet<Guid>> GetCommentedAsync(IReadOnlyCollection<Guid> paragraphIds);
 
     /// <summary>
-    /// Saves the edit and commits it: <paramref name="paragraphs"/> is the chapter after the edit, paragraphs it keeps
-    /// (from <see cref="Paragraphs"/>, with content and order updated in place) and new ones; <paramref name="removed"/>
-    /// are paragraphs it no longer has. Removed paragraphs go with their comments, those comments' replies, likes and
-    /// notifications; the chapter's and the comment authors' comment counters drop to match, and the chapter's
-    /// ParagraphsCount becomes the new count.
+    /// Writes the edit (kept once <see cref="CommitAsync"/> commits it): <paramref name="paragraphs"/> is the chapter
+    /// after the edit, paragraphs it keeps (from <see cref="Paragraphs"/>, with content and order updated in place) and
+    /// new ones; <paramref name="removed"/> are paragraphs it no longer has. Removed paragraphs go with their comments,
+    /// those comments' replies, likes and notifications; the chapter's and the comment authors' comment counters drop
+    /// to match, and the chapter's ParagraphsCount becomes the new count.
     /// </summary>
     Task<RemovedParagraphComments> SaveAsync(IReadOnlyList<ChapterParagraph> paragraphs, IReadOnlyList<ChapterParagraph> removed);
+
+    /// <summary>
+    /// The comments that removing these paragraphs would delete (<see cref="SaveAsync"/>), by paragraph: each one's
+    /// comments with every reply below them, counted as the comment counters count (#66), so without those their
+    /// authors deleted. Every paragraph asked about is in the answer, 0 when nothing is on it.
+    /// </summary>
+    Task<Dictionary<Guid, int>> CountCommentsToDeleteAsync(IReadOnlyCollection<Guid> paragraphIds);
+
+    /// <summary>Commits what the edit wrote, the chapter's row included, and lets the chapter's text go.</summary>
+    Task CommitAsync();
 }
 
 /// <summary>

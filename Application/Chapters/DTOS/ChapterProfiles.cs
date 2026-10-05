@@ -22,8 +22,13 @@ public class ChapterProfiles : Profile
         // When a chapter came out is sent as UTC with "Z" (#39): SQL Server gives dates back without a kind.
         CreateMap<Chapter, ChaptersDTO>()
             .ForMember(dest => dest.PublishedAt, opt => opt.MapFrom(src => AsUtc(src.PublishedAt)));
+        // When it was last saved too (#75), also sent with "Z".
+        CreateMap<Chapter, ChaptersAuthorDTO>()
+            .IncludeBase<Chapter, ChaptersDTO>()
+            .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(src => DateTime.SpecifyKind(src.UpdatedAt, DateTimeKind.Utc)));
         CreateMap<Chapter, ChapterSingleAuthorDTO>()
-            .ForMember(dest => dest.PublishedAt, opt => opt.MapFrom(src => AsUtc(src.PublishedAt)));
+            .ForMember(dest => dest.PublishedAt, opt => opt.MapFrom(src => AsUtc(src.PublishedAt)))
+            .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(src => DateTime.SpecifyKind(src.UpdatedAt, DateTimeKind.Utc)));
         CreateMap<Chapter, ChapterSingleReaderDTO>()
             .ForMember(dest => dest.Author, opt => opt.MapFrom(src => src.Novel.Owner))
             .ForMember(dest => dest.PublishedAt, opt => opt.MapFrom(src => AsUtc(src.PublishedAt)));

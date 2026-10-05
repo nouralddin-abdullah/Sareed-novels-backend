@@ -40,8 +40,10 @@ public class CreateChapterCommandHandler(
         chapter.ChapterIndex = await chaptersRepository.GetNextChapterIndex(novel.Id);
         chapter.Id = Guid.NewGuid();
         chapter.Slug = Slugs.For(chapter.Id, request.Title);
-        // Created now; created published, it also comes out now (#33).
+        // Created now; created published, it also comes out now (#33). Its first revision (#75).
         chapter.CreatedAt = now;
+        chapter.UpdatedAt = now;
+        chapter.Revision = 1;
         chapter.SetStatus(request.Status, now);
         
         // The text as chapter format v1 stores it (#74), one row per paragraph.

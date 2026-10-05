@@ -8,13 +8,20 @@ public interface IChaptersRepository
     Task<Chapter?> GetChapterById(Guid chapterId);
     Task<Chapter?> GetChapterBySlug(string slug);
     /// <summary>
-    /// Saves the author's edit of a chapter loaded with <see cref="GetChapterById"/>, in one transaction. When the
-    /// chapter came out (<see cref="Chapter.PublishedAt"/>) is stored once, and never from the loaded copy: this save
-    /// stores it only while the chapter has none, so a save made from an older copy can neither erase nor move it, and
-    /// of two saves that publish a new chapter at once, only one is its first publish. The comment and view counters
-    /// aren't written either; they move with their own atomic updates.
+    /// Saves the author's edit of a chapter loaded with <see cref="GetChapterById"/>, in one transaction: the edit of the
+    /// chapter's text it is part of (<see cref="IChapterParagraphsRepository.BeginEditAsync"/>, committed with it), or
+    /// one of its own. When the chapter came out (<see cref="Chapter.PublishedAt"/>) is stored once, and never from the
+    /// loaded copy: this save stores it only while the chapter has none, so a save made from an older copy can neither
+    /// erase nor move it, and of two saves that publish a new chapter at once, only one is its first publish. The
+    /// comment and view counters and the paragraph count aren't written either; they move with their own atomic
+    /// updates. <see cref="Chapter.Revision"/> is written only when the edit moved it, and only over the revision it
+    /// was loaded at (#75): if the stored one isn't that any more, nothing is saved and
+    /// <see cref="Exceptions.ChapterChangedException"/> is thrown.
     /// </summary>
     Task<ChapterSave> UpdateChapter(Chapter chapter);
+
+    /// <summary>Reads the chapter again into the tracked <paramref name="chapter"/>, as it is now; false when it is gone.</summary>
+    Task<bool> ReloadAsync(Chapter chapter);
     Task<int> GetNextChapterIndex(Guid novelId);
 
     /// <summary>Up to <paramref name="take"/> chapter ids after <paramref name="after"/> (all chapters, in id order).</summary>
