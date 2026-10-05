@@ -17,7 +17,7 @@ public class EarningsHoldRulesTests
     private static WithdrawableBalance Wallet(decimal balance, decimal released = 0, decimal pendingWithdrawals = 0,
         decimal pendingEarnings = 0, DateTime? nextReleaseAt = null, int holdDays = 30, decimal deficit = 0) =>
         new(balance, Math.Max(0, balance - released - pendingEarnings), released, pendingEarnings, nextReleaseAt, deficit,
-            pendingWithdrawals, holdDays, Now);
+            pendingWithdrawals, holdDays, Now, TotalEarned: released + pendingEarnings);
 
     // ===== Rule 3: what is withdrawable =====
 
@@ -76,16 +76,18 @@ public class EarningsHoldRulesTests
     [Fact]
     public void The_record_takes_its_amounts_from_the_pools()
     {
-        var pools = WalletPools.Fold(1800,
+        LedgerEntry[] ledger =
         [
-            new LedgerEntry(Guid.NewGuid(), TransactionType.GiftReceived, 1000, 0, 1000, Now.AddDays(-40), Now.AddDays(-10)),
-            new LedgerEntry(Guid.NewGuid(), TransactionType.GiftReceived, 800, 1000, 1800, Now.AddDays(-2), Now.AddDays(28))
-        ], Now);
+            new(Guid.NewGuid(), TransactionType.GiftReceived, 1000, 0, 1000, Now.AddDays(-40), Now.AddDays(-10)),
+            new(Guid.NewGuid(), TransactionType.GiftReceived, 800, 1000, 1800, Now.AddDays(-2), Now.AddDays(28))
+        ];
+        var pools = WalletPools.Fold(1800, ledger, Now);
 
-        var wallet = WithdrawableBalance.From(1800, pools, 300, 30, Now);
+        var wallet = WithdrawableBalance.From(1800, pools, 300, 30, Now, Earnings.Net(ledger));
 
         Assert.Equal((1800m, 0m, 1000m, 800m, 0m, 300m), (wallet.Balance, wallet.Bought, wallet.Released, wallet.PendingEarnings,
             wallet.Deficit, wallet.PendingWithdrawals));
+        Assert.Equal(1800m, wallet.TotalEarned);
         Assert.Equal(Now.AddDays(28), wallet.NextReleaseAt);
         Assert.Equal((1000m, 700m), (wallet.Payable, wallet.Withdrawable));
     }

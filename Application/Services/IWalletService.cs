@@ -22,6 +22,8 @@ public sealed record TransactionDetails(Guid? NovelId = null, Guid? GiftId = nul
 /// from the balance until approval.</param>
 /// <param name="HoldDays">The hold (Wallet:EarningsHoldDays).</param>
 /// <param name="AsOf">The moment this was computed (UTC).</param>
+/// <param name="TotalEarned">What the user's earnings came to in all, less what refunds took back of them
+/// (<see cref="Earnings.Net"/>, #78): totalEarned on GET /api/wallet and GET /api/wallet/earnings.</param>
 public sealed record WithdrawableBalance(
     decimal Balance,
     decimal Bought,
@@ -31,7 +33,8 @@ public sealed record WithdrawableBalance(
     decimal Deficit,
     decimal PendingWithdrawals,
     int HoldDays,
-    DateTime AsOf)
+    DateTime AsOf,
+    decimal TotalEarned)
 {
     /// <summary>
     /// What approving a withdrawal can pay out now: the released earnings, never more than the balance, never below 0.
@@ -46,9 +49,10 @@ public sealed record WithdrawableBalance(
     /// </summary>
     public decimal Withdrawable => Math.Max(0, Payable - PendingWithdrawals);
 
-    public static WithdrawableBalance From(decimal balance, WalletPools pools, decimal pendingWithdrawals, int holdDays, DateTime asOf) =>
+    public static WithdrawableBalance From(decimal balance, WalletPools pools, decimal pendingWithdrawals, int holdDays, DateTime asOf,
+        decimal totalEarned) =>
         new(balance, pools.Bought, pools.Released, pools.PendingEarnings, pools.NextReleaseAt, pools.Deficit, pendingWithdrawals,
-            holdDays, asOf);
+            holdDays, asOf, totalEarned);
 }
 
 /// <summary>What a Google Play refund did (#22 rule 4, #27).</summary>
@@ -100,8 +104,9 @@ public interface IWalletService
         TransactionDetails? details = null);
 
     /// <summary>
-    /// What the user can withdraw now, and their earnings still on hold (#22, #27), without locks: for showing. A change
-    /// committed while it reads counts as if it came before the ledger, which can only lower what it shows.
+    /// What the user can withdraw now, their earnings still on hold (#22, #27) and what they earned in all (#78), without
+    /// locks: for showing (GET /api/wallet and GET /api/wallet/earnings). A change committed while it reads counts as if it
+    /// came before the ledger, which can only lower what it shows.
     /// </summary>
     Task<WithdrawableBalance> GetWithdrawableAsync(string userId);
 

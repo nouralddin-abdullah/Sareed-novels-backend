@@ -7,6 +7,9 @@ public class UserWallet
     public User User { get; set; } = default!;
     
     public decimal CurrentBalance { get; set; } = 0;
+
+    // The four totals below have never been written by any code (always 0 on rows the API made). The ledger
+    // (PointTransactions) is the record: GET /api/wallet's totalEarned comes from it (#78), not from TotalEarned.
     public decimal TotalRecharged { get; set; } = 0;
     public decimal TotalWithdrawn { get; set; } = 0;
     public decimal TotalSpent { get; set; } = 0;
