@@ -113,6 +113,7 @@ public class CleanChapterFormatCommandHandler(
         {
             var (kept, removed) = plan.Apply();
             await edit.SaveAsync(kept, removed);
+            await edit.CommitAsync();
         }
 
         return plan;

@@ -26,6 +26,16 @@ public class ChaptersDTO
     public bool IsLocked { get; set; } = false; // Is this chapter locked by privilege?
 }
 
+/// <summary>A chapter in the author's chapter list (GET /api/myworks/{workId}/chapters), with what an editor needs (#75).</summary>
+public class ChaptersAuthorDTO : ChaptersDTO
+{
+    /// <summary>The chapter's revision (#75): sent back as baseRevision when the editor saves this chapter.</summary>
+    public int Revision { get; set; }
+
+    /// <summary>When the chapter was last saved, UTC with "Z": created, or edited in any way, its status included.</summary>
+    public DateTime UpdatedAt { get; set; }
+}
+
 public class ChapterSingleAuthorDTO
 {
     public Guid Id { get; set; }
@@ -41,6 +51,15 @@ public class ChapterSingleAuthorDTO
     /// when it was written, which for a draft published later is earlier.
     /// </summary>
     public DateTime? PublishedAt { get; set; }
+
+    /// <summary>
+    /// The chapter's revision (#75): 1 when created, one more with each save that changes its title or text. The editor
+    /// sends it back as baseRevision, and a save from an older copy is refused (409 ChapterChanged).
+    /// </summary>
+    public int Revision { get; set; }
+
+    /// <summary>When the chapter was last saved, UTC with "Z": created, or edited in any way, its status included.</summary>
+    public DateTime UpdatedAt { get; set; }
     public List<ChapterParagraphDTO> Paragraphs { get; set; } = new();
 }
 

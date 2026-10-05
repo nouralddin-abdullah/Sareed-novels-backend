@@ -112,13 +112,26 @@ internal static class Seed
 
     /// <summary>
     /// Inserts <paramref name="chapters"/> with plain SQL, naming only columns that predate <c>AddChapterPublishedAt</c>
-    /// (so without <see cref="Chapter.PublishedAt"/>): for data-fix tests that seed a database migrated to an older
-    /// point, like <see cref="InsertUserRowAsync"/>.
+    /// (so without <see cref="Chapter.PublishedAt"/>, unless <paramref name="withPublishedAt"/>, for a point after it):
+    /// for data-fix tests that seed a database migrated to an older point, like <see cref="InsertUserRowAsync"/>. Columns
+    /// added since (the revision, #75) are left to their defaults.
     /// </summary>
-    public static async Task InsertChapterRowsAsync(ApplicationDbContext db, IEnumerable<Chapter> chapters)
+    public static async Task InsertChapterRowsAsync(ApplicationDbContext db, IEnumerable<Chapter> chapters, bool withPublishedAt = false)
     {
         foreach (var c in chapters)
         {
+            if (withPublishedAt)
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO Chapters (Id, NovelId, Title, Slug, Content, Status, ChapterIndex, PublishedChapterSequence,
+                        CreatedAt, PublishedAt, CommentsCount, TotalCommentsCount, ParagraphsCount, ViewsCount)
+                    VALUES ({c.Id}, {c.NovelId}, {c.Title}, {c.Slug}, {c.Content}, {c.Status}, {c.ChapterIndex},
+                        {c.PublishedChapterSequence}, {c.CreatedAt}, {c.PublishedAt}, {c.CommentsCount},
+                        {c.TotalCommentsCount}, {c.ParagraphsCount}, {c.ViewsCount})
+                    """);
+                continue;
+            }
+
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO Chapters (Id, NovelId, Title, Slug, Content, Status, ChapterIndex, PublishedChapterSequence,
                     CreatedAt, CommentsCount, TotalCommentsCount, ParagraphsCount, ViewsCount)

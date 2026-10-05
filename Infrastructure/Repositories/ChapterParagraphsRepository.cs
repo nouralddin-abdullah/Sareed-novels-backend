@@ -119,7 +119,7 @@ public class ChapterParagraphsRepository(ApplicationDbContext dbContext) : IChap
         ApplicationDbContext db, IDbContextTransaction transaction, Guid chapterId, List<ChapterParagraph> paragraphs)
         : IChapterTextEdit
     {
-        private bool saved;
+        private bool committed;
 
         public IReadOnlyList<ChapterParagraph> Paragraphs => paragraphs;
 
@@ -129,6 +129,8 @@ public class ChapterParagraphsRepository(ApplicationDbContext dbContext) : IChap
         public async Task<RemovedParagraphComments> SaveAsync(
             IReadOnlyList<ChapterParagraph> edited, IReadOnlyList<ChapterParagraph> removed)
         {
+            ObjectDisposedException.ThrowIf(committed, this);
+
             // Kept paragraphs are the tracked rows the caller changed in place, so only the columns the edit changed are
             // written; CommentsCount never is, since it moves with atomic SQL.
             foreach (var paragraph in edited)
@@ -165,15 +167,51 @@ public class ChapterParagraphsRepository(ApplicationDbContext dbContext) : IChap
             await db.Chapters
                 .Where(c => c.Id == chapterId)
                 .ExecuteUpdateAsync(s => s.SetProperty(c => c.ParagraphsCount, edited.Count));
-
-            await transaction.CommitAsync();
-            saved = true;
             return deleted;
+        }
+
+        public async Task<Dictionary<Guid, int>> CountCommentsToDeleteAsync(IReadOnlyCollection<Guid> paragraphIds)
+        {
+            var counts = paragraphIds.Distinct().ToDictionary(id => id, _ => 0);
+            if (counts.Count == 0)
+            {
+                return counts;
+            }
+
+            var parameters = counts.Keys.Select((id, i) => new SqlParameter($"@p{i}", id)).ToArray();
+            // The comments SocialCounters.DeleteCommentsOnRemovedParagraphs deletes with these paragraphs: those on them
+            // and every reply below, each counted once, for the paragraph it hangs from; visible ones only (#66).
+            // Built from constant parts: the ids are only ever parameters.
+            var sql = $"""
+                WITH tree AS (
+                    SELECT c.Id, c.ParagraphId AS Root FROM Comments c
+                    WHERE c.ParagraphId IN ({string.Join(", ", parameters.Select(p => p.ParameterName))})
+                    UNION ALL
+                    SELECT r.Id, t.Root FROM Comments r JOIN tree t ON r.ParentCommentId = t.Id
+                )
+                SELECT x.Root AS ParagraphId, COUNT(CASE WHEN c.IsDeleted = 0 THEN 1 END) AS Comments
+                FROM (SELECT t.Id, t.Root, ROW_NUMBER() OVER (PARTITION BY t.Id ORDER BY t.Root) AS Pick FROM tree t) x
+                JOIN Comments c ON c.Id = x.Id
+                WHERE x.Pick = 1
+                GROUP BY x.Root
+                """;
+            foreach (var row in await db.Database.SqlQueryRaw<ParagraphComments>(sql, parameters.Cast<object>().ToArray()).ToListAsync())
+            {
+                counts[row.ParagraphId] = row.Comments;
+            }
+
+            return counts;
+        }
+
+        public async Task CommitAsync()
+        {
+            await transaction.CommitAsync();
+            committed = true;
         }
 
         public async ValueTask DisposeAsync()
         {
-            if (!saved)
+            if (!committed)
             {
                 // Rolled back: what the caller changed in place, or a failed save began, is undone in this context too,
                 // so no later save of it writes any of it.
@@ -194,5 +232,12 @@ public class ChapterParagraphsRepository(ApplicationDbContext dbContext) : IChap
 
             await transaction.DisposeAsync();
         }
+    }
+
+    /// <summary>A row of <see cref="ChapterTextEdit.CountCommentsToDeleteAsync"/>.</summary>
+    private sealed class ParagraphComments
+    {
+        public Guid ParagraphId { get; set; }
+        public int Comments { get; set; }
     }
 }
