@@ -16,6 +16,8 @@ public class PublishWorkCommandHandler(INovelsRepository novelsRepository, IUser
         {
             throw new ForbidException("هذا الإجراء متاح لكاتب الرواية فقط", "NotOwner");
         }
+        // Readers see it from now on. The chapters that came out while it was hidden aren't announced now (#80): a chapter
+        // is announced when it comes out (ChapterStatusEffects.AnnounceNewChapterAsync), and those came out unannounced.
         novel.IsDraft = false;
         novel.IsEligibleForRanking = true;
         var result = await novelsRepository.UpdateOne(novel);
