@@ -98,4 +98,52 @@ public class PointTransactionRepository(ApplicationDbContext dbContext) : IPoint
         // Reversals are rare: trimming each user's list here is cheaper than a window function.
         return rows.GroupBy(t => t.UserId).SelectMany(g => g.Take(perUser)).ToList();
     }
+
+    public async Task<IReadOnlyList<EarningsGroup>> GetEarningsGroupsAsync(string userId)
+    {
+        // One grouped query. A reversal is joined to the earning it took back (by primary key) for that earning's novel;
+        // the sign is part of the group so a reversal's two sides are never summed together.
+        var groups = await (
+                from row in dbContext.PointTransactions.AsNoTracking()
+                where row.UserId == userId
+                      && (row.Type == TransactionType.GiftReceived || row.Type == TransactionType.PrivilegeRevenue
+                          || row.Type == TransactionType.EarningReversed)
+                join reversed in dbContext.PointTransactions.AsNoTracking()
+                    on row.ReversedTransactionId equals (Guid?)reversed.Id into earnings
+                from earning in earnings.DefaultIfEmpty()
+                group row.Amount by new
+                {
+                    NovelId = row.Type == TransactionType.EarningReversed ? earning!.NovelId : row.NovelId,
+                    row.CreatedAt.Year,
+                    row.CreatedAt.Month,
+                    row.Type,
+                    Debit = row.Amount < 0
+                }
+                into g
+                select new { g.Key.NovelId, g.Key.Year, g.Key.Month, g.Key.Type, Amount = g.Sum() })
+            .ToListAsync();
+
+        return groups.Select(g => new EarningsGroup(g.NovelId, g.Year, g.Month, g.Type, g.Amount)).ToList();
+    }
+
+    public async Task<IReadOnlyList<NovelSupporters>> GetSupportersByNovelAsync(string userId)
+    {
+        // Both rows of a gift or subscription share RelatedRequestId (#22): the earning finds its payment by it, as the
+        // refund clawback does the other way round.
+        var counts = await (
+                from earning in dbContext.PointTransactions.AsNoTracking()
+                where earning.UserId == userId
+                      && (earning.Type == TransactionType.GiftReceived || earning.Type == TransactionType.PrivilegeRevenue)
+                      && earning.RelatedRequestId != null
+                join payment in dbContext.PointTransactions.AsNoTracking() on earning.RelatedRequestId equals payment.RelatedRequestId
+                where payment.UserId != userId
+                      && ((earning.Type == TransactionType.GiftReceived && payment.Type == TransactionType.GiftSent)
+                          || (earning.Type == TransactionType.PrivilegeRevenue && payment.Type == TransactionType.PrivilegeSubscription))
+                group payment.UserId by earning.NovelId
+                into g
+                select new { NovelId = g.Key, Count = g.Distinct().Count() })
+            .ToListAsync();
+
+        return counts.Select(c => new NovelSupporters(c.NovelId, c.Count)).ToList();
+    }
 }

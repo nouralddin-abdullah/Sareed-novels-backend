@@ -20,18 +20,25 @@ namespace Sareed_novels_backend.Controllers;
 [Route("api/notifications")]
 public class NotificationController(IMediator mediator) : ControllerBase
 {
+    /// <summary>
+    /// The caller's notifications, newest first. <paramref name="types"/> (#78): only these NotificationType names,
+    /// comma-separated, in any letter case; unknown names are ignored, and none known (or none at all) means every type.
+    /// With it, totalCount and unreadCount count those types only.
+    /// </summary>
     [HttpGet]
-    public async Task<IActionResult> GetNotifications([FromQuery] int? pageNumber, [FromQuery] int? pageSize, [FromQuery] bool? unreadOnly)
+    public async Task<IActionResult> GetNotifications([FromQuery] int? pageNumber, [FromQuery] int? pageSize, [FromQuery] bool? unreadOnly,
+        [FromQuery] string[]? types)
     {
-        var query = new GetNotificationsQuery(pageNumber ?? 1, pageSize ?? 20, unreadOnly ?? false);
+        var query = new GetNotificationsQuery(pageNumber ?? 1, pageSize ?? 20, unreadOnly ?? false, types);
         var result = await mediator.Send(query);
         return Ok(result);
     }
 
+    /// <summary>How many of the caller's notifications are unread; with <paramref name="types"/>, of those types only (#78).</summary>
     [HttpGet("unread-count")]
-    public async Task<IActionResult> GetUnreadCount()
+    public async Task<IActionResult> GetUnreadCount([FromQuery] string[]? types)
     {
-        var query = new GetUnreadCountQuery();
+        var query = new GetUnreadCountQuery(types);
         var count = await mediator.Send(query);
         return Ok(new { unreadCount = count });
     }

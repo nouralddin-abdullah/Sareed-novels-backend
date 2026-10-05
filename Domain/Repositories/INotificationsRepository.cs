@@ -22,9 +22,15 @@ public interface INotificationsRepository
     /// calls.
     /// </summary>
     Task<bool> CreateUnlessUnreadExists(Notification notification);
-    Task<(IEnumerable<Notification>, int)> GetUserNotifications(string userId, int pageNumber, int pageSize, bool unreadOnly = false);
+    /// <summary>
+    /// A page of the user's notifications, newest first, and how many there are in all: only unread ones with
+    /// <paramref name="unreadOnly"/>, and only of <paramref name="types"/> when given (null: every type).
+    /// </summary>
+    Task<(IEnumerable<Notification>, int)> GetUserNotifications(string userId, int pageNumber, int pageSize, bool unreadOnly = false,
+        IReadOnlyCollection<string>? types = null);
     Task<Notification?> GetNotificationById(Guid notificationId);
-    Task<int> GetUnreadCount(string userId);
+    /// <summary>How many of the user's notifications are unread, only of <paramref name="types"/> when given (null: every type).</summary>
+    Task<int> GetUnreadCount(string userId, IReadOnlyCollection<string>? types = null);
     /// <summary>Marks the notification read (already read is fine); false when it doesn't exist.</summary>
     Task<bool> MarkAsRead(Guid notificationId);
     /// <summary>Marks every unread notification of the user read in one statement; how many there were (0 is fine).</summary>

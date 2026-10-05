@@ -21,6 +21,8 @@ public class GetMyWalletQueryHandler(
 
         var dto = mapper.Map<WalletDto>(wallet);
         dto.Withdrawable = withdrawable.Withdrawable;
+        // The earnings figures GET /api/wallet/earnings shows too, from the same call (#78).
+        dto.TotalEarned = withdrawable.TotalEarned;
         dto.PendingEarnings = withdrawable.PendingEarnings;
         dto.NextReleaseAt = withdrawable.NextReleaseAt;
         return dto;

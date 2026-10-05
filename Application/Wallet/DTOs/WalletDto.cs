@@ -6,6 +6,12 @@ public class WalletDto
     public decimal TotalRecharged { get; set; }
     public decimal TotalWithdrawn { get; set; }
     public decimal TotalSpent { get; set; }
+
+    /// <summary>
+    /// What the user's earnings (gifts and privilege subscriptions received) came to in all, less what refunds took back of
+    /// them (#78); the same figure as GET /api/wallet/earnings. It was always 0 before: the column it was read from was
+    /// never written.
+    /// </summary>
     public decimal TotalEarned { get; set; }
 
     /// <summary>
