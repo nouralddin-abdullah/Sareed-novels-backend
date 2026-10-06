@@ -29,6 +29,21 @@ public static class TransactionType
     // refund already took those points; both point at the voided purchase and at the reversed earning row.
     public const string EarningReversed = "EarningReversed";
 
+    // The wallet's first week wrote these names for what is now RechargeApproved and WithdrawalApproved, and its rows
+    // still carry them. Never written now.
+    public const string Recharge = "Recharge";
+    public const string Withdrawal = "Withdrawal";
+
+    /// <summary>
+    /// Every type above, the first week's names included: the names the types filter of GET /api/wallet/transactions
+    /// accepts (#92). A unit test fails when a type is added above and not here.
+    /// </summary>
+    public static readonly IReadOnlyList<string> All =
+    [
+        RechargeApproved, GiftReceived, PrivilegeRevenue, WithdrawalApproved, GiftSent, PrivilegeSubscription, Refund,
+        PlayPurchase, PlayRefund, BalanceForfeited, EarningReversed, Recharge, Withdrawal
+    ];
+
     /// <summary>The earning types: only these become withdrawable, after the hold.</summary>
     public static readonly IReadOnlyList<string> Earnings = [GiftReceived, PrivilegeRevenue];
 

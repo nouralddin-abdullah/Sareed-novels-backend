@@ -52,8 +52,8 @@ public interface INovelsRepository
     /// <summary>The current slug and title of each of these novels that still exists (deleted ones are left out).</summary>
     Task<Dictionary<Guid, (string Slug, string Title)>> GetSlugsAndTitlesAsync(IReadOnlyCollection<Guid> novelIds);
     /// <summary>
-    /// The slug, title and cover of each of these novels, drafts and deleted novels included: an author's earnings name
-    /// every novel they came from (#78).
+    /// The slug, title and cover of each of these novels, and whether it is a draft or deleted, drafts and deleted novels
+    /// included: an author's earnings name every novel they came from (#78) and say which are hidden or deleted (#92).
     /// </summary>
     Task<Dictionary<Guid, NovelCard>> GetCardsIncludingDeletedAsync(IReadOnlyCollection<Guid> novelIds);
     Task<List<Novel>> GetNovelsBySharedGenresAsync(List<int> genreIds, Guid excludeNovelId, int limit);
@@ -79,5 +79,5 @@ public interface INovelsRepository
 /// <summary>A novel's cover, for maintenance jobs.</summary>
 public record NovelCoverRef(Guid Id, string Title, string CoverImageUrl);
 
-/// <summary>What names a novel in a list: its slug, title and cover.</summary>
-public record NovelCard(Guid Id, string Slug, string Title, string CoverImageUrl);
+/// <summary>What names a novel in a list: its slug, title and cover, and whether it is a draft (hidden) or deleted.</summary>
+public record NovelCard(Guid Id, string Slug, string Title, string CoverImageUrl, bool IsDraft, bool IsDeleted);

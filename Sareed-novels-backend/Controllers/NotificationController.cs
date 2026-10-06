@@ -1,5 +1,6 @@
 ﻿using Application.Notifications.Commands.MarkAllAsRead;
 using Application.Notifications.Commands.MarkAsRead;
+using Application.Notifications.Commands.MarkTypesAsRead;
 using Application.Notifications.Commands.RegisterDevice;
 using Application.Notifications.Commands.UnregisterDevice;
 using Application.Notifications.Commands.UpdatePreferences;
@@ -67,6 +68,19 @@ public class NotificationController(IMediator mediator) : ControllerBase
     {
         await mediator.Send(new MarkAllNotificationsAsReadCommand());
         return NoContent();
+    }
+
+    /// <summary>
+    /// Marks the caller's unread notifications of <paramref name="types"/> read, and no others (#92, «على رواياتي»):
+    /// types as GET /api/notifications takes them, except that naming no known type marks nothing (never every type;
+    /// that is read-all). Answers 200 { marked, unreadCount, typesUnreadCount }: how many it marked, and the unread
+    /// counts after it, of every type and of these types. 400 ValidationFailed when types names nothing at all.
+    /// </summary>
+    [HttpPatch("read")]
+    public async Task<IActionResult> MarkTypesAsRead([FromQuery] string[]? types)
+    {
+        var result = await mediator.Send(new MarkTypesAsReadCommand(types));
+        return Ok(result);
     }
 
     /// <summary>Registers the app's FCM token for push notifications (after sign-in and on token refresh).</summary>

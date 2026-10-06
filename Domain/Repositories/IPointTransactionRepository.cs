@@ -46,7 +46,12 @@ public sealed record NovelSupporters(Guid? NovelId, int Count);
 public interface IPointTransactionRepository
 {
     Task<PointTransaction> CreateAsync(PointTransaction transaction);
-    Task<(IEnumerable<PointTransaction>, int)> GetUserTransactionsAsync(string userId, int pageNumber, int pageSize);
+    /// <summary>
+    /// A page of the user's ledger rows, newest first (rows of the same instant by id, so pages never repeat or skip
+    /// one), and how many there are in all: only of <paramref name="types"/> when given (null: every type, #92).
+    /// </summary>
+    Task<(IEnumerable<PointTransaction>, int)> GetUserTransactionsAsync(string userId, int pageNumber, int pageSize,
+        IReadOnlyCollection<string>? types = null);
 
     /// <summary>Every ledger row of the user, in no particular order (the wallet's pools order them, #27).</summary>
     Task<IReadOnlyList<LedgerEntry>> GetLedgerAsync(string userId);
