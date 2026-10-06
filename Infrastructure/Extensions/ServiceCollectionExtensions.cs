@@ -138,7 +138,7 @@ public static class ServiceCollectionExtensions
         // Scheduled work runs inside the API (replaces the retired Azure Functions app).
         services.TryAddSingleton(TimeProvider.System);
         services.AddHostedService<RankingRecalculationService>();
-        services.AddHostedService<DailyPrivilegeUnlockService>();
+        // Early access needs no job (#94): a chapter's lock ends by its own date, read whenever it is read.
         services.AddHostedService<GiftLeaderboardRecalculationService>();
         // Scheduled chapters every minute, and the word counts of chapters from before them once (#77).
         services.AddHostedService<ScheduledChapterPublishingService>();

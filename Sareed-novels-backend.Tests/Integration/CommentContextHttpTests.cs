@@ -152,12 +152,11 @@ public class CommentContextHttpTests(SardApiFactory api)
         var onDraft = Comment(author, 0, paragraphId: draftParagraphs[0].Id);
         await using (var db = api.Db())
         {
-            // The privilege system locks the novel's first published chapter; one reader has paid for it.
-            await db.Chapters.Where(c => c.Id == locked.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.PublishedChapterSequence, 1));
-            db.NovelPrivileges.Add(new NovelPrivilege
-            {
-                Id = Guid.NewGuid(), NovelId = novel.Id, IsEnabled = true, CurrentLockedCount = 1, PrivilegeStartSequence = 1
-            });
+            // Early access locks the novel's chapter (#94: its own lock, started now); one reader has paid for it.
+            await db.Chapters.Where(c => c.Id == locked.Id).ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.PublishedChapterSequence, 1)
+                .SetProperty(c => c.EarlyAccessFrom, DateTime.UtcNow));
+            db.NovelPrivileges.Add(new NovelPrivilege { Id = Guid.NewGuid(), NovelId = novel.Id, IsEnabled = true });
             db.NovelPrivilegeSubscriptions.Add(new NovelPrivilegeSubscription
             {
                 Id = Guid.NewGuid(), NovelId = novel.Id, UserId = subscriber.Id, AmountPaid = 100, IsActive = true

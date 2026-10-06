@@ -39,10 +39,10 @@ public class HiddenNovelChaptersTests(SqlServerDatabase database) : IClassFixtur
             Assert.Equal(0, await desk.Announced(chapter, expected: 0));
         }
 
-        // The rest of coming out happens as for any novel: its chapter count, last update and privilege window.
+        // The rest of coming out happens as for any novel: its chapter count, last update and early access (#94).
         var hidden = await desk.StoredNovel(novel.Id);
         Assert.Equal((3, desk.Clock.UtcNow), (hidden.ChapterCount, hidden.LastUpdatedAt));
-        Assert.Equal(3, desk.WindowExtensions(novel.Id));
+        Assert.Equal((1, 1, 1), (desk.EarlyAccessTold(created), desk.EarlyAccessTold(draft), desk.EarlyAccessTold(scheduled)));
     }
 
     [Fact]

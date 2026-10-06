@@ -1,16 +1,21 @@
-﻿using Application.Services;
+using Application.Common;
+using Application.Privileges;
+using Application.Services;
 using Application.Users.Commands.FollowUser;
+using Application.Wallet;
 using Domain.Constants;
 using Domain.Entities;
 using Domain.Exceptions;
 using Domain.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Application.Common;
-using Application.Wallet;
 
 namespace Infrastructure.Services;
 
+/// <summary>
+/// Early access (#94). Its rules are <see cref="EarlyAccess"/>'s; its settings and its chapters' locks are written in SQL,
+/// a change of a novel's settings inside a transaction holding the novel (<see cref="INovelPrivilegeRepository.HoldAsync"/>).
+/// </summary>
 public class PrivilegeService(
     ILogger<PrivilegeService> logger,
     INovelPrivilegeRepository privilegeRepository,
@@ -19,537 +24,315 @@ public class PrivilegeService(
     IChaptersRepository chaptersRepository,
     IWalletService walletService,
     ITransactionManager transactionManager,
-    IServiceScopeFactory scopeFactory) : IPrivilegeService
+    IServiceScopeFactory scopeFactory,
+    TimeProvider time) : IPrivilegeService
 {
-    // ===== QUERY OPERATIONS =====
-    
-    public async Task<List<Chapter>> GetLockedChaptersAsync(Guid novelId)
-    {
-        var privilege = await privilegeRepository.GetByNovelIdAsync(novelId);
-        if (privilege == null || !privilege.IsEnabled || privilege.CurrentLockedCount <= 0)
-        {
-            return new List<Chapter>();
-        }
-        
-        // Get all published chapters ordered by PublishedChapterSequence
-        var publishedChapters = await chaptersRepository.GetChaptersReaderView(novelId);
-        var orderedChapters = publishedChapters
-            .Where(c => c.PublishedChapterSequence.HasValue)
-            .OrderBy(c => c.PublishedChapterSequence)
-            .ToList();
-        
-        var totalPublished = orderedChapters.Count;
-        
-        // Check if novel meets minimum requirement
-        if (totalPublished < privilege.MinPublishedRequired)
-        {
-            logger.LogWarning(
-                "Novel {NovelId} has privilege enabled but only {Count} published chapters (min: {Min})",
-                novelId, totalPublished, privilege.MinPublishedRequired);
-            return new List<Chapter>();
-        }
-        
-        // Use PrivilegeStartSequence if set, otherwise calculate from CurrentLockedCount
-        List<Chapter> lockedChapters;
-        
-        if (privilege.PrivilegeStartSequence.HasValue)
-        {
-            // Lock chapters from PrivilegeStartSequence onwards (up to CurrentLockedCount)
-            lockedChapters = orderedChapters
-                .Where(c => c.PublishedChapterSequence >= privilege.PrivilegeStartSequence.Value)
-                .Take(privilege.CurrentLockedCount)
-                .ToList();
-        }
-        else
-        {
-            // Fallback: Lock the LAST N published chapters (sliding window)
-            var lockedCount = Math.Min(privilege.CurrentLockedCount, totalPublished);
-            lockedChapters = orderedChapters
-                .TakeLast(lockedCount)
-                .ToList();
-        }
-        
-        logger.LogDebug(
-            "Novel {NovelId}: {LockedCount} chapters locked out of {TotalPublished} (Start sequence: {StartSeq})",
-            novelId, lockedChapters.Count, totalPublished, privilege.PrivilegeStartSequence);
-        
-        return lockedChapters;
-    }
-    
-    /// <summary>
-    /// Fast check: Is a chapter locked based on its PublishedChapterSequence?
-    /// Does NOT load all chapters - just compares sequence numbers.
-    /// </summary>
-    public bool IsChapterLockedBySequence(int publishedChapterSequence, NovelPrivilege? privilege)
-    {
-        if (privilege == null || !privilege.IsEnabled || privilege.CurrentLockedCount <= 0)
-            return false;
-        
-        if (!privilege.PrivilegeStartSequence.HasValue)
-            return false; // Cannot determine without start sequence
-        
-        // Simple range check: is chapter sequence >= start sequence?
-        // AND is it within the locked count range?
-        return publishedChapterSequence >= privilege.PrivilegeStartSequence.Value;
-    }
-    
+    public const string NotEnabledMessage = "الوصول المبكر غير مفعّل لهذه الرواية";
+    public const string ChapterNotLockedMessage = "هذا الفصل غير مقفل";
+    public const string BothModesMessage = "اختر واحدًا: عدد أيام الوصول المبكر أو للمشتركين فقط";
+    public const string InvalidDaysMessage = "عدد أيام الوصول المبكر يجب أن يكون من 1 إلى 30";
+    public const string NoChangesMessage = "لم يتغير شيء في الإعدادات";
+    public const string FirstChaptersFreeMessage =
+        "تبقى الفصول العشرة الأولى مجانية للقرّاء، فالوصول المبكر يبدأ من الفصل 11 أو بعده.";
+
+    private DateTime Now => time.GetUtcNow().UtcDateTime;
+
+    // ===== READING =====
+
     public async Task<bool> IsChapterLockedAsync(Guid chapterId, string? userId = null)
     {
-        var chapter = await chaptersRepository.GetChapterById(chapterId);
-        if (chapter == null || chapter.Status != "Published" || !chapter.PublishedChapterSequence.HasValue)
+        var chapter = await privilegeRepository.GetChapterLockAsync(chapterId);
+        if (chapter is null)
+        {
             return false;
-        
-        // Check if user has subscription (bypasses all locks)
-        if (!string.IsNullOrEmpty(userId))
-        {
-            var hasSubscription = await HasActiveSubscriptionAsync(chapter.NovelId, userId);
-            if (hasSubscription)
-            {
-                logger.LogDebug(
-                    "User {UserId} has subscription to novel {NovelId}, chapter {ChapterId} unlocked",
-                    userId, chapter.NovelId, chapterId);
-                return false;
-            }
         }
-        
-        // ✅ OPTIMIZED: Get privilege config only (no chapter loading)
+
         var privilege = await privilegeRepository.GetByNovelIdAsync(chapter.NovelId);
-        
-        // ✅ Fast sequence-based check (no database query!)
-        var isLocked = IsChapterLockedBySequence(chapter.PublishedChapterSequence.Value, privilege);
-        
-        if (isLocked)
+        if (!EarlyAccess.IsLocked(new ChapterLock(chapter.IsPublished, chapter.From, chapter.FreedAt), EarlyAccessSettings.Of(privilege), Now))
         {
-            logger.LogDebug(
-                "Chapter {ChapterId} (seq {Seq}) is privilege-locked for novel {NovelId}",
-                chapterId, chapter.PublishedChapterSequence.Value, chapter.NovelId);
+            return false;
         }
-        
-        return isLocked;
+
+        // Locked for non-subscribers: its author and its subscribers still read it.
+        return userId is null
+               || (privilege!.Novel?.AuthorId != userId && !await subscriptionRepository.HasActiveSubscriptionAsync(chapter.NovelId, userId));
     }
-    
-    public async Task<NovelPrivilege?> GetPrivilegeConfigAsync(Guid novelId)
+
+    public async Task<EarlyAccessView> GetViewAsync(Guid novelId, string novelAuthorId, string? viewerId)
     {
-        return await privilegeRepository.GetByNovelIdAsync(novelId);
+        var settings = EarlyAccessSettings.Of(await privilegeRepository.GetByNovelIdAsync(novelId));
+        var readsLockedChapters = viewerId is not null
+                                  && (viewerId == novelAuthorId
+                                      || (settings is { IsEnabled: true }
+                                          && await subscriptionRepository.HasActiveSubscriptionAsync(novelId, viewerId)));
+        return new EarlyAccessView(settings, readsLockedChapters, Now);
     }
-    
-    public async Task<bool> HasActiveSubscriptionAsync(Guid novelId, string userId)
-    {
-        return await subscriptionRepository.HasActiveSubscriptionAsync(novelId, userId);
-    }
-    
+
+    public async Task<NovelPrivilege?> GetPrivilegeConfigAsync(Guid novelId) =>
+        await privilegeRepository.GetByNovelIdAsync(novelId);
+
+    public async Task<EarlyAccessSummary> SummarizeAsync(Guid novelId, EarlyAccessSettings? settings) =>
+        EarlyAccessSummary.Of(await privilegeRepository.GetPublishedLocksAsync(novelId), settings, Now);
+
+    public async Task<bool> HasActiveSubscriptionAsync(Guid novelId, string userId) =>
+        await subscriptionRepository.HasActiveSubscriptionAsync(novelId, userId);
+
     // ===== AUTHOR OPERATIONS =====
-    
-    public async Task<OperationResult> EnablePrivilegeAsync(
-        Guid novelId, 
-        string authorId, 
-        decimal subscriptionCost,
-        int? privilegeStartSequence = null)
+
+    public async Task<OperationResult> EnablePrivilegeAsync(Guid novelId, string authorId, decimal subscriptionCost,
+        int? privilegeStartSequence = null, int? earlyAccessDays = null, bool? subscribersOnly = null)
     {
-        // Validate novel ownership
-        var novel = await novelsRepository.GetOne(novelId);
-        if (novel == null)
+        if (await AuthorRefusal(novelId, authorId) is { } refusal)
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NovelNotFound",
-                Message = "الرواية غير موجودة"
-            };
+            return refusal;
         }
-        
-        if (novel.AuthorId != authorId)
+
+        // Days, or subscribers only; neither (the website before #94) is the default days.
+        if (subscribersOnly == true && earlyAccessDays.HasValue)
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotOwner",
-                Message = "هذا الإجراء متاح لكاتب الرواية فقط"
-            };
+            return Fail("ValidationFailed", BothModesMessage);
         }
-        
-        // Check if privilege already exists
-        var existingPrivilege = await privilegeRepository.GetByNovelIdAsync(novelId);
-        if (existingPrivilege != null)
+        if (earlyAccessDays is < EarlyAccess.MinDays or > EarlyAccess.MaxDays)
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "PrivilegeAlreadyEnabled",
-                Message = "الوصول المبكر مفعّل لهذه الرواية بالفعل"
-            };
+            return Fail("InvalidEarlyAccessDays", InvalidDaysMessage);
         }
-        
-        // Validate subscription cost
-        if (subscriptionCost < 100 || subscriptionCost > 2000)
+        var only = subscribersOnly == true;
+        var days = only ? (int?)null : earlyAccessDays ?? EarlyAccess.DefaultDays;
+
+        if (subscriptionCost is < EarlyAccess.MinCost or > EarlyAccess.MaxCost)
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "InvalidSubscriptionCost",
-                Message = "سعر الاشتراك يجب أن يكون من 100 إلى 2000 نقطة"
-            };
+            return Fail("InvalidSubscriptionCost", "سعر الاشتراك يجب أن يكون من 100 إلى 2000 نقطة");
         }
-        
-        // Check published chapter count
-        var publishedCount = await novelsRepository.GetPublishedChaptersCountAsync(novelId);
-        if (publishedCount < 11)
+        if (privilegeStartSequence is <= EarlyAccess.FreeChapters)
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotEnoughPublishedChapters",
-                Message = $"يلزم 11 فصلًا منشورًا على الأقل لتفعيل الوصول المبكر (المنشور الآن: {publishedCount}). تبقى الفصول العشرة الأولى مجانية للقرّاء."
-            };
+            return Fail("FirstChaptersMustStayFree", FirstChaptersFreeMessage);
         }
-        
-        // Validate privilege start sequence if provided
-        if (privilegeStartSequence.HasValue)
+
+        var now = Now;
+        return await transactionManager.InTransactionAsync(async () =>
         {
-            if (privilegeStartSequence.Value < 1 || privilegeStartSequence.Value > publishedCount)
+            await privilegeRepository.HoldAsync(novelId);
+            var existing = await privilegeRepository.GetByNovelIdAsync(novelId);
+            if (existing is { IsEnabled: true })
             {
-                return new OperationResult
-                {
-                    Success = false,
-                    Code = "InvalidPrivilegeStart",
-                    Message = $"رقم أول فصل مقفل يجب أن يكون من 1 إلى {publishedCount}"
-                };
+                return Fail("PrivilegeAlreadyEnabled", "الوصول المبكر مفعّل لهذه الرواية بالفعل");
             }
-            
-            // BUSINESS RULE: First 10 chapters must always be free
-            if (privilegeStartSequence.Value <= 10)
+
+            var published = await novelsRepository.GetPublishedChaptersCountAsync(novelId);
+            if (EarlyAccess.DefaultStart(published) is not { } defaultStart)
             {
-                return new OperationResult
-                {
-                    Success = false,
-                    Code = "FirstChaptersMustStayFree",
-                    Message = "تبقى الفصول العشرة الأولى مجانية للقرّاء، فالوصول المبكر يبدأ من الفصل 11 أو بعده."
-                };
+                return Fail("NotEnoughPublishedChapters",
+                    $"يلزم 11 فصلًا منشورًا على الأقل لتفعيل الوصول المبكر (المنشور الآن: {published}). تبقى الفصول العشرة الأولى مجانية للقرّاء.");
             }
-            
-            // Calculate locked count based on start sequence
-            var lockedCount = publishedCount - privilegeStartSequence.Value + 1;
-            
-            // Ensure locked count doesn't exceed max (20)
-            if (lockedCount > 20)
+
+            var start = privilegeStartSequence ?? defaultStart;
+            if (start > published)
             {
-                return new OperationResult
-                {
-                    Success = false,
-                    Code = "TooManyLockedChapters",
-                    Message = $"البدء من الفصل {privilegeStartSequence.Value} يقفل {ArabicCount.ChaptersObject(lockedCount)}، والحد الأقصى 20 فصلًا. ابدأ من الفصل {publishedCount - 19} أو بعده."
-                };
+                return Fail("InvalidPrivilegeStart", $"رقم أول فصل مقفل يجب أن يكون من 11 إلى {published}");
             }
-            
-            // Create privilege with specific start sequence
-            var privilege = new NovelPrivilege
+            var count = published - start + 1;
+            if (count > EarlyAccess.MaxLockedWhenEnabled)
             {
-                Id = Guid.NewGuid(),
-                NovelId = novelId,
-                IsEnabled = true,
-                SubscriptionCost = subscriptionCost,
-                CurrentLockedCount = lockedCount,
-                PrivilegeStartSequence = privilegeStartSequence.Value,
-                MaxLockedChapters = 20,
-                MinPublishedRequired = 11,
-                CreatedAt = DateTime.UtcNow
-            };
-            
-            await privilegeRepository.CreateAsync(privilege);
-            
+                return Fail("TooManyLockedChapters",
+                    $"البدء من الفصل {start} يقفل {ArabicCount.ChaptersObject(count)}، والحد الأقصى 20 فصلًا. ابدأ من الفصل {published - 19} أو بعده.");
+            }
+
+            // The first time, its row; again after it was turned off, the same row (its subscriptions are still there).
+            var on = existing is null
+                ? await privilegeRepository.CreateAsync(new NovelPrivilege
+                {
+                    Id = Guid.NewGuid(),
+                    NovelId = novelId,
+                    IsEnabled = true,
+                    SubscriptionCost = subscriptionCost,
+                    EarlyAccessDays = days,
+                    SubscribersOnly = only,
+                    CreatedAt = now
+                })
+                : await privilegeRepository.TurnOnAsync(novelId, subscriptionCost, days, only, now);
+            if (!on)
+            {
+                return Fail("PrivilegeAlreadyEnabled", "الوصول المبكر مفعّل لهذه الرواية بالفعل");
+            }
+
+            var locked = await privilegeRepository.LockFromPositionAsync(novelId, start, now);
             logger.LogInformation(
-                "Privilege enabled for novel {NovelId} by author {AuthorId}: Starting from sequence {StartSeq}, {LockedCount} chapters locked, cost: {Cost}",
-                novelId, authorId, privilegeStartSequence.Value, lockedCount, subscriptionCost);
-            
+                "Early access enabled for novel {NovelId} by {AuthorId}: chapters {Start}-{Published} locked ({Locked}), {Mode}, cost {Cost}",
+                novelId, authorId, start, published, locked, only ? "subscribers only" : $"{days} days", subscriptionCost);
+
+            var lasting = only
+                ? "وتبقى مقفلة لغير المشتركين حتى تفتحها بنفسك"
+                : $"ويُفتح كل فصل منها للجميع بعد {ArabicCount.DaysObject(days!.Value)} من قفله";
             return new OperationResult
             {
                 Success = true,
-                Message = $"تم تفعيل الوصول المبكر. الفصول من {privilegeStartSequence.Value} إلى {publishedCount} مقفلة الآن ({ArabicCount.Chapters(lockedCount)})، وسعر الاشتراك {Points.Format(subscriptionCost)} نقطة."
+                Message = $"تم تفعيل الوصول المبكر. الفصول من {start} إلى {published} مقفلة الآن ({ArabicCount.Chapters(count)})، {lasting}، وتبقى الفصول العشرة الأولى مجانية. سعر الاشتراك {Points.Format(subscriptionCost)} نقطة."
             };
-        }
-        else
-        {
-            // Default behavior: lock last 20 (or fewer) chapters, but ensure first 10 are free
-            var initialLockedCount = Math.Min(20, publishedCount - 10); // Leave first 10 free
-            
-            // If less than 11 chapters, cannot lock anything
-            if (initialLockedCount <= 0)
-            {
-                return new OperationResult
-                {
-                    Success = false,
-                    Code = "NotEnoughPublishedChapters",
-                    Message = $"يلزم 11 فصلًا منشورًا على الأقل لتفعيل الوصول المبكر (المنشور الآن: {publishedCount}). تبقى الفصول العشرة الأولى مجانية للقرّاء."
-                };
-            }
-            
-            var startSequence = publishedCount - initialLockedCount + 1;
-            
-            // Ensure start sequence is at least 11
-            if (startSequence < 11)
-            {
-                startSequence = 11;
-                initialLockedCount = publishedCount - startSequence + 1;
-            }
-            
-            var privilege = new NovelPrivilege
-            {
-                Id = Guid.NewGuid(),
-                NovelId = novelId,
-                IsEnabled = true,
-                SubscriptionCost = subscriptionCost,
-                CurrentLockedCount = initialLockedCount,
-                PrivilegeStartSequence = startSequence,
-                MaxLockedChapters = 20,
-                MinPublishedRequired = 11,
-                CreatedAt = DateTime.UtcNow
-            };
-            
-            await privilegeRepository.CreateAsync(privilege);
-            
-            logger.LogInformation(
-                "Privilege enabled for novel {NovelId} by author {AuthorId}: {LockedCount} chapters locked (starting from seq {StartSeq}), cost: {Cost}",
-                novelId, authorId, initialLockedCount, startSequence, subscriptionCost);
-            
-            return new OperationResult
-            {
-                Success = true,
-                Message = $"تم تفعيل الوصول المبكر. الفصول من {startSequence} إلى {publishedCount} مقفلة الآن ({ArabicCount.Chapters(initialLockedCount)})، وتبقى الفصول العشرة الأولى مجانية. سعر الاشتراك {Points.Format(subscriptionCost)} نقطة."
-            };
-        }
+        });
     }
-    
-    public async Task<OperationResult> UpdatePrivilegeConfigAsync(
-        Guid novelId, 
-        string authorId, 
-        decimal? newSubscriptionCost = null,
-        int? newPrivilegeStartSequence = null)
+
+    public async Task<OperationResult> UpdatePrivilegeConfigAsync(Guid novelId, string authorId, decimal? newSubscriptionCost = null,
+        int? newPrivilegeStartSequence = null, int? earlyAccessDays = null, bool? subscribersOnly = null)
     {
-        // Validate novel ownership
-        var novel = await novelsRepository.GetOne(novelId);
-        if (novel == null || novel.AuthorId != authorId)
+        if (await AuthorRefusal(novelId, authorId) is { } refusal)
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotOwner",
-                Message = "هذا الإجراء متاح لكاتب الرواية فقط"
-            };
+            return refusal;
         }
-        
-        var privilege = await privilegeRepository.GetByNovelIdAsync(novelId);
-        if (privilege == null)
+        if (subscribersOnly == true && earlyAccessDays.HasValue)
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "PrivilegeNotEnabled",
-                Message = "الوصول المبكر غير مفعّل لهذه الرواية"
-            };
+            return Fail("ValidationFailed", BothModesMessage);
         }
-        
-        var updated = false;
-        
-        // Update subscription cost
-        if (newSubscriptionCost.HasValue)
+        if (earlyAccessDays is < EarlyAccess.MinDays or > EarlyAccess.MaxDays)
         {
-            if (newSubscriptionCost.Value < 100 || newSubscriptionCost.Value > 2000)
-            {
-                return new OperationResult
-                {
-                    Success = false,
-                    Code = "InvalidSubscriptionCost",
-                    Message = "سعر الاشتراك يجب أن يكون من 100 إلى 2000 نقطة"
-                };
-            }
-            
-            privilege.SubscriptionCost = newSubscriptionCost.Value;
-            updated = true;
+            return Fail("InvalidEarlyAccessDays", InvalidDaysMessage);
         }
-        
-        // Update privilege start sequence (move forward only!)
-        if (newPrivilegeStartSequence.HasValue)
+        if (newSubscriptionCost is < EarlyAccess.MinCost or > EarlyAccess.MaxCost)
         {
-            var totalPublished = await novelsRepository.GetPublishedChaptersCountAsync(novelId);
-            
-            // Validate new start sequence
-            if (newPrivilegeStartSequence.Value < 1 || newPrivilegeStartSequence.Value > totalPublished)
+            return Fail("InvalidSubscriptionCost", "سعر الاشتراك يجب أن يكون من 100 إلى 2000 نقطة");
+        }
+        if (newPrivilegeStartSequence is <= EarlyAccess.FreeChapters)
+        {
+            return Fail("FirstChaptersMustStayFree", FirstChaptersFreeMessage);
+        }
+
+        var now = Now;
+        return await transactionManager.InTransactionAsync(async () =>
+        {
+            await privilegeRepository.HoldAsync(novelId);
+            var privilege = await privilegeRepository.GetByNovelIdAsync(novelId);
+            if (privilege is not { IsEnabled: true })
             {
-                return new OperationResult
-                {
-                    Success = false,
-                    Code = "InvalidPrivilegeStart",
-                    Message = $"رقم أول فصل مقفل يجب أن يكون من 1 إلى {totalPublished}"
-                };
+                return Fail("PrivilegeNotEnabled", NotEnabledMessage);
             }
-            
-            // BUSINESS RULE: First 10 chapters must always be free
-            if (newPrivilegeStartSequence.Value <= 10)
+
+            var settings = EarlyAccessSettings.Of(privilege)!.Value;
+            var cost = newSubscriptionCost ?? privilege.SubscriptionCost;
+
+            // The mode asked for: subscribers only, or days (switching from subscribers only without days takes the default).
+            var (days, only) = subscribersOnly == true
+                ? ((int?)null, true)
+                : earlyAccessDays.HasValue || subscribersOnly == false
+                    ? (earlyAccessDays ?? settings.Days ?? EarlyAccess.DefaultDays, false)
+                    : (settings.Days, settings.SubscribersOnly);
+            var modeChanged = days != settings.Days || only != settings.SubscribersOnly;
+
+            // The website before #94 moves the first locked chapter forward: the locked chapters before it are freed.
+            var startChanged = false;
+            if (newPrivilegeStartSequence is { } newStart)
             {
-                return new OperationResult
+                var summary = await SummarizeAsync(novelId, settings);
+                var first = summary.FirstLockedSequence ?? summary.PublishedCount + 1;
+                if (newStart > summary.PublishedCount)
                 {
-                    Success = false,
-                    Code = "FirstChaptersMustStayFree",
-                    Message = "تبقى الفصول العشرة الأولى مجانية للقرّاء، فالوصول المبكر يبدأ من الفصل 11 أو بعده."
-                };
+                    return Fail("InvalidPrivilegeStart", $"رقم أول فصل مقفل يجب أن يكون من 11 إلى {summary.PublishedCount}");
+                }
+                if (newStart < first)
+                {
+                    return Fail("PrivilegeStartCannotMoveBack",
+                        $"لا يمكن إرجاع بداية الفصول المقفلة من الفصل {first} إلى الفصل {newStart}، فهذا يقفل فصولًا فُتحت للقرّاء من قبل. يمكن تقديمها فقط.");
+                }
+                startChanged = newStart > first;
             }
-            
-            // Check if we have a current start sequence
-            if (!privilege.PrivilegeStartSequence.HasValue)
+
+            if (cost == privilege.SubscriptionCost && !modeChanged && !startChanged)
             {
-                return new OperationResult
-                {
-                    Success = false,
-                    Code = "NoPrivilegeStart",
-                    Message = "لا يمكن تغيير أول فصل مقفل، فإعدادات الوصول المبكر الحالية لا تحدده"
-                };
+                return Fail("NoChanges", NoChangesMessage);
             }
-            
-            // Prevent moving BACKWARD (re-locking chapters)
-            if (newPrivilegeStartSequence.Value < privilege.PrivilegeStartSequence.Value)
+
+            // New days apply to the chapters still locked, their end counted from their own lock's start, so a lock that is
+            // over now is frozen first: no change of the days ever locks a chapter readers could already read.
+            if (modeChanged && !settings.SubscribersOnly)
             {
-                return new OperationResult
-                {
-                    Success = false,
-                    Code = "PrivilegeStartCannotMoveBack",
-                    Message = $"لا يمكن إرجاع بداية الفصول المقفلة من الفصل {privilege.PrivilegeStartSequence.Value} إلى الفصل {newPrivilegeStartSequence.Value}، فهذا يقفل فصولًا فُتحت للقرّاء من قبل. يمكن تقديمها فقط."
-                };
+                await privilegeRepository.FreezeEndedAsync(novelId, now.AddDays(-(settings.Days ?? EarlyAccess.DefaultDays)), now);
             }
-            
-            // Prevent moving to same value
-            if (newPrivilegeStartSequence.Value == privilege.PrivilegeStartSequence.Value)
+            if (startChanged)
             {
-                return new OperationResult
-                {
-                    Success = false,
-                    Code = "NoChanges",
-                    Message = $"الفصول المقفلة تبدأ من الفصل {privilege.PrivilegeStartSequence.Value} بالفعل"
-                };
+                await privilegeRepository.FreeBeforeAsync(novelId, newPrivilegeStartSequence!.Value, now);
             }
-            
-            // Calculate new locked count
-            var oldStartSequence = privilege.PrivilegeStartSequence.Value;
-            var newLockedCount = totalPublished - newPrivilegeStartSequence.Value + 1;
-            
-            // Ensure we don't exceed max locked chapters (should never happen when moving forward)
-            if (newLockedCount > privilege.MaxLockedChapters)
-            {
-                return new OperationResult
-                {
-                    Success = false,
-                    Code = "TooManyLockedChapters",
-                    Message = $"البدء من الفصل {newPrivilegeStartSequence.Value} يقفل {ArabicCount.ChaptersObject(newLockedCount)}، والحد الأقصى {ArabicCount.Chapters(privilege.MaxLockedChapters)}."
-                };
-            }
-            
-            // Calculate how many chapters are being unlocked
-            var chaptersUnlocked = newPrivilegeStartSequence.Value - oldStartSequence;
-            
-            // Update privilege
-            privilege.PrivilegeStartSequence = newPrivilegeStartSequence.Value;
-            privilege.CurrentLockedCount = Math.Max(0, newLockedCount);
-            updated = true;
-            
+            await privilegeRepository.UpdateSettingsAsync(novelId, cost, days, only, now);
+
             logger.LogInformation(
-                "Privilege start moved forward for novel {NovelId}: {OldStart} → {NewStart}, unlocked {UnlockedCount} chapters, {LockedCount} now locked",
-                novelId, oldStartSequence, newPrivilegeStartSequence.Value, chaptersUnlocked, privilege.CurrentLockedCount);
-        }
-        
-        if (updated)
-        {
-            await privilegeRepository.UpdateAsync(privilege);
-            
-            logger.LogInformation(
-                "Privilege config updated for novel {NovelId} by author {AuthorId}",
-                novelId, authorId);
-            
-            return new OperationResult
-            {
-                Success = true,
-                Message = "حُفظت إعدادات الوصول المبكر"
-            };
-        }
-        
-        return new OperationResult
-        {
-            Success = false,
-            Code = "NoChanges",
-            Message = "لم يتغير شيء في الإعدادات"
-        };
+                "Early access of novel {NovelId} changed by {AuthorId}: cost {Cost}, {Mode}, first locked moved to {Start}",
+                novelId, authorId, cost, only ? "subscribers only" : $"{days} days", newPrivilegeStartSequence);
+            return new OperationResult { Success = true, Message = "حُفظت إعدادات الوصول المبكر" };
+        });
     }
-    
-    public async Task<OperationResult> ManuallyUnlockChapterAsync(Guid chapterId, string authorId)
+
+    public async Task<OperationResult> ManuallyUnlockChapterAsync(Guid novelId, Guid chapterId, string authorId)
     {
         var chapter = await chaptersRepository.GetChapterById(chapterId);
-        if (chapter == null)
+        if (chapter is null || chapter.NovelId != novelId)
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "ChapterNotFound",
-                Message = "الفصل غير موجود"
-            };
+            return Fail("ChapterNotFound", "الفصل غير موجود");
         }
-        
-        var novel = await novelsRepository.GetOne(chapter.NovelId);
-        if (novel == null || novel.AuthorId != authorId)
+        if (await AuthorRefusal(novelId, authorId) is { } refusal)
         {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "NotOwner",
-                Message = "هذا الإجراء متاح لكاتب الرواية فقط"
-            };
-        }
-        
-        var privilege = await privilegeRepository.GetByNovelIdAsync(chapter.NovelId);
-        if (privilege == null || !privilege.IsEnabled)
-        {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "PrivilegeNotEnabled",
-                Message = "الوصول المبكر غير مفعّل لهذه الرواية"
-            };
-        }
-        
-        // Readers see a chapter as locked when its sequence is at or past PrivilegeStartSequence, so unlocking means
-        // moving the start past it. (This used to only decrement CurrentLockedCount, which readers never check, so
-        // the author got "Chapter unlocked!" while the chapter stayed locked.) Earlier locked chapters are unlocked
-        // with it: the model is a single locked range, it can't leave holes.
-        if (chapter.Status != "Published"
-            || !chapter.PublishedChapterSequence.HasValue
-            || !IsChapterLockedBySequence(chapter.PublishedChapterSequence.Value, privilege))
-        {
-            return new OperationResult
-            {
-                Success = false,
-                Code = "ChapterNotLocked",
-                Message = "هذا الفصل غير مقفل"
-            };
+            return refusal;
         }
 
-        var sequence = chapter.PublishedChapterSequence.Value;
-        var oldStart = privilege.PrivilegeStartSequence!.Value;
-        var unlockedCount = sequence - oldStart + 1;
-
-        privilege.PrivilegeStartSequence = sequence + 1;
-        privilege.CurrentLockedCount = Math.Max(0, privilege.CurrentLockedCount - unlockedCount);
-        await privilegeRepository.UpdateAsync(privilege);
-
-        logger.LogInformation(
-            "Author {AuthorId} manually unlocked chapter {ChapterId} (seq {Sequence}) for novel {NovelId}: start {OldStart} -> {NewStart}, {Count} still locked",
-            authorId, chapterId, sequence, chapter.NovelId, oldStart, privilege.PrivilegeStartSequence, privilege.CurrentLockedCount);
-
-        return new OperationResult
+        var now = Now;
+        return await transactionManager.InTransactionAsync(async () =>
         {
-            Success = true,
-            Message = unlockedCount == 1
-                ? $"فُتح الفصل للجميع. الفصول المقفلة الآن: {privilege.CurrentLockedCount}"
-                : $"فُتحت الفصول من {oldStart} إلى {sequence} للجميع. الفصول المقفلة الآن: {privilege.CurrentLockedCount}"
-        };
+            await privilegeRepository.HoldAsync(novelId);
+            var privilege = await privilegeRepository.GetByNovelIdAsync(novelId);
+            if (privilege is not { IsEnabled: true })
+            {
+                return Fail("PrivilegeNotEnabled", NotEnabledMessage);
+            }
+
+            // That chapter only, as stored now: freed for good, so no later change locks it again.
+            var settings = EarlyAccessSettings.Of(privilege);
+            var stored = await privilegeRepository.GetChapterLockAsync(chapterId);
+            if (stored is null
+                || !EarlyAccess.IsLocked(new ChapterLock(stored.IsPublished, stored.From, stored.FreedAt), settings, now)
+                || !await privilegeRepository.FreeAsync(chapterId, now))
+            {
+                return Fail("ChapterNotLocked", ChapterNotLockedMessage);
+            }
+
+            var stillLocked = (await SummarizeAsync(novelId, settings)).LockedCount;
+            logger.LogInformation("Author {AuthorId} freed chapter {ChapterId} of novel {NovelId}: {Locked} still locked",
+                authorId, chapterId, novelId, stillLocked);
+            return new OperationResult { Success = true, Message = $"فُتح الفصل للجميع. الفصول المقفلة الآن: {stillLocked}" };
+        });
     }
-    
+
+    public async Task<OperationResult> DisablePrivilegeAsync(Guid novelId, string authorId)
+    {
+        if (await AuthorRefusal(novelId, authorId) is { } refusal)
+        {
+            return refusal;
+        }
+
+        var now = Now;
+        return await transactionManager.InTransactionAsync(async () =>
+        {
+            await privilegeRepository.HoldAsync(novelId);
+            if (!await privilegeRepository.TurnOffAsync(novelId, now))
+            {
+                return Fail("PrivilegeNotEnabled", NotEnabledMessage);
+            }
+
+            logger.LogInformation("Early access disabled for novel {NovelId} by {AuthorId}", novelId, authorId);
+            return new OperationResult
+            {
+                Success = true,
+                Message = "أُوقف الوصول المبكر: كل الفصول متاحة للجميع الآن، والفصول الجديدة لا تُقفل. ويبقى المشتركون مشتركين إن فعّلته من جديد."
+            };
+        });
+    }
+
+    /// <summary>NovelNotFound or NotOwner unless <paramref name="authorId"/> wrote the novel.</summary>
+    private async Task<OperationResult?> AuthorRefusal(Guid novelId, string authorId)
+    {
+        var novel = await novelsRepository.GetOne(novelId);
+        return novel is null ? Fail("NovelNotFound", "الرواية غير موجودة")
+            : novel.AuthorId != authorId ? Fail("NotOwner", "هذا الإجراء متاح لكاتب الرواية فقط")
+            : null;
+    }
+
+    private static OperationResult Fail(string code, string message) => new() { Success = false, Code = code, Message = message };
+
     // ===== READER OPERATIONS =====
     
     public async Task<OperationResult> SubscribeToPrivilegeAsync(Guid novelId, string userId)
@@ -715,156 +498,17 @@ public class PrivilegeService(
             Message = $"تم الاشتراك في الوصول المبكر. فُتحت لك الفصول المقفلة في هذه الرواية بشكل دائم، مقابل {Points.Format(cost)} نقطة."
         };
     }
-    
-    // ===== INTERNAL TRIGGERS =====
-    
-    public async Task OnChapterPublishedAsync(Guid novelId)
+
+    // ===== CHAPTERS =====
+
+    public async Task<bool> OnChapterCameOutAsync(Guid chapterId)
     {
-        var privilege = await privilegeRepository.GetByNovelIdAsync(novelId);
-        if (privilege == null || !privilege.IsEnabled)
-            return;
-        
-        var totalPublished = await novelsRepository.GetPublishedChaptersCountAsync(novelId);
-        
-        // If we have less than max (20), add 1
-        if (privilege.CurrentLockedCount < privilege.MaxLockedChapters)
+        var locked = await privilegeRepository.LockCameOutAsync(chapterId, EarlyAccess.FreeChapters);
+        if (locked)
         {
-            privilege.CurrentLockedCount++;
-            await privilegeRepository.UpdateAsync(privilege);
-            
-            logger.LogInformation(
-                "Chapter published for novel {NovelId}: Locked count increased to {Count}",
-                novelId, privilege.CurrentLockedCount);
+            logger.LogInformation("Chapter {ChapterId} came out in early access", chapterId);
         }
-        // If we're at max (20), maintain the sliding window
-        // New chapter extends the lock range, oldest locked chapter becomes unlocked automatically
-        else
-        {
-            // Update PrivilegeStartSequence to shift the window forward
-            if (privilege.PrivilegeStartSequence.HasValue)
-            {
-                privilege.PrivilegeStartSequence++;
-                await privilegeRepository.UpdateAsync(privilege);
-                
-                logger.LogInformation(
-                    "Chapter published for novel {NovelId}: Locked count at max ({Max}), sliding window shifted to start at sequence {NewStart}",
-                    novelId, privilege.MaxLockedChapters, privilege.PrivilegeStartSequence);
-            }
-            else
-            {
-                logger.LogInformation(
-                    "Chapter published for novel {NovelId}: Locked count at max ({Max}), sliding window maintained",
-                    novelId, privilege.MaxLockedChapters);
-            }
-        }
-    }
-    
-    public async Task OnChapterDeletedAsync(Guid novelId, int deletedChapterSequence)
-    {
-        var privilege = await privilegeRepository.GetByNovelIdAsync(novelId);
-        if (privilege == null || !privilege.IsEnabled)
-            return;
-        
-        // Check if the deleted chapter was actually in the locked range
-        var wasLocked = false;
-        
-        if (privilege.PrivilegeStartSequence.HasValue)
-        {
-            // Check if deleted chapter sequence was >= start sequence
-            // (meaning it was in the locked range)
-            wasLocked = deletedChapterSequence >= privilege.PrivilegeStartSequence.Value;
-            
-            // If deleted chapter was BEFORE privilege start, shift the start sequence DOWN by 1
-            if (deletedChapterSequence < privilege.PrivilegeStartSequence.Value)
-            {
-                privilege.PrivilegeStartSequence--;
-                await privilegeRepository.UpdateAsync(privilege);
-                
-                logger.LogInformation(
-                    "Published UNLOCKED chapter (seq {Sequence}) deleted BEFORE privilege start for novel {NovelId}: Privilege start shifted from {OldStart} to {NewStart}",
-                    deletedChapterSequence, novelId, privilege.PrivilegeStartSequence + 1, privilege.PrivilegeStartSequence);
-                
-                return; // Don't decrease locked count - it was unlocked
-            }
-        }
-        else
-        {
-            // Fallback: check if chapter was in the last N chapters
-            var totalPublished = await novelsRepository.GetPublishedChaptersCountAsync(novelId);
-            var lockStartSequence = totalPublished - privilege.CurrentLockedCount + 1;
-            wasLocked = deletedChapterSequence >= lockStartSequence;
-        }
-        
-        // Only decrease locked count if the deleted chapter was actually locked
-        if (wasLocked && privilege.CurrentLockedCount > 0)
-        {
-            privilege.CurrentLockedCount--;
-            await privilegeRepository.UpdateAsync(privilege);
-            
-            logger.LogInformation(
-                "Published LOCKED chapter (seq {Sequence}) deleted for novel {NovelId}: Locked count decreased to {Count}",
-                deletedChapterSequence, novelId, privilege.CurrentLockedCount);
-        }
-        else if (!privilege.PrivilegeStartSequence.HasValue)
-        {
-            // Log if chapter was unlocked (for fallback case)
-            logger.LogInformation(
-                "Published UNLOCKED chapter (seq {Sequence}) deleted for novel {NovelId}: Locked count remains {Count}",
-                deletedChapterSequence, novelId, privilege.CurrentLockedCount);
-        }
-    }
-    
-    public async Task PerformDailyUnlockAsync(Guid? specificNovelId = null)
-    {
-        List<NovelPrivilege> privileges;
-        
-        if (specificNovelId.HasValue)
-        {
-            var privilege = await privilegeRepository.GetByNovelIdAsync(specificNovelId.Value);
-            privileges = privilege != null ? new List<NovelPrivilege> { privilege } : new List<NovelPrivilege>();
-        }
-        else
-        {
-            privileges = await privilegeRepository.GetAllEnabledPrivilegesAsync();
-        }
-        
-        var unlockedCount = 0;
-        
-        foreach (var privilege in privileges)
-        {
-            if (privilege.LastDailyUnlockDate?.Date == DateTime.UtcNow.Date)
-            {
-                logger.LogDebug(
-                    "Novel {NovelId} already had daily unlock today, skipping",
-                    privilege.NovelId);
-                continue;
-            }
-            
-            if (privilege.CurrentLockedCount > 0 && privilege.PrivilegeStartSequence.HasValue)
-            {
-                privilege.PrivilegeStartSequence++;
-                privilege.CurrentLockedCount--;
-                privilege.TotalDailyUnlocksPerformed++;
-                privilege.LastDailyUnlockDate = DateTime.UtcNow;
-                
-                await privilegeRepository.UpdateAsync(privilege);
-                unlockedCount++;
-                
-                logger.LogInformation(
-                    "Daily unlock for novel {NovelId}: Start sequence moved to {NewStart}, {RemainingLocked} chapters still locked",
-                    privilege.NovelId, privilege.PrivilegeStartSequence.Value, privilege.CurrentLockedCount);
-            }
-            else if (privilege.CurrentLockedCount == 0)
-            {
-                logger.LogDebug(
-                    "Novel {NovelId} has no locked chapters, skipping daily unlock (waiting for new chapter)",
-                    privilege.NovelId);
-            }
-        }
-        
-        logger.LogInformation(
-            "Daily unlock completed: {UnlockedCount} novels processed",
-            unlockedCount);
+        return locked;
     }
 
     private sealed class AlreadySubscribedException : Exception;

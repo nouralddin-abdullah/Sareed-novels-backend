@@ -19,9 +19,7 @@ public class ManualUnlockChapterCommandHandler(
         var currentUser = userContext.GetCurrentUser() 
             ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
-        var result = await privilegeService.ManuallyUnlockChapterAsync(
-            request.ChapterId, 
-            currentUser.Id);
+        var result = await privilegeService.ManuallyUnlockChapterAsync(request.NovelId, request.ChapterId, currentUser.Id);
         
         return result;
     }

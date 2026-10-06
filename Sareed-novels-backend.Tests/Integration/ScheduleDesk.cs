@@ -29,7 +29,7 @@ namespace Sareed_novels_backend.Tests.Integration;
 /// The author's editor and the schedule (#77) on one clock the test moves: POST and PATCH a chapter through the real
 /// handlers (<see cref="CreateChapterCommandHandler"/>, <see cref="UpdateChapterCommandHandler"/>), each on a context of
 /// its own as each request has, and <see cref="ScheduledChapterPublisher"/> as the app wires it (the real repositories,
-/// a scope per run and per chapter). What a publish tells is recorded: the privilege window (<see cref="Privileges"/>)
+/// a scope per run and per chapter). What a publish tells is recorded: early access (<see cref="Privileges"/>, #94)
 /// and readers (<see cref="Notifications"/>; every novel has one reader with it in her library), whom a publish tells
 /// in the background (<see cref="Announced"/>).
 /// </summary>
@@ -174,9 +174,9 @@ internal sealed class ScheduleDesk : IAsyncDisposable
         call.GetMethodInfo().Name == nameof(INotificationService.SendNewChapterInLibraryNotification)
         && ((Chapter)call.GetArguments()[2]!).Id == chapterId);
 
-    /// <summary>How many times a publish extended the novel's privilege window.</summary>
-    public int WindowExtensions(Guid novelId) => Privileges.ReceivedCalls().Count(call =>
-        call.GetMethodInfo().Name == nameof(IPrivilegeService.OnChapterPublishedAsync) && (Guid)call.GetArguments()[0]! == novelId);
+    /// <summary>How many times early access was told that the chapter came out (#94), which may lock it.</summary>
+    public int EarlyAccessTold(Guid chapterId) => Privileges.ReceivedCalls().Count(call =>
+        call.GetMethodInfo().Name == nameof(IPrivilegeService.OnChapterCameOutAsync) && (Guid)call.GetArguments()[0]! == chapterId);
 
     public async Task<Chapter> Stored(Guid chapterId)
     {

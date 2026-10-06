@@ -84,6 +84,9 @@ public class PrivilegeSubscriptionRepository(ApplicationDbContext dbContext) : I
         return await dbContext.SaveChangesAsync() > 0;
     }
 
+    public async Task<int> CountActiveSubscribersAsync(Guid novelId) =>
+        await dbContext.NovelPrivilegeSubscriptions.CountAsync(s => s.NovelId == novelId && s.IsActive);
+
     public async Task<bool> HasActiveSubscriptionAsync(Guid novelId, string userId)
     {
         return await dbContext.NovelPrivilegeSubscriptions

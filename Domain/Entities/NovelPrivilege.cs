@@ -1,8 +1,10 @@
 ﻿namespace Domain.Entities;
 
 /// <summary>
-/// Represents the privilege (premium chapter lock) configuration for a novel.
-/// Authors can enable this to lock the latest N chapters behind a subscription paywall.
+/// A novel's early access («الوصول المبكر», #94): whether it is on, what a subscription costs, and how long a chapter
+/// stays early. Which chapters are locked is stored on the chapters (<see cref="Chapter.EarlyAccessFrom"/>,
+/// <see cref="Chapter.EarlyAccessFreedAt"/>), and who they lock out is the rule of <c>EarlyAccess</c>. One row per novel,
+/// kept when early access is turned off, so its subscriptions stay.
 /// </summary>
 public class NovelPrivilege
 {
@@ -10,24 +12,30 @@ public class NovelPrivilege
     public Guid NovelId { get; set; }
     public Novel Novel { get; set; } = default!;
     
-    // Core Settings
+    /// <summary>On: new chapters lock as they come out, and locked chapters are open to subscribers only.</summary>
     public bool IsEnabled { get; set; } = false;
-    public int MaxLockedChapters { get; set; } = 20; // Always lock max 20 chapters
     
-    // Pricing
-    public decimal SubscriptionCost { get; set; } = 100; // Points required to subscribe (100-2000)
-    // NOTE: Subscriptions are PERMANENT - no expiration date
-    
-    // Current State
-    public int CurrentLockedCount { get; set; } = 0; // How many chapters are currently locked (0-20)
-    public int? PrivilegeStartSequence { get; set; } // Which PublishedChapterSequence privilege starts from
-    
-    // Daily Unlock Tracking
-    public DateTime? LastDailyUnlockDate { get; set; } // Last time daily unlock was triggered (UTC)
-    public int TotalDailyUnlocksPerformed { get; set; } = 0; // Total count of daily unlocks since creation
-    
-    // Requirements
-    public int MinPublishedRequired { get; set; } = 11; // Need at least 11 published chapters (first 10 must be free)
+    /// <summary>Points a subscription costs (100-2000); a change applies to new subscribers. Subscriptions are permanent.</summary>
+    public decimal SubscriptionCost { get; set; } = 100;
+
+    /// <summary>
+    /// How many days a chapter stays locked from when its lock started (#94): 1 to 30, 7 unless set. Null when
+    /// <see cref="SubscribersOnly"/>; never both (a check constraint).
+    /// </summary>
+    public int? EarlyAccessDays { get; set; } = 7;
+
+    /// <summary>Locked chapters stay locked for non-subscribers until the author frees them (#94): no automatic unlock.</summary>
+    public bool SubscribersOnly { get; set; }
+
+    // The positional window that came before #94: a start position among the published chapters, a stored count of the
+    // chapters from there, moved by a daily job. Nothing reads or writes them any more; the columns stay for one release
+    // so that the version before can still run against this database, and go in a later migration.
+    public int MaxLockedChapters { get; set; } = 20;
+    public int CurrentLockedCount { get; set; } = 0;
+    public int? PrivilegeStartSequence { get; set; }
+    public DateTime? LastDailyUnlockDate { get; set; }
+    public int TotalDailyUnlocksPerformed { get; set; } = 0;
+    public int MinPublishedRequired { get; set; } = 11;
     
     // Metadata
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -35,20 +43,4 @@ public class NovelPrivilege
     
     // Navigation
     public ICollection<NovelPrivilegeSubscription> Subscriptions { get; set; } = new List<NovelPrivilegeSubscription>();
-    
-    /// <summary>
-    /// Validates if the subscription cost is within allowed range (100-2000 points)
-    /// </summary>
-    public bool IsValidSubscriptionCost()
-    {
-        return SubscriptionCost >= 100 && SubscriptionCost <= 2000;
-    }
-    
-    /// <summary>
-    /// Checks if privilege can be enabled (minimum published chapters requirement)
-    /// </summary>
-    public bool CanBeEnabled(int currentPublishedCount)
-    {
-        return currentPublishedCount >= MinPublishedRequired;
-    }
 }
