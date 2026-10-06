@@ -1,4 +1,5 @@
 ﻿using Application.Chapters.DTOS;
+using Application.Services;
 using Application.Users;
 using AutoMapper;
 using Domain.Exceptions;
@@ -7,7 +8,7 @@ using MediatR;
 
 namespace Application.Chapters.Queries.GetChapterAuthor;
 
-public class GetChapterAuthorQueryHandler(IChaptersRepository chaptersRepository, IChapterParagraphsRepository paragraphsRepository, INovelsRepository novelsRepository, IUserContext userContext, IMapper mapper) : IRequestHandler<GetChapterAuthorQuery, ChapterSingleAuthorDTO>
+public class GetChapterAuthorQueryHandler(IChaptersRepository chaptersRepository, IChapterParagraphsRepository paragraphsRepository, INovelsRepository novelsRepository, IUserContext userContext, IMapper mapper, IPrivilegeService privilegeService) : IRequestHandler<GetChapterAuthorQuery, ChapterSingleAuthorDTO>
 {
     public async Task<ChapterSingleAuthorDTO> Handle(GetChapterAuthorQuery request, CancellationToken cancellationToken)
     {
@@ -25,6 +26,11 @@ public class GetChapterAuthorQueryHandler(IChaptersRepository chaptersRepository
         
         var chapterDTO = mapper.Map<ChapterSingleAuthorDTO>(chapter);
         chapterDTO.Paragraphs = mapper.Map<List<ChapterParagraphDTO>>(paragraphs);
+
+        // Early access (#94) as non-subscribers meet it.
+        var earlyAccess = await privilegeService.GetViewAsync(novel.Id, novel.AuthorId, viewerId: null);
+        chapterDTO.IsLocked = earlyAccess.IsLocked(chapter);
+        chapterDTO.UnlocksAt = earlyAccess.UnlocksAt(chapter);
         
         return chapterDTO;
     }

@@ -22,8 +22,17 @@ public class ChaptersDTO
     /// </summary>
     public DateTime? PublishedAt { get; set; }
     
-    // Privilege System
-    public bool IsLocked { get; set; } = false; // Is this chapter locked by privilege?
+    /// <summary>
+    /// Early access (#94): in a reader's list, whether the chapter is locked for that reader (never for the novel's
+    /// author or a subscriber); in the author's own list, whether it is locked for non-subscribers.
+    /// </summary>
+    public bool IsLocked { get; set; } = false;
+
+    /// <summary>
+    /// When a locked chapter opens to everyone (#94), UTC with "Z"; null when <see cref="IsLocked"/> is false, and on a
+    /// subscribers-only novel, whose locks don't end by themselves.
+    /// </summary>
+    public DateTime? UnlocksAt { get; set; }
 }
 
 /// <summary>
@@ -79,6 +88,12 @@ public class ChapterSingleAuthorDTO
     /// <summary>The chapter's words (#77, <see cref="ChaptersAuthorDTO.WordsCount"/>).</summary>
     public int? WordsCount { get; set; }
 
+    /// <summary>Whether early access locks the chapter for non-subscribers (#94), as in the author's list.</summary>
+    public bool IsLocked { get; set; }
+
+    /// <summary>When it opens to everyone (#94), as in the author's list (<see cref="ChaptersDTO.UnlocksAt"/>).</summary>
+    public DateTime? UnlocksAt { get; set; }
+
     public List<ChapterParagraphDTO> Paragraphs { get; set; } = new();
 }
 
@@ -100,9 +115,14 @@ public class ChapterSingleReaderDTO
     public string? NextChapterSlug { get; set; }
     public List<ChapterParagraphDTO> Paragraphs { get; set; } = new();
     
-    // Privilege System
-    public bool IsLocked { get; set; } = false; // Is this chapter locked?
-    public string? LockMessage { get; set; } // Message to display when locked
+    /// <summary>Whether early access locks the chapter for this reader (#94): then it comes without its paragraphs.</summary>
+    public bool IsLocked { get; set; } = false;
+
+    /// <summary>Why, in Arabic, when <see cref="IsLocked"/>; null otherwise.</summary>
+    public string? LockMessage { get; set; }
+
+    /// <summary>When it opens to everyone (#94), UTC with "Z"; null when it isn't locked, or on a subscribers-only novel.</summary>
+    public DateTime? UnlocksAt { get; set; }
 }
 
 /// <summary>

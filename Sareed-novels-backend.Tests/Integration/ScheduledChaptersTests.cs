@@ -56,14 +56,14 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
         var stored = await desk.StoredNovel(novel.Id);
         Assert.Equal((1, cameOut), (stored.ChapterCount, stored.LastUpdatedAt));
         Assert.Equal(1, await desk.Announced(chapter));
-        Assert.Equal(1, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(chapter));
 
         // Later runs find nothing to do.
         desk.Clock.Advance(TimeSpan.FromMinutes(1));
         await desk.PublishDue();
         await desk.PublishDue();
         Assert.Equal(1, await desk.Announced(chapter));
-        Assert.Equal(1, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(chapter));
         Assert.Equal(cameOut, (await desk.Stored(chapter)).PublishedAt);
     }
 
@@ -88,7 +88,7 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
         var (handNovel, scheduledNovel) = (await desk.StoredNovel(byHand.Id), await desk.StoredNovel(onSchedule.Id));
         Assert.Equal((handNovel.ChapterCount, handNovel.LastUpdatedAt), (scheduledNovel.ChapterCount, scheduledNovel.LastUpdatedAt));
         Assert.Equal((1, 1), (await desk.Announced(handDraft), await desk.Announced(scheduledDraft)));
-        Assert.Equal((2, 2), (desk.WindowExtensions(byHand.Id), desk.WindowExtensions(onSchedule.Id)));
+        Assert.Equal((1, 1), (desk.EarlyAccessTold(handDraft), desk.EarlyAccessTold(scheduledDraft)));
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
 
         Assert.Equal(ChapterStatuses.Published, (await desk.Stored(chapter)).Status);
         Assert.Equal(1, await desk.Announced(chapter));
-        Assert.Equal(1, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(chapter));
         Assert.Equal(1, (await desk.StoredNovel(novel.Id)).ChapterCount);
 
         // A run that found it due, but holds it only after another run published it, does nothing either.
@@ -142,14 +142,14 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
         await desk.PublishDue();
         Assert.True(otherRan);
         Assert.Equal(1, await desk.Announced(next));
-        Assert.Equal(2, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(next));
 
         // And truly at once.
         var last = await desk.Create(author, novel, ChapterStatuses.Draft, publishAt: Start.AddHours(1).AddMinutes(2));
         desk.Clock.Advance(TimeSpan.FromMinutes(1));
         await Task.WhenAll(desk.PublishDue(), desk.PublishDue(), desk.PublishDue());
         Assert.Equal(1, await desk.Announced(last));
-        Assert.Equal(3, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(last));
         Assert.Equal(3, (await desk.StoredNovel(novel.Id)).ChapterCount);
     }
 
@@ -181,7 +181,7 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
         Assert.Equal(desk.Clock.UtcNow, stored.PublishedAt);
         Assert.Equal(1, (await desk.StoredNovel(novel.Id)).ChapterCount);
         Assert.Equal(1, await desk.Announced(chapter));
-        Assert.Equal(1, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(chapter));
     }
 
     [Fact]
@@ -203,7 +203,7 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
         var stored = await desk.Stored(chapter);
         Assert.Equal((ChapterStatuses.Published, (DateTime?)null, (int?)1), (stored.Status, stored.PublishAt, stored.PublishedChapterSequence));
         Assert.Equal(1, await desk.Announced(chapter));
-        Assert.Equal(1, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(chapter));
         Assert.Equal(1, (await desk.StoredNovel(novel.Id)).ChapterCount);
     }
 
@@ -228,7 +228,7 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
         Assert.Equal((ChapterStatuses.Published, (DateTime?)null, (DateTime?)desk.Clock.UtcNow, (int?)1),
             (stored.Status, stored.PublishAt, stored.PublishedAt, stored.PublishedChapterSequence));
         Assert.Equal(1, await desk.Announced(chapter));
-        Assert.Equal(1, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(chapter));
         Assert.Equal(1, (await desk.StoredNovel(novel.Id)).ChapterCount);
     }
 
@@ -252,7 +252,7 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
         var stored = await desk.Stored(chapter);
         Assert.Equal((ChapterStatuses.Published, (DateTime?)null, (int?)1), (stored.Status, stored.PublishAt, stored.PublishedChapterSequence));
         Assert.Equal(1, await desk.Announced(chapter));
-        Assert.Equal(1, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(chapter));
         Assert.Equal(1, (await desk.StoredNovel(novel.Id)).ChapterCount);
     }
 
@@ -292,7 +292,7 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
         await desk.PublishDue();
         Assert.Equal(ChapterStatuses.Draft, (await desk.Stored(chapter)).Status);
         Assert.Equal(1, await desk.Announced(chapter));
-        Assert.Equal(1, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(chapter));
     }
 
     [Fact]
@@ -398,7 +398,7 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
         desk.Clock.Advance(TimeSpan.FromHours(1));
         await desk.PublishDue();
         Assert.Equal(1, await desk.Announced(chapter));
-        Assert.Equal(1, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(chapter));
 
         // Unpublished later, it isn't scheduled again.
         Assert.True((await desk.Save(author, novel, chapter, ChapterStatuses.Draft)).Success);
@@ -653,7 +653,7 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
         });
         Assert.Equal(3, (await desk.StoredNovel(novel.Id)).ChapterCount);
         Assert.Equal((1, 1), (await desk.Announced(second), await desk.Announced(third)));
-        Assert.Equal(3, desk.WindowExtensions(novel.Id));
+        Assert.Equal((1, 1, 1), (desk.EarlyAccessTold(first), desk.EarlyAccessTold(second), desk.EarlyAccessTold(third)));
     }
 
     [Fact]
@@ -693,7 +693,7 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
         Assert.True(answered);
         Assert.Equal(desk.Clock.UtcNow, (await desk.Stored(chapter)).PublishedAt);
         Assert.Equal(1, await desk.Announced(chapter));
-        Assert.Equal(1, desk.WindowExtensions(novel.Id));
+        Assert.Equal(1, desk.EarlyAccessTold(chapter));
         Assert.Equal(ChapterStatuses.Draft, (await desk.Stored(elsewhere)).Status); // its novel wasn't read
 
         // Read again: nothing more.

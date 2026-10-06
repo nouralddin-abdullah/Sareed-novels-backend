@@ -424,7 +424,7 @@ public class WalletFlowTests(SqlServerDatabase database) : IClassFixture<SqlServ
             await using var request = new Request(database);
             var privileges = new PrivilegeService(NullLogger<PrivilegeService>.Instance, new NovelPrivilegeRepository(request.Db),
                 new PrivilegeSubscriptionRepository(request.Db), new NovelsRepository(request.Db), new ChaptersRepository(request.Db),
-                request.Wallet, request.Transactions, Substitute.For<IServiceScopeFactory>());
+                request.Wallet, request.Transactions, Substitute.For<IServiceScopeFactory>(), TimeProvider.System);
             return await privileges.SubscribeToPrivilegeAsync(novel.Id, reader.Id);
         });
 

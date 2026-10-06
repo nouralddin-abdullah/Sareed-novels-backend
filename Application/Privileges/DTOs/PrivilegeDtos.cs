@@ -19,15 +19,36 @@ public class NovelPrivilegeDto
 }
 
 /// <summary>
-/// Privilege info for readers (includes subscription status)
+/// GET /api/novel/{novelId}/privilege when early access is on (#94): its settings, its locked chapters now, and the
+/// signed-in member's subscription. Off, the answer is only <c>{ isEnabled: false }</c>.
 /// </summary>
 public class PrivilegeInfoDto
 {
     public bool IsEnabled { get; set; }
     public decimal SubscriptionCost { get; set; }
+
+    /// <summary>How many days a chapter stays locked from when its lock started (1-30); null when <see cref="SubscribersOnly"/>.</summary>
+    public int? EarlyAccessDays { get; set; }
+
+    /// <summary>Locked chapters stay locked for non-subscribers until the author frees them.</summary>
+    public bool SubscribersOnly { get; set; }
+
+    /// <summary>How many published chapters are locked for non-subscribers now, counted from the chapters.</summary>
     public int LockedChaptersCount { get; set; }
-    public int? PrivilegeStartSequence { get; set; } // NEW: Which sequence privilege starts from
+
+    /// <summary>The earliest moment a locked chapter opens to everyone (UTC, "Z"); null when none is locked, or subscribers only.</summary>
+    public DateTime? NextUnlockAt { get; set; }
+
+    /// <summary>
+    /// The published position of the first locked chapter; the number after the last published chapter when none is
+    /// locked (what the website reads as "locking starts from").
+    /// </summary>
+    public int? PrivilegeStartSequence { get; set; }
     public int TotalPublishedChapters { get; set; }
+
+    /// <summary>How many members subscribed: for the novel's author only, null for anyone else.</summary>
+    public int? SubscribersCount { get; set; }
+
     public bool IsSubscribed { get; set; } // Does current user have subscription?
     /// <summary>When the signed-in reader's subscription began (UTC); null when not subscribed.</summary>
     public DateTime? SubscribedAt { get; set; }

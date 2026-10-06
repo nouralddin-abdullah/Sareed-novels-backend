@@ -119,7 +119,7 @@ public class NegativeBalanceTests(SqlServerDatabase database) : IClassFixture<Sq
     private static PrivilegeService Privileges(Request request) => new(
         NullLogger<PrivilegeService>.Instance, new NovelPrivilegeRepository(request.Db), new PrivilegeSubscriptionRepository(request.Db),
         new NovelsRepository(request.Db), new ChaptersRepository(request.Db), request.Wallet, request.Transactions,
-        Substitute.For<IServiceScopeFactory>());
+        Substitute.For<IServiceScopeFactory>(), TimeProvider.System);
 
     [Fact]
     public async Task A_refund_takes_the_points_back_below_zero()

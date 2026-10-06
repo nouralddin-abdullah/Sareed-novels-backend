@@ -1,4 +1,5 @@
 ﻿using Application.Privileges.Commands.CancelSubscription;
+using Application.Privileges.Commands.DisablePrivilege;
 using Application.Privileges.Commands.EnablePrivilege;
 using Application.Privileges.Commands.ManualUnlock;
 using Application.Privileges.Commands.Subscribe;
@@ -18,7 +19,9 @@ public class PrivilegeController(IMediator mediator) : ControllerBase
     // ===== READER ENDPOINTS =====
     
     /// <summary>
-    /// Get privilege information for a novel (visible to all users)
+    /// A novel's early access, for anyone (#94): its settings (earlyAccessDays or subscribersOnly), its locked chapters
+    /// now (lockedChaptersCount, nextUnlockAt, privilegeStartSequence), subscribersCount for its author, and the
+    /// signed-in member's subscription; <c>{ isEnabled: false }</c> while it is off.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetPrivilegeInfo([FromRoute] Guid novelId)
@@ -64,7 +67,10 @@ public class PrivilegeController(IMediator mediator) : ControllerBase
     // ===== AUTHOR ENDPOINTS =====
     
     /// <summary>
-    /// Enable privilege system for a novel (author only)
+    /// Turns early access on (#94), the first time or again after it was turned off: the published chapters from
+    /// privilegeStartSequence on lock now (by default the last min(20, published - 10); never the first 10, at most 20),
+    /// each for earlyAccessDays (1-30) or for subscribers only until the author frees it; neither sent is 7 days, both
+    /// is 400 ValidationFailed, days out of range 400 InvalidEarlyAccessDays.
     /// </summary>
     [HttpPost("enable")]
     [Authorize]
@@ -76,7 +82,9 @@ public class PrivilegeController(IMediator mediator) : ControllerBase
         {
             NovelId = novelId,
             SubscriptionCost = request.SubscriptionCost,
-            PrivilegeStartSequence = request.PrivilegeStartSequence
+            PrivilegeStartSequence = request.PrivilegeStartSequence,
+            EarlyAccessDays = request.EarlyAccessDays,
+            SubscribersOnly = request.SubscribersOnly
         };
         
         var result = await mediator.Send(command);
@@ -90,7 +98,9 @@ public class PrivilegeController(IMediator mediator) : ControllerBase
     }
     
     /// <summary>
-    /// Update privilege configuration (author only)
+    /// Changes early access (#94): the cost (new subscribers), the days or subscribers only (chapters that come out from
+    /// now and those still locked, their end counted from their own lock; a freed chapter never locks again), and,
+    /// for the website before #94, the first locked chapter, forward only. 400 NoChanges when nothing changes.
     /// </summary>
     [HttpPatch]
     [Authorize]
@@ -102,7 +112,9 @@ public class PrivilegeController(IMediator mediator) : ControllerBase
         {
             NovelId = novelId,
             NewSubscriptionCost = request.NewSubscriptionCost,
-            NewPrivilegeStartSequence = request.NewPrivilegeStartSequence
+            NewPrivilegeStartSequence = request.NewPrivilegeStartSequence,
+            EarlyAccessDays = request.EarlyAccessDays,
+            SubscribersOnly = request.SubscribersOnly
         };
         
         var result = await mediator.Send(command);
@@ -116,7 +128,8 @@ public class PrivilegeController(IMediator mediator) : ControllerBase
     }
     
     /// <summary>
-    /// Manually unlock a privilege chapter (author only)
+    /// Frees that chapter only, for everyone, for good (#94). 400 ChapterNotLocked, NotOwner, PrivilegeNotEnabled or
+    /// ChapterNotFound (also for a chapter of another novel).
     /// </summary>
     [HttpPost("manual-unlock/{chapterId}")]
     [Authorize]
@@ -124,7 +137,7 @@ public class PrivilegeController(IMediator mediator) : ControllerBase
         [FromRoute] Guid novelId,
         [FromRoute] Guid chapterId)
     {
-        var command = new ManualUnlockChapterCommand { ChapterId = chapterId };
+        var command = new ManualUnlockChapterCommand { NovelId = novelId, ChapterId = chapterId };
         var result = await mediator.Send(command);
         
         if (result.Success)
@@ -133,6 +146,18 @@ public class PrivilegeController(IMediator mediator) : ControllerBase
         }
         
         return BadRequest(result);
+    }
+
+    /// <summary>
+    /// Turns early access off (#94): every chapter opens to everyone and new chapters don't lock; subscriptions stay,
+    /// for when it is turned on again (enable). 400 PrivilegeNotEnabled when it is off, NotOwner, NovelNotFound.
+    /// </summary>
+    [HttpPost("disable")]
+    [Authorize]
+    public async Task<IActionResult> DisablePrivilege([FromRoute] Guid novelId)
+    {
+        var result = await mediator.Send(new DisablePrivilegeCommand(novelId));
+        return result.Success ? Ok(result) : BadRequest(result);
     }
 }
 
@@ -143,12 +168,16 @@ public class EnablePrivilegeRequest
     public decimal SubscriptionCost { get; set; }
     
     /// <summary>
-    /// Optional: The PublishedChapterSequence from which privilege should start.
-    /// Example: If you have 50 published chapters and set this to 31,
-    /// chapters 31-50 will be locked (20 chapters).
-    /// If not provided, the last 20 published chapters will be locked.
+    /// The published position of the first chapter to lock: 11 or after, at most 20 locked. Not sent: the last
+    /// min(20, published - 10).
     /// </summary>
     public int? PrivilegeStartSequence { get; set; }
+
+    /// <summary>How many days each locked chapter stays early (1-30, #94).</summary>
+    public int? EarlyAccessDays { get; set; }
+
+    /// <summary>Locked chapters stay locked for non-subscribers until the author frees them (#94).</summary>
+    public bool? SubscribersOnly { get; set; }
 }
 
 public class UpdatePrivilegeRequest
@@ -156,9 +185,14 @@ public class UpdatePrivilegeRequest
     public decimal? NewSubscriptionCost { get; set; }
     
     /// <summary>
-    /// Optional: Move privilege start forward (unlock more chapters).
-    /// Can only move FORWARD, not backward.
-    /// Example: Current start is 31, move to 40 = unlock chapters 31-39.
+    /// The website before #94: moves the first locked chapter forward to this published position, freeing the locked
+    /// chapters before it. Never back.
     /// </summary>
     public int? NewPrivilegeStartSequence { get; set; }
+
+    /// <summary>New days (1-30, #94).</summary>
+    public int? EarlyAccessDays { get; set; }
+
+    /// <summary>True: subscribers only; false: back to days (#94).</summary>
+    public bool? SubscribersOnly { get; set; }
 }

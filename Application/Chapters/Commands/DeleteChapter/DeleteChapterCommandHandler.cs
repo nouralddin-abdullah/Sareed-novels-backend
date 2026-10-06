@@ -6,7 +6,6 @@ using AutoMapper;
 using Domain.Exceptions;
 using Domain.Repositories;
 using MediatR;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Chapters.Commands.DeleteChapter;
@@ -16,8 +15,7 @@ public class DeleteChapterCommandHandler(
     INovelsRepository novelsRepository, 
     IChaptersRepository chaptersRepository, 
     IUserContext userContext,
-    IChapterSequenceService sequenceService,
-    IServiceProvider serviceProvider) : IRequestHandler<DeleteChapterCommand, bool>
+    IChapterSequenceService sequenceService) : IRequestHandler<DeleteChapterCommand, bool>
 {
     public async Task<bool> Handle(DeleteChapterCommand request, CancellationToken cancellationToken)
     {
@@ -32,7 +30,6 @@ public class DeleteChapterCommandHandler(
         if (chapter.NovelId != novel.Id) throw new NotFoundException("الفصل غير موجود", "ChapterNotFound");
         
         var wasPublished = chapter.Status == "Published";
-        var publishedSequence = chapter.PublishedChapterSequence;
         
         var deleteResult = await chaptersRepository.DeleteChapter(chapter);
         if (deleteResult)
@@ -46,15 +43,9 @@ public class DeleteChapterCommandHandler(
                     "Published chapter {ChapterId} deleted from novel {NovelId}, triggering sequence recalculation", 
                     request.ChapterId, request.NovelId);
                 
+                // The other chapters keep their early-access locks (#94): a lock is the chapter's own, not a position.
                 await sequenceService.RecalculateSequencesForNovelAsync(request.NovelId);
                 await sequenceService.UpdateReadingProgressForNovelAsync(request.NovelId);
-                
-                // Trigger privilege update (decrease locked count)
-                if (publishedSequence.HasValue)
-                {
-                    var privilegeService = serviceProvider.GetRequiredService<IPrivilegeService>();
-                    await privilegeService.OnChapterDeletedAsync(request.NovelId, publishedSequence.Value);
-                }
             }
             
         }

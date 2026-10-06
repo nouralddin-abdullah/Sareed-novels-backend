@@ -4,6 +4,7 @@ using Domain.Search;
 using Infrastructure.Push;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Infrastructure.Persistence;
 
@@ -421,6 +422,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             // The version of the chapter's title and text (#75); existing chapters start at 1.
             entity.Property(c => c.Revision)
                   .HasDefaultValue(1);
+
+            // A chapter's early-access lock (#94) is written only in SQL, by the early-access code: a save of the chapter
+            // (ChaptersRepository.UpdateChapter marks every column of the copy it loaded) must never write back the lock
+            // that copy was loaded with, or a save could lock a chapter its author had just freed.
+            entity.Property(c => c.EarlyAccessFrom).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+            entity.Property(c => c.EarlyAccessFreedAt).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
 
             entity.HasOne(c => c.Novel)
                   .WithMany(n => n.Chapters)
@@ -1344,6 +1351,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.Property(np => np.TotalDailyUnlocksPerformed)
                 .HasDefaultValue(0);
+
+            // Days or subscribers only (#94): exactly one of the two. IS NOT NULL because a check only refuses what is
+            // false, and NULL BETWEEN 1 AND 30 is unknown.
+            entity.Property(np => np.SubscribersOnly)
+                .HasDefaultValue(false);
+            entity.ToTable(t => t.HasCheckConstraint("CK_NovelPrivileges_EarlyAccessMode",
+                "([SubscribersOnly] = 1 AND [EarlyAccessDays] IS NULL) OR ([SubscribersOnly] = 0 AND [EarlyAccessDays] IS NOT NULL AND [EarlyAccessDays] BETWEEN 1 AND 30)"));
 
             // Unique constraint: one privilege config per novel
             entity.HasIndex(np => np.NovelId)

@@ -25,36 +25,14 @@ public class GetChaptersReaderQueryHandler(
         var chapters = await chaptersRepository.GetChaptersReaderView(request.NovelId);
         var chapterDtos = mapper.Map<IEnumerable<ChaptersDTO>>(chapters).ToList();
         
-        var currentUser = userContext.GetCurrentUser();
-        
-        // ✅ Authors can see all their own chapters unlocked (skip privilege check)
-        if (currentUser != null && novel.AuthorId == currentUser.Id)
+        // Each chapter's own early-access lock (#94), for this reader: never for the novel's author or a subscriber.
+        var view = await privilegeService.GetViewAsync(novel.Id, novel.AuthorId, userContext.GetCurrentUser()?.Id);
+        var byId = chapters.ToDictionary(c => c.Id);
+        foreach (var dto in chapterDtos)
         {
-            return chapterDtos; // All chapters unlocked for author
-        }
-        
-        // ✅ OPTIMIZED: Get privilege config once (no chapter loading)
-        var privilege = await privilegeService.GetPrivilegeConfigAsync(request.NovelId);
-        
-        // Check if user has subscription
-        var hasSubscription = false;
-        if (currentUser != null && privilege != null && privilege.IsEnabled)
-        {
-            hasSubscription = await privilegeService.HasActiveSubscriptionAsync(request.NovelId, currentUser.Id);
-        }
-        
-        // ✅ Mark locked chapters using in-memory sequence comparison (no extra queries!)
-        if (!hasSubscription && privilege != null && privilege.IsEnabled && privilege.PrivilegeStartSequence.HasValue)
-        {
-            foreach (var dto in chapterDtos)
-            {
-                var chapter = chapters.First(c => c.Id == dto.Id);
-                if (chapter.PublishedChapterSequence.HasValue && 
-                    chapter.PublishedChapterSequence.Value >= privilege.PrivilegeStartSequence.Value)
-                {
-                    dto.IsLocked = true;
-                }
-            }
+            var chapter = byId[dto.Id];
+            dto.IsLocked = view.IsLockedForViewer(chapter);
+            dto.UnlocksAt = view.UnlocksAtForViewer(chapter);
         }
         
         return chapterDtos;

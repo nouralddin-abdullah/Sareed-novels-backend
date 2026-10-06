@@ -51,6 +51,23 @@ public class Chapter
     /// </summary>
     public int? WordsCount { get; set; }
 
+    /// <summary>
+    /// When the chapter's early-access lock started (UTC, #94): the moment early access was turned on, for the chapters it
+    /// locked then, or when the chapter came out (<see cref="PublishedAt"/>), for one that came out while it was on.
+    /// Null while early access has never locked it. The lock lasts the novel's early-access days from here, or for good
+    /// on a subscribers-only novel, unless the chapter is freed first (<see cref="EarlyAccessFreedAt"/>); who it locks
+    /// out is the rule of <c>EarlyAccess</c>. Written only by the early-access code, in SQL: a save of the chapter never
+    /// writes it (ApplicationDbContext), so a save from an older copy can't undo a lock or an unlock.
+    /// </summary>
+    public DateTime? EarlyAccessFrom { get; set; }
+
+    /// <summary>
+    /// When the chapter was freed for good (UTC, #94): its author unlocked it by hand, or moved the start of the locked
+    /// chapters past it, or a change of the novel's early-access settings found its lock already over. A freed chapter
+    /// never locks again. Null otherwise; written like <see cref="EarlyAccessFrom"/>.
+    /// </summary>
+    public DateTime? EarlyAccessFreedAt { get; set; }
+
     // NEW: Paragraphs
     public ICollection<ChapterParagraph> Paragraphs { get; set; } = new List<ChapterParagraph>();
     

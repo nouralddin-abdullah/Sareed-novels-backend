@@ -147,12 +147,11 @@ public class ChapterViewHttpTests(SardApiFactory api)
         var (chapter, _) = await api.AddChapter(novel, "<p>فقرة</p>");
         await using (var db = api.Db())
         {
-            // Early access from the first published chapter on: every chapter is locked for non-subscribers.
-            await db.Chapters.Where(c => c.Id == chapter.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.PublishedChapterSequence, 1));
-            db.NovelPrivileges.Add(new NovelPrivilege
-            {
-                Id = Guid.NewGuid(), NovelId = novel.Id, IsEnabled = true, SubscriptionCost = 200, CurrentLockedCount = 5, PrivilegeStartSequence = 1
-            });
+            // Early access locks the chapter for non-subscribers (#94: its own lock, started now, for 7 days).
+            await db.Chapters.Where(c => c.Id == chapter.Id).ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.PublishedChapterSequence, 1)
+                .SetProperty(c => c.EarlyAccessFrom, DateTime.UtcNow));
+            db.NovelPrivileges.Add(new NovelPrivilege { Id = Guid.NewGuid(), NovelId = novel.Id, IsEnabled = true, SubscriptionCost = 200 });
             await db.SaveChangesAsync();
         }
         var reader = await api.SignUp();

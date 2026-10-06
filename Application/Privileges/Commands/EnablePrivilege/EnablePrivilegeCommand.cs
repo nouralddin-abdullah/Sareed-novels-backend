@@ -9,10 +9,14 @@ public class EnablePrivilegeCommand : IRequest<OperationResult>
     public decimal SubscriptionCost { get; set; }
     
     /// <summary>
-    /// The PublishedChapterSequence from which privilege should start.
-    /// Example: If you have 50 published chapters and set this to 31,
-    /// chapters 31-50 will be locked (20 chapters).
-    /// If null, defaults to locking the last 20 published chapters.
+    /// The published position of the first chapter to lock (11 or after, at most 20 locked); null locks the last
+    /// min(20, published - 10).
     /// </summary>
     public int? PrivilegeStartSequence { get; set; }
+
+    /// <summary>How many days a chapter stays locked (1-30, #94); 7 when neither this nor <see cref="SubscribersOnly"/> is sent.</summary>
+    public int? EarlyAccessDays { get; set; }
+
+    /// <summary>Chapters stay locked for non-subscribers until the author frees them (#94); not with <see cref="EarlyAccessDays"/>.</summary>
+    public bool? SubscribersOnly { get; set; }
 }

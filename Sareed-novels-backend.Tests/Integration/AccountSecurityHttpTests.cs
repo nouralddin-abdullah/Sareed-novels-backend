@@ -65,8 +65,7 @@ public sealed class SardApiFactory : WebApplicationFactory<Program>, IAsyncLifet
             // them, #77).
             Type[] jobs =
             [
-                typeof(RankingRecalculationService), typeof(DailyPrivilegeUnlockService),
-                typeof(ScheduledChapterPublishingService), typeof(ChapterWordsBackfillService)
+                typeof(RankingRecalculationService), typeof(ScheduledChapterPublishingService), typeof(ChapterWordsBackfillService)
             ];
             foreach (var job in services.Where(d => d.ServiceType == typeof(IHostedService) && jobs.Contains(d.ImplementationType)).ToList())
             {
