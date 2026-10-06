@@ -7,4 +7,7 @@ public class GetMyTransactionHistoryQuery : IRequest<(IEnumerable<PointTransacti
 {
     public int PageNumber { get; set; } = 1;
     public int PageSize { get; set; } = 20;
+
+    /// <summary>The types filter as sent (#92): comma-separated TransactionType names (<see cref="TransactionTypeFilter"/>).</summary>
+    public IReadOnlyList<string>? Types { get; set; }
 }

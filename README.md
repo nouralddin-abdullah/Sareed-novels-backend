@@ -1640,10 +1640,9 @@ readers see: comments their authors deleted aren't counted, as the comment count
 The migration `AddChapterRevision` adds `Chapters.Revision` (1 for every existing chapter) and `Chapters.UpdatedAt`
 (set to when each was created).
 
-### Writer mode: notifications by type, and an author's earnings (#78)
+### Writer mode: notifications by type, and an author's earnings (#78, #92)
 
-Two read routes for the app's writer mode. Both are for the signed-in member (401 without a token) and never take a
-user id.
+Routes for the app's writer mode. All are for the signed-in member (401 without a token) and never take a user id.
 
 **Notifications of some types.** `GET /api/notifications` and `GET /api/notifications/unread-count` take an optional
 `types`: `NotificationType` names, comma-separated. «على رواياتي», what happens on her novels apart from the social
@@ -1667,6 +1666,25 @@ GET /api/notifications/unread-count?types=CommentOnChapter,ReviewOnNovel,GiftRec
 - Blocks are unchanged: a block stops a notification when it would be created (#52), so it is in no list, filtered or
   not.
 
+**Marking only some types read (#92).** `PATCH /api/notifications/read?types=…` marks the caller's unread
+notifications of those types read, and no others: «على رواياتي»'s «تحديد الكل كمقروء».
+
+```
+PATCH /api/notifications/read?types=CommentOnChapter,ReviewOnNovel,GiftReceived,PrivilegeSubscribed
+200 { "marked": 4, "unreadCount": 2, "typesUnreadCount": 0 }
+```
+
+- `types` is read as the list's: the same names, any letter case, spaces around them, the parameter repeated, unknown
+  names ignored. But **naming no known type marks nothing**, where a list shows every type: a write never widens to
+  every type. `PATCH /api/notifications/read-all` (204) is still the one that marks every type.
+- `marked`: how many it marked (0 when none of those types was unread, so asking again is harmless). `unreadCount`: the
+  unread notifications of every type after it (the bell), as `unread-count` answers. `typesUnreadCount`: those of these
+  types, as `unread-count?types=…` answers: 0, unless one arrived meanwhile.
+- `types` missing, empty or only commas and spaces: 400 `ValidationFailed` «حدّد أنواع الإشعارات التي تريد تحديدها
+  كمقروءة», and nothing is marked.
+- It is a route of its own because `read-all` ignores a `types` parameter and marks everything; a server from before
+  #92 answers 404 here, so an app can call it safely.
+
 **An author's earnings: `GET /api/wallet/earnings`.** What her novels earned her, in **points only**: no money, no
 withdrawable amount, nothing about payouts (store policy, the owner's decision).
 
@@ -1677,8 +1695,10 @@ withdrawable amount, nothing about payouts (store policy, the owner's decision).
   "nextReleaseAt": "2026-11-02T18:40:12.5Z",
   "byNovel": [
     { "novelId": "6f0c2a…", "novelSlug": "6f0c2-رواية", "novelTitle": "رواية", "coverImageUrl": "https://…",
+      "isDeleted": false, "isDraft": false,
       "gifts": 600, "privileges": 300, "reversed": 200, "total": 700, "supportersCount": 4 },
     { "novelId": null, "novelSlug": null, "novelTitle": "أرباح بلا رواية محددة", "coverImageUrl": null,
+      "isDeleted": null, "isDraft": null,
       "gifts": 350, "privileges": 0, "reversed": 0, "total": 350, "supportersCount": 0 }
   ],
   "byMonth": [
@@ -1708,6 +1728,9 @@ How each row of her ledger (`PointTransactions`) counts:
 - `byNovel`: every novel she has earnings from, of all time, highest `total` first; equal totals by `novelId`, with the
   entry without a novel after the novels. Drafts and deleted novels are in it with their title, slug and cover (a
   deleted novel's page answers 404; `GET /api/myworks` lists the ones that still exist).
+- `isDeleted` and `isDraft` (#92) say which: `isDeleted` when the author deleted the novel («محذوفة»), `isDraft` when it
+  is hidden from readers and not deleted («مخفية»). At most one is true (a deleted draft is deleted), and both are
+  `null` on the entry without a novel.
 - **The entry without a novel**: ledger rows written before #17 (2026-09-28) don't say which novel they were for. They
   share one entry: `novelId`, `novelSlug` and `coverImageUrl` `null`, `novelTitle` «أرباح بلا رواية محددة», sorted like
   the others.
@@ -1721,6 +1744,20 @@ How each row of her ledger (`PointTransactions`) counts:
 
 **`GET /api/wallet`'s `totalEarned`** was always 0: it was read from a column nothing ever wrote. It is now the figure
 above. `totalRecharged`, `totalWithdrawn` and `totalSpent` are still read from columns nothing writes: don't show them.
+
+**The ledger by type: `GET /api/wallet/transactions?types=…` (#92).** The earnings page lists only earnings:
+`types=GiftReceived,PrivilegeRevenue,EarningReversed`, with `pageNumber` and `pageSize` as before.
+
+- The names (each item's `type`): `RechargeApproved`, `WithdrawalApproved`, `GiftSent`, `GiftReceived`,
+  `PrivilegeSubscription`, `PrivilegeRevenue`, `PlayPurchase`, `PlayRefund`, `BalanceForfeited`, `EarningReversed`,
+  `Refund`, and the first week's `Recharge` and `Withdrawal`. They are read as the notifications' `types`: any letter
+  case, unknown names ignored, and a `types` naming no known type (or empty) filters nothing.
+- It is applied in SQL; with it, `totalCount` counts those types only.
+- It filters by type only. `EarningReversed` rows are both sides of a reversal: negative, an earning of hers taken back;
+  positive, points given back to her because a buyer's refund took back an earning she had paid another author. The
+  earnings page counts the negative ones, as `GET /api/wallet/earnings` does.
+- Pages are newest first, and rows of the same instant (a refund writes several) follow their id, so paging never
+  repeats or skips one, with or without `types`.
 
 ### Writer extras: word counts and scheduled publishing (#77)
 

@@ -377,7 +377,7 @@ public class NovelsRepository(ApplicationDbContext dbContext) : INovelsRepositor
             .IgnoreQueryFilters() // deleted novels too
             .AsNoTracking()
             .Where(n => novelIds.Contains(n.Id))
-            .Select(n => new NovelCard(n.Id, n.Slug, n.Title, n.CoverImageUrl))
+            .Select(n => new NovelCard(n.Id, n.Slug, n.Title, n.CoverImageUrl, n.IsDraft, n.IsDeleted))
             .ToDictionaryAsync(n => n.Id);
     }
 

@@ -36,13 +36,20 @@ public class WalletController(IMediator mediator) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// The caller's ledger, newest first. <paramref name="types"/> (#92): only these TransactionType names, comma-separated,
+    /// in any letter case, as GET /api/notifications takes its types: unknown names are ignored, and none known (or none
+    /// at all) means every type. With it, totalCount counts those types only.
+    /// </summary>
     [HttpGet("transactions")]
-    public async Task<IActionResult> GetMyTransactionHistory([FromQuery] int? pageNumber, [FromQuery] int? pageSize)
+    public async Task<IActionResult> GetMyTransactionHistory([FromQuery] int? pageNumber, [FromQuery] int? pageSize,
+        [FromQuery] string[]? types)
     {
         var query = new GetMyTransactionHistoryQuery
         {
             PageNumber = pageNumber ?? 1,
-            PageSize = pageSize ?? 20
+            PageSize = pageSize ?? 20,
+            Types = types
         };
         var (transactions, totalCount) = await mediator.Send(query);
         return Ok(new { transactions, totalCount });

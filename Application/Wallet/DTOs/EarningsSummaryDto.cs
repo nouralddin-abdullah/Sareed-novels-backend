@@ -40,6 +40,18 @@ public class NovelEarningsDto
 
     public string? CoverImageUrl { get; set; }
 
+    /// <summary>
+    /// Whether the author deleted the novel (#92): «محذوفة». Null for the entry without a novel. At most one of this
+    /// and <see cref="IsDraft"/> is true.
+    /// </summary>
+    public bool? IsDeleted { get; set; }
+
+    /// <summary>
+    /// Whether the novel is hidden from readers, a draft not deleted (#92): «مخفية». Null for the entry without a novel;
+    /// false for a deleted novel, which <see cref="IsDeleted"/> says.
+    /// </summary>
+    public bool? IsDraft { get; set; }
+
     /// <summary>Points earned from gifts to the novel.</summary>
     public decimal Gifts { get; set; }
 

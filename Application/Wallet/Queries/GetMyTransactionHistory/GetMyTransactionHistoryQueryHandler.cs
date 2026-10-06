@@ -23,7 +23,8 @@ public class GetMyTransactionHistoryQueryHandler(
         var (transactions, totalCount) = await transactionRepository.GetUserTransactionsAsync(
             currentUser.Id,
             pageNumber,
-            pageSize
+            pageSize,
+            TransactionTypeFilter.Parse(request.Types)
         );
         
         var dtos = mapper.Map<List<PointTransactionDto>>(transactions);

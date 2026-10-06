@@ -35,5 +35,10 @@ public interface INotificationsRepository
     Task<bool> MarkAsRead(Guid notificationId);
     /// <summary>Marks every unread notification of the user read in one statement; how many there were (0 is fine).</summary>
     Task<int> MarkAllAsRead(string userId);
+    /// <summary>
+    /// Marks the user's unread notifications of <paramref name="types"/> read in one statement, and no others: none for
+    /// an empty list (#92). How many there were (0 is fine).
+    /// </summary>
+    Task<int> MarkTypesAsRead(string userId, IReadOnlyCollection<string> types);
     Task<bool> DeleteNotification(Guid notificationId);
 }
