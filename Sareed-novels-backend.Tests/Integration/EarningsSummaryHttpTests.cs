@@ -26,8 +26,9 @@ public class EarningsSummaryHttpTests(SardApiFactory api)
 
     // ===== Reading the summary =====
 
+    /// <summary>An entry of byNovel; a novel neither deleted nor a draft unless said (#92).</summary>
     private sealed record NovelLine(Guid? NovelId, string? Slug, string? Title, string? Cover, decimal Gifts, decimal Privileges,
-        decimal Reversed, decimal Total, int Supporters);
+        decimal Reversed, decimal Total, int Supporters, bool? IsDeleted = false, bool? IsDraft = false);
 
     private sealed record MonthLine(string Month, decimal Gifts, decimal Privileges, decimal Reversed, decimal Total);
 
@@ -41,13 +42,16 @@ public class EarningsSummaryHttpTests(SardApiFactory api)
     private static readonly string[] SummaryFields = ["totalEarned", "pendingEarnings", "nextReleaseAt", "byNovel", "byMonth"];
 
     private static readonly string[] NovelFields =
-        ["novelId", "novelSlug", "novelTitle", "coverImageUrl", "gifts", "privileges", "reversed", "total", "supportersCount"];
+        ["novelId", "novelSlug", "novelTitle", "coverImageUrl", "isDeleted", "isDraft", "gifts", "privileges", "reversed", "total",
+            "supportersCount"];
 
     private static readonly string[] MonthFields = ["month", "gifts", "privileges", "reversed", "total"];
 
     private static List<string> Fields(JsonElement element) => element.EnumerateObject().Select(p => p.Name).ToList();
 
     private static string? NullableString(JsonElement element) => element.ValueKind == JsonValueKind.Null ? null : element.GetString();
+
+    private static bool? NullableBool(JsonElement element) => element.ValueKind == JsonValueKind.Null ? null : element.GetBoolean();
 
     /// <summary>The summary, checked to have exactly the issue's fields.</summary>
     private async Task<Summary> Earnings(ApiUser user)
@@ -61,7 +65,8 @@ public class EarningsSummaryHttpTests(SardApiFactory api)
             return new NovelLine(id.ValueKind == JsonValueKind.Null ? null : id.GetGuid(), NullableString(n.GetProperty("novelSlug")),
                 NullableString(n.GetProperty("novelTitle")), NullableString(n.GetProperty("coverImageUrl")),
                 n.GetProperty("gifts").GetDecimal(), n.GetProperty("privileges").GetDecimal(), n.GetProperty("reversed").GetDecimal(),
-                n.GetProperty("total").GetDecimal(), n.GetProperty("supportersCount").GetInt32());
+                n.GetProperty("total").GetDecimal(), n.GetProperty("supportersCount").GetInt32(), NullableBool(n.GetProperty("isDeleted")),
+                NullableBool(n.GetProperty("isDraft")));
         }).ToList();
         var byMonth = body.GetProperty("byMonth").EnumerateArray().Select(m =>
         {
@@ -337,7 +342,7 @@ public class EarningsSummaryHttpTests(SardApiFactory api)
         Assert.Equal(
         [
             new NovelLine(null, null, GetMyEarningsQueryHandler.NoNovelTitle, null, Gifts: 500, Privileges: 150, Reversed: 0, Total: 650,
-                Supporters: 0),
+                Supporters: 0, IsDeleted: null, IsDraft: null),
             new NovelLine(novel.Id, novel.Slug, novel.Title, novel.CoverImageUrl, Gifts: 300, Privileges: 0, Reversed: 0, Total: 300,
                 Supporters: 1)
         ], summary.ByNovel);
@@ -375,29 +380,42 @@ public class EarningsSummaryHttpTests(SardApiFactory api)
     }
 
     [Fact]
-    public async Task Deleted_and_draft_novels_are_listed_by_their_title()
+    public async Task Deleted_and_draft_novels_are_listed_by_their_title_and_say_which_they_are()
     {
         var (author, reader) = (await api.SignUp(), await api.SignUp());
-        var (deleted, draft, kept) = (await Novel(author), await Novel(author), await Novel(author));
-        await Fund(reader, 2000);
-        await Gift(reader, deleted, 4);
-        await Gift(reader, draft, 3);
+        var (deleted, draft, deletedDraft, republished, kept) =
+            (await Novel(author), await Novel(author), await Novel(author), await Novel(author), await Novel(author));
+        await Fund(reader, 5000);
+        await Gift(reader, deleted, 6);
+        await Gift(reader, draft, 5);
+        await Gift(reader, deletedDraft, 4);
+        await Gift(reader, republished, 3);
         await Gift(reader, kept, 1);
 
         (await api.Send(HttpMethod.Delete, $"/api/myworks/{deleted.Id}/delete", author)).EnsureSuccessStatusCode();
         (await api.Send(HttpMethod.Patch, $"/api/myworks/{draft.Id}/draft", author)).EnsureSuccessStatusCode();
+        (await api.Send(HttpMethod.Patch, $"/api/myworks/{deletedDraft.Id}/draft", author)).EnsureSuccessStatusCode();
+        (await api.Send(HttpMethod.Delete, $"/api/myworks/{deletedDraft.Id}/delete", author)).EnsureSuccessStatusCode();
+        (await api.Send(HttpMethod.Patch, $"/api/myworks/{republished.Id}/draft", author)).EnsureSuccessStatusCode();
+        (await api.Send(HttpMethod.Patch, $"/api/myworks/{republished.Id}/publish", author)).EnsureSuccessStatusCode();
         await using (var db = api.Db())
         {
             Assert.True((await db.Novels.IgnoreQueryFilters().SingleAsync(n => n.Id == deleted.Id)).IsDeleted);
             Assert.True((await db.Novels.SingleAsync(n => n.Id == draft.Id)).IsDraft);
+            var both = await db.Novels.IgnoreQueryFilters().SingleAsync(n => n.Id == deletedDraft.Id);
+            Assert.True(both.IsDraft && both.IsDeleted);
         }
 
         var summary = await Earnings(author);
 
+        // «محذوفة» or «مخفية», one at most: a deleted draft is deleted.
         Assert.Equal(
         [
-            new NovelLine(deleted.Id, deleted.Slug, deleted.Title, deleted.CoverImageUrl, 400, 0, 0, 400, 1),
-            new NovelLine(draft.Id, draft.Slug, draft.Title, draft.CoverImageUrl, 300, 0, 0, 300, 1),
+            new NovelLine(deleted.Id, deleted.Slug, deleted.Title, deleted.CoverImageUrl, 600, 0, 0, 600, 1, IsDeleted: true),
+            new NovelLine(draft.Id, draft.Slug, draft.Title, draft.CoverImageUrl, 500, 0, 0, 500, 1, IsDraft: true),
+            new NovelLine(deletedDraft.Id, deletedDraft.Slug, deletedDraft.Title, deletedDraft.CoverImageUrl, 400, 0, 0, 400, 1,
+                IsDeleted: true),
+            new NovelLine(republished.Id, republished.Slug, republished.Title, republished.CoverImageUrl, 300, 0, 0, 300, 1),
             new NovelLine(kept.Id, kept.Slug, kept.Title, kept.CoverImageUrl, 100, 0, 0, 100, 1)
         ], summary.ByNovel);
         await AssertAddsUp(author, summary);

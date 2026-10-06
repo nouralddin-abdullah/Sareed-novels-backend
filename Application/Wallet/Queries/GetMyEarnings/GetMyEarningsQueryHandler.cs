@@ -42,7 +42,8 @@ public class GetMyEarningsQueryHandler(
             NextReleaseAt = wallet.NextReleaseAt,
             ByNovel = breakdown.ByNovel.Select(entry =>
             {
-                // A novel id without a novel can't happen (novels are only ever soft-deleted): it would keep its id, unnamed.
+                // A novel id without a novel can't happen (novels are only ever soft-deleted): it would keep its id,
+                // unnamed, and count as deleted.
                 var novel = entry.NovelId is { } id ? novels.GetValueOrDefault(id) : null;
                 return new NovelEarningsDto
                 {
@@ -50,6 +51,8 @@ public class GetMyEarningsQueryHandler(
                     NovelSlug = novel?.Slug,
                     NovelTitle = entry.NovelId is null ? NoNovelTitle : novel?.Title,
                     CoverImageUrl = novel?.CoverImageUrl,
+                    IsDeleted = entry.NovelId is null ? null : novel?.IsDeleted ?? true,
+                    IsDraft = entry.NovelId is null ? null : novel is { IsDraft: true, IsDeleted: false },
                     Gifts = entry.Sums.Gifts,
                     Privileges = entry.Sums.Privileges,
                     Reversed = entry.Sums.Reversed,

@@ -207,6 +207,13 @@ public class NotificationsRepository(ApplicationDbContext dbContext, PushOutboxS
             .Where(n => n.UserId == userId && !n.IsRead)
             .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
 
+    public async Task<int> MarkTypesAsRead(string userId, IReadOnlyCollection<string> types) =>
+        types.Count == 0
+            ? 0
+            : await dbContext.Notifications
+                .Where(n => n.UserId == userId && !n.IsRead && types.Contains(n.Type))
+                .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
+
     public async Task<bool> DeleteNotification(Guid notificationId)
     {
         var notification = await dbContext.Notifications.FindAsync(notificationId);

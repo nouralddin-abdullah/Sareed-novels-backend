@@ -16,15 +16,23 @@ public class PointTransactionRepository(ApplicationDbContext dbContext) : IPoint
         return transaction;
     }
 
-    public async Task<(IEnumerable<PointTransaction>, int)> GetUserTransactionsAsync(string userId, int pageNumber, int pageSize)
+    public async Task<(IEnumerable<PointTransaction>, int)> GetUserTransactionsAsync(string userId, int pageNumber, int pageSize,
+        IReadOnlyCollection<string>? types = null)
     {
-        var query = dbContext.PointTransactions
+        var query = dbContext.PointTransactions.AsNoTracking()
             .Where(t => t.UserId == userId);
+        if (types is not null)
+        {
+            query = query.Where(t => types.Contains(t.Type));
+        }
 
         var totalCount = await query.CountAsync();
 
+        // One operation writes several rows of the same instant (a refund's reversals): the id orders them, so pages
+        // never repeat or skip one.
         var transactions = await query
             .OrderByDescending(t => t.CreatedAt)
+            .ThenByDescending(t => t.Id)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
