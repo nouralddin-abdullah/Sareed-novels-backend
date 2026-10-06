@@ -2,6 +2,7 @@
 using Application.Chapters.Commands.UpdateChapter;
 using Application.Chapters.Scheduling;
 using Domain.Constants;
+using Domain.Entities;
 using Domain.Exceptions;
 using Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -473,6 +474,167 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
     }
 
     [Fact]
+    public async Task Cancelling_the_schedule_of_a_chapter_that_has_come_out_is_refused_and_nothing_is_saved()
+    {
+        // #88: alone, as the app cancels; with a status that keeps it out; with new text and a title, which aren't
+        // saved either.
+        var (author, novel) = await desk.SeedNovel();
+        var chapter = await desk.Create(author, novel, ChapterStatuses.Published);
+        desk.Clock.Advance(TimeSpan.FromMinutes(5));
+        var before = await desk.Stored(chapter);
+
+        foreach (var (status, title, content) in new (string?, string?, string?)[]
+                 {
+                     (null, null, null), (ChapterStatuses.Published, null, null), (null, "عنوان لا يحفظ", "<p>نص جديد لا يحفظ</p>")
+                 })
+        {
+            var refused = await Assert.ThrowsAsync<BadRequestException>(() => desk.Save(author, novel, chapter, status,
+                setsSchedule: true, publishAt: null, content: content, title: title));
+            Assert.Equal((ChapterSchedule.NotDraftCode, "نُشر هذا الفصل بالفعل"), (refused.Code, refused.Message));
+        }
+
+        await AssertUnchanged(before);
+        Assert.Equal("نص الفصل", await Text(chapter));
+    }
+
+    [Fact]
+    public async Task Cancelling_on_a_draft_clears_its_schedule_or_changes_nothing_and_the_answer_says_so()
+    {
+        // #88: a scheduled draft is no longer scheduled; one without a schedule stays as it is. Both answer the chapter
+        // as stored.
+        var (author, novel) = await desk.SeedNovel();
+        var scheduled = await desk.Create(author, novel, ChapterStatuses.Draft, publishAt: Start.AddHours(1));
+        var unscheduled = await desk.Create(author, novel, ChapterStatuses.Draft);
+
+        foreach (var chapter in new[] { scheduled, unscheduled })
+        {
+            var cancelled = await desk.Save(author, novel, chapter, status: null, setsSchedule: true, publishAt: null, content: null, title: null);
+            Assert.Equal((true, 1, ChapterStatuses.Draft, (DateTime?)null),
+                (cancelled.Success, cancelled.Revision, cancelled.Status, cancelled.PublishAt));
+            var stored = await desk.Stored(chapter);
+            Assert.Equal((ChapterStatuses.Draft, (DateTime?)null), (stored.Status, stored.PublishAt));
+        }
+
+        // Its old time comes and goes: it stays a draft.
+        desk.Clock.Advance(TimeSpan.FromHours(2));
+        await desk.PublishDue();
+        Assert.Equal(ChapterStatuses.Draft, (await desk.Stored(scheduled)).Status);
+        Assert.Equal(0, await desk.Announced(scheduled, expected: 0));
+
+        // A save that publishes a scheduled draft may cancel its schedule too: publishing clears it anyway.
+        var publishedNow = await desk.Create(author, novel, ChapterStatuses.Draft, publishAt: Start.AddHours(5));
+        var published = await desk.Save(author, novel, publishedNow, ChapterStatuses.Published, setsSchedule: true, publishAt: null,
+            content: null, title: null);
+        Assert.Equal((true, ChapterStatuses.Published, (DateTime?)null), (published.Success, published.Status, published.PublishAt));
+        Assert.Equal(ChapterStatuses.Published, (await desk.Stored(publishedNow)).Status);
+        Assert.Equal(1, await desk.Announced(publishedNow));
+    }
+
+    [Fact]
+    public async Task A_save_making_a_chapter_a_draft_again_may_send_publishAt_null_and_unpublishes_it()
+    {
+        // #88 keeps #77: a status that turns the chapter back into a draft lets publishAt: null through. Published on
+        // schedule, then unpublished: readers were told once, and the counts follow.
+        var (author, novel) = await desk.SeedNovel();
+        var chapter = await desk.Create(author, novel, ChapterStatuses.Draft, publishAt: Start.AddHours(1));
+        desk.Clock.Advance(TimeSpan.FromHours(1));
+        await desk.PublishDue();
+        var cameOut = desk.Clock.UtcNow;
+        desk.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        var unpublished = await desk.Save(author, novel, chapter, ChapterStatuses.Draft, setsSchedule: true, publishAt: null,
+            content: null, title: null);
+
+        Assert.Equal((true, 1, ChapterStatuses.Draft, (DateTime?)null),
+            (unpublished.Success, unpublished.Revision, unpublished.Status, unpublished.PublishAt));
+        var stored = await desk.Stored(chapter);
+        Assert.Equal((ChapterStatuses.Draft, (DateTime?)null, (DateTime?)cameOut, (int?)null, desk.Clock.UtcNow),
+            (stored.Status, stored.PublishAt, stored.PublishedAt, stored.PublishedChapterSequence, stored.UpdatedAt));
+        Assert.Equal(0, (await desk.StoredNovel(novel.Id)).ChapterCount);
+        Assert.Equal(1, await desk.Announced(chapter));
+    }
+
+    [Fact]
+    public async Task A_cancel_waiting_for_the_scheduled_publish_of_its_chapter_is_refused_because_the_chapter_came_out()
+    {
+        // #88, the race the app found: the author cancels (publishAt: null alone) at the moment the chapter falls due,
+        // and the scheduler holds it first. The cancel waits, then reads the chapter the publish stored: it came out,
+        // so the cancel is refused and saves nothing, and the chapter stays out, announced once.
+        var (author, novel) = await desk.SeedNovel();
+        var chapter = await desk.Create(author, novel, ChapterStatuses.Draft, publishAt: Start.AddHours(1));
+        desk.Clock.Advance(TimeSpan.FromHours(1));
+        var before = await desk.Stored(chapter);
+
+        var schedule = desk.ScheduleCommands.HoldWithChapter(chapter);
+        var run = desk.PublishDue();
+        await schedule.Held;
+        var cancel = desk.Save(author, novel, chapter, status: null, setsSchedule: true, publishAt: null, content: null, title: null);
+        await AssertWaits(cancel);
+        schedule.Release();
+        await run;
+
+        var refused = await Assert.ThrowsAsync<BadRequestException>(() => cancel);
+        Assert.Equal((ChapterSchedule.NotDraftCode, "نُشر هذا الفصل بالفعل"), (refused.Code, refused.Message));
+        var stored = await desk.Stored(chapter);
+        Assert.Equal((ChapterStatuses.Published, (DateTime?)null, (DateTime?)desk.Clock.UtcNow, (int?)1),
+            (stored.Status, stored.PublishAt, stored.PublishedAt, stored.PublishedChapterSequence));
+        Assert.Equal((before.Revision, before.UpdatedAt), (stored.Revision, stored.UpdatedAt));
+        Assert.Equal(1, (await desk.StoredNovel(novel.Id)).ChapterCount);
+        Assert.Equal(1, await desk.Announced(chapter));
+    }
+
+    [Fact]
+    public async Task A_cancel_that_read_the_chapter_as_a_scheduled_draft_before_the_scheduled_publish_is_refused()
+    {
+        // #88: the cancel has read the chapter as a scheduled draft; before it holds it, the schedule publishes it. The
+        // cancel reads the chapter again once it holds it, and is refused.
+        var (author, novel) = await desk.SeedNovel();
+        var chapter = await desk.Create(author, novel, ChapterStatuses.Draft, publishAt: Start.AddHours(1));
+        desk.Clock.Advance(TimeSpan.FromHours(1));
+        var authorsCancel = new CommandHook();
+        var scheduleRan = false;
+        authorsCancel.Before(command => TakesTheLockOf(command, chapter), async () =>
+        {
+            await desk.PublishDue();
+            scheduleRan = true;
+        });
+
+        var refused = await Assert.ThrowsAsync<BadRequestException>(() => desk.Save(author, novel, chapter, status: null,
+            setsSchedule: true, publishAt: null, content: null, title: null, interceptors: authorsCancel));
+
+        Assert.True(scheduleRan);
+        Assert.Equal((ChapterSchedule.NotDraftCode, "نُشر هذا الفصل بالفعل"), (refused.Code, refused.Message));
+        Assert.Equal((ChapterStatuses.Published, (DateTime?)null), ((await desk.Stored(chapter)).Status, (await desk.Stored(chapter)).PublishAt));
+        Assert.Equal(1, await desk.Announced(chapter));
+    }
+
+    [Fact]
+    public async Task The_scheduler_waiting_for_a_cancel_of_its_chapter_finds_nothing_due()
+    {
+        // #88, the other order: the cancel holds the chapter first; the run waits, then finds it no longer scheduled.
+        var (author, novel) = await desk.SeedNovel();
+        var chapter = await desk.Create(author, novel, ChapterStatuses.Draft, publishAt: Start.AddHours(1));
+        desk.Clock.Advance(TimeSpan.FromHours(1));
+
+        var authorsCancel = new CommandHook();
+        var hold = authorsCancel.HoldWithChapter(chapter);
+        var cancel = desk.Save(author, novel, chapter, status: null, setsSchedule: true, publishAt: null, content: null, title: null,
+            interceptors: authorsCancel);
+        await hold.Held;
+        var run = desk.PublishDue();
+        await AssertWaits(run);
+        hold.Release();
+        var cancelled = await cancel;
+        await run;
+
+        Assert.Equal((true, ChapterStatuses.Draft, (DateTime?)null), (cancelled.Success, cancelled.Status, cancelled.PublishAt));
+        var stored = await desk.Stored(chapter);
+        Assert.Equal((ChapterStatuses.Draft, (DateTime?)null, (DateTime?)null), (stored.Status, stored.PublishAt, stored.PublishedAt));
+        Assert.Equal(0, (await desk.StoredNovel(novel.Id)).ChapterCount);
+        Assert.Equal(0, await desk.Announced(chapter, expected: 0));
+    }
+
+    [Fact]
     public async Task Chapters_of_a_novel_due_together_come_out_in_order_with_their_sequences()
     {
         var (author, novel) = await desk.SeedNovel();
@@ -599,6 +761,14 @@ public class ScheduledChaptersTests(SqlServerDatabase database) : IClassFixture<
     private static bool TakesTheLockOf(DbCommand command, Guid chapterId) =>
         command.CommandText.Contains("sp_getapplock")
         && command.Parameters.Cast<DbParameter>().Any(p => p.ParameterName == "@resource" && Equals(p.Value, $"chapter-text:{chapterId:N}"));
+
+    /// <summary>The chapter is stored as it was before: nothing of it was saved since.</summary>
+    private async Task AssertUnchanged(Chapter before)
+    {
+        var after = await desk.Stored(before.Id);
+        Assert.Equal((before.Status, before.PublishAt, before.PublishedAt, before.Title, before.Revision, before.UpdatedAt, before.WordsCount),
+            (after.Status, after.PublishAt, after.PublishedAt, after.Title, after.Revision, after.UpdatedAt, after.WordsCount));
+    }
 
     /// <summary>The task is waiting (for the chapter another save or run holds): not done after half a second.</summary>
     private static async Task AssertWaits(Task task)

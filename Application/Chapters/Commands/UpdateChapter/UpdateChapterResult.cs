@@ -3,7 +3,10 @@ using Application.Users.Commands.FollowUser;
 
 namespace Application.Chapters.Commands.UpdateChapter;
 
-/// <summary>A saved chapter: today's <c>success</c> and <c>message</c>, and the chapter's revision after the save (#75).</summary>
+/// <summary>
+/// A saved chapter: today's <c>success</c> and <c>message</c>, and the chapter as the save stored it: its revision
+/// (#75), status and schedule (#88).
+/// </summary>
 public class UpdateChapterResult : OperationResult
 {
     /// <summary>
@@ -11,6 +14,18 @@ public class UpdateChapterResult : OperationResult
     /// didn't (a change of status alone, or the title and text sent back unchanged).
     /// </summary>
     public int Revision { get; set; }
+
+    /// <summary>
+    /// The chapter's status as the save stored it (#88), <c>Draft</c> or <c>Published</c>: the one sent, or the one it
+    /// had when the save read it, which the schedule may have published just before.
+    /// </summary>
+    public string? Status { get; set; }
+
+    /// <summary>
+    /// When the draft publishes itself as the save stored it (#77, #88), UTC with "Z": the time sent, the one it had,
+    /// or null when it isn't scheduled (cancelled, never scheduled, or published, which clears it).
+    /// </summary>
+    public DateTime? PublishAt { get; set; }
 
     /// <summary>A dry run's answer (?dryRun=true), sent instead of this result; null otherwise.</summary>
     [JsonIgnore]

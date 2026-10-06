@@ -1599,8 +1599,9 @@ copy was loaded at:
 
   Reload the chapter (its `revision` is the one in the answer), let the author merge, and save with the new one.
 - `baseRevision` left out: no check, as before, so the current web keeps working.
-- A success answers `{ "success": true, "message": "حُفظ الفصل", "revision": 8 }`, the revision after the save; keep it
-  as the copy's new `baseRevision`.
+- A success answers `{ "success": true, "message": "حُفظ الفصل", "revision": 8, "status": "Draft", "publishAt": null }`,
+  the revision after the save (keep it as the copy's new `baseRevision`), and the chapter's status and schedule as the
+  save stored them (#88, below #77's table).
 - The check and the save are one step: saves of one chapter run one at a time (the format maintenance's too), each
   reading the chapter inside, and the revision is written only over the one it read. Of two saves from the same
   revision, one is saved and the other gets the 409.
@@ -1629,9 +1630,9 @@ readers see: comments their authors deleted aren't counted, as the comment count
 
 | HTTP | `code` | When |
 |---|---|---|
-| 200 | | saved (`{ success, message, revision }`), or the dry run's answer |
+| 200 | | saved (`{ success, message, revision, status, publishAt }`), or the dry run's answer |
 | 400 | `ValidationFailed` | a rule above; the messages are the validators' |
-| 400 | `PublishAtInPast`, `ScheduleRequiresDraft` | a schedule refused (#77) |
+| 400 | `PublishAtInPast`, `ScheduleRequiresDraft` | a schedule refused (#77), or cancelled on a chapter that came out (#88) |
 | 403 | `NotOwner` | not the novel's author |
 | 404 | `NovelNotFound`, `ChapterNotFound` | no such novel, or the chapter isn't one of its chapters |
 | 409 | `ChapterChanged` | `baseRevision` isn't the chapter's revision; `revision` is the one it has |
@@ -1758,13 +1759,15 @@ above. `totalRecharged`, `totalWithdrawn` and `totalSpent` are still read from c
 
 - Only a draft: created with `status: "Draft"`, or a chapter that is a draft and stays one in that save (a save that
   unpublishes a chapter may schedule it).
-- On `PATCH`: leaving `publishAt` out keeps the schedule (every edit does, the web's too), `null` cancels it, a new time
-  moves it. Publishing by hand (`status: "Published"`) clears it. `publishAt` can be sent alone, or with `status`
-  alone, without the title and text (the table below).
+- On `PATCH`: leaving `publishAt` out keeps the schedule (every edit does, the web's too), `null` cancels it (on a
+  draft; on a chapter that came out it is refused, #88 below), a new time moves it. Publishing by hand
+  (`status: "Published"`) clears it. `publishAt` can be sent alone, or with `status` alone, without the title and text
+  (the table below).
 - Refused, before anything is saved, with 400 `{ "code", "message" }` (a dry run, `?dryRun=true`, too):
   `PublishAtInPast` «موعد النشر يجب أن يكون في المستقبل» (now or past), `ScheduleRequiresDraft` «يمكن تحديد موعد نشر
-  للمسودات فقط» (created published, a published chapter, or a save that publishes it). The chapter is checked as it is
-  when the save runs: one the schedule has just published is no longer a draft.
+  للمسودات فقط» (created published, a published chapter, or a save that publishes it), and for `null` on a published
+  chapter `ScheduleRequiresDraft` «نُشر هذا الفصل بالفعل» (#88). The chapter is checked as it is when the save runs: one
+  the schedule has just published is no longer a draft.
 - `publishAt` (UTC with `Z`, `null` when not scheduled) is in the author's chapter list and chapter and in what `POST`
   returns. Readers' payloads don't have it.
 - **When it falls due**, the chapter is published as its author publishes it: held as the author's save holds it
@@ -1805,6 +1808,30 @@ Every successful save moves `updatedAt`, a change of status or schedule alone to
 
 The migration `AddChapterWordsCountAndPublishAt` adds the nullable columns `Chapters.WordsCount` and
 `Chapters.PublishAt`, and a filtered index on `PublishAt` for the scheduler.
+
+**Cancelling a schedule on a chapter that already came out (#88).** `publishAt: null` on a published chapter, alone or
+with a `status` that doesn't make it a draft again, answers 400
+`{ "code": "ScheduleRequiresDraft", "message": "نُشر هذا الفصل بالفعل" }` and saves nothing, not the title and text sent
+with it either; a dry run answers the same. It is decided with the chapter held, as the save then reads it: a cancel
+that waited for the scheduled publish of its chapter (or read it as a scheduled draft just before) is refused, and the
+app should show the chapter as published. A cancel that holds the chapter first cancels the schedule, and the scheduler
+then finds nothing due.
+
+| The chapter, as the save reads it | Body | Answer |
+|---|---|---|
+| a scheduled draft | `{ "publishAt": null }` | 200, the schedule cleared |
+| a draft without a schedule | `{ "publishAt": null }` | 200, nothing changes |
+| published | `{ "publishAt": null }`, or with `"status": "Published"` | 400 `ScheduleRequiresDraft` «نُشر هذا الفصل بالفعل», nothing saved |
+| published | `{ "status": "Draft", "publishAt": null }` | 200, unpublished (as before #88; readers were told once) |
+| a draft | `{ "status": "Published", "publishAt": null }` | 200, published (publishing clears the schedule anyway) |
+
+**A save's answer has the chapter's `status` and `publishAt` (#88).** Every successful `PATCH …/chapter/{chapterId}`
+(200, not a dry run) answers `{ "success", "message", "revision", "status", "publishAt" }`: `status` (`"Draft"` or
+`"Published"`) and `publishAt` (UTC with `Z`, or `null` when not scheduled) are the chapter's as the save stored them,
+with the chapter held: the ones sent, or the ones it had, which the schedule may have changed just before (a save
+without `status` answers the status the chapter has; one without `publishAt` the schedule it kept; publishing clears the
+schedule). So the app shows them without loading the chapter again. Read them from a 200 only; the dry run's answer
+(`?dryRun=true`, what a save would delete) doesn't have them.
 
 ### Writer studio follow-ups (#80)
 

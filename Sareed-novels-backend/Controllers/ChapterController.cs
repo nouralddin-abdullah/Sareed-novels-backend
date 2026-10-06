@@ -43,11 +43,12 @@ namespace Sareed_novels_backend.Controllers
         /// <summary>
         /// Saves the author's chapter: its title and text (chapter format v1, #74), its status, or its status alone (#75:
         /// title and content left out together); a draft's schedule (#77: publishAt, a time to come or null to cancel)
-        /// with any of these or alone. With baseRevision, the chapter's revision the editor's copy was loaded at, a
+        /// with any of these or alone; cancelling on a chapter that has come out and stays out is 400
+        /// ScheduleRequiresDraft (#88). With baseRevision, the chapter's revision the editor's copy was loaded at, a
         /// title or text save from an older copy is refused, 409 ChapterChanged with the chapter's revision, and
-        /// nothing is saved. Answers { success, message, revision }. With ?dryRun=true it checks and matches everything
-        /// a save would, saves nothing, and answers what the save would delete:
-        /// { paragraphsRemoved, commentsDeleted, removed: [{ paragraphId, commentsCount }] }.
+        /// nothing is saved. Answers { success, message, revision, status, publishAt }, the chapter as saved (#88).
+        /// With ?dryRun=true it checks and matches everything a save would, saves nothing, and answers what the save
+        /// would delete: { paragraphsRemoved, commentsDeleted, removed: [{ paragraphId, commentsCount }] }.
         /// </summary>
         [HttpPatch("{chapterId}")]
         [Authorize]
