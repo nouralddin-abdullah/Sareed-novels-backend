@@ -97,6 +97,7 @@ public class CreateChapterCommandHandler(
                 .GetViewAsync(novel.Id, novel.AuthorId, viewerId: null);
             chapterDto.IsLocked = earlyAccess.IsLocked(chapter);
             chapterDto.UnlocksAt = earlyAccess.UnlocksAt(chapter);
+            chapterDto.LockedAt = earlyAccess.LockedAt(chapter);
         }
         
         logger.LogInformation("Chapter {ChapterId} created successfully with {ParagraphCount} paragraphs for novel {NovelId}", 

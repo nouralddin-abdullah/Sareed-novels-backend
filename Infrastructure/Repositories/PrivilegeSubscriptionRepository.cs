@@ -69,8 +69,10 @@ public class PrivilegeSubscriptionRepository(ApplicationDbContext dbContext) : I
 
         var totalCount = await query.CountAsync();
 
+        // Newest first; the id breaks ties, so pages never repeat or skip a subscriber.
         var subscriptions = await query
             .OrderByDescending(s => s.SubscribedAt)
+            .ThenByDescending(s => s.Id)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();

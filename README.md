@@ -1939,6 +1939,23 @@ those two columns after the insert), so a save from an older copy can't undo an 
   (`GET /api/myworks/{workId}/chapters/{chapterId}`) and a chapter created published (`POST …/chapter`): for
   non-subscribers.
 
+**Follow-ups (#96).**
+- `lockedAt` on the author's list and chapter (and a chapter created published): when the lock started, UTC with `Z`,
+  while the chapter is locked for non-subscribers; `null` otherwise. New days end it that many days after `lockedAt`.
+- `isEarlyAccess` on the reader list (and the author's list): whether the chapter is locked for non-subscribers now,
+  whoever reads it, a subscriber or the author included (for them `isLocked` is `false`). The app tells its
+  early-access downloads by it.
+- Prices are whole points: a `subscriptionCost` or `newSubscriptionCost` with a fraction (150.5) is 400
+  `InvalidSubscriptionCost`, as one out of 100-2000.
+- `GET /api/novel/{novelId}/privilege/subscribers?pageNumber=&pageSize=`, for the novel's author only (403 `NotOwner`;
+  404 `NovelNotFound`), also while early access is off: `{ subscribers: [{ userId, userName, displayName, profilePhoto,
+  subscribedAt }], totalCount, pageNumber, pageSize, totalPages }`, newest first (then by id), pages as
+  `GET /api/privilege/my-subscriptions` (default 20, at most 50).
+- `rules` on `GET …/privilege`, also while it is off (`{ isEnabled: false, rules }`):
+  `{ minCost: 100, maxCost: 2000, freeChapters: 10, maxLockedOnEnable: 20, minDays: 1, maxDays: 30, defaultDays: 7 }`.
+- Still the owner's to decide: subscribing while nothing is locked takes the points (the subscription is permanent and
+  opens the chapters that come out later); refusing it (`NothingLocked`) waits for their decision.
+
 **The migration `EarlyAccessByChapter`** adds `Chapters.EarlyAccessFrom`, `Chapters.EarlyAccessFreedAt`,
 `NovelPrivileges.EarlyAccessDays` and `NovelPrivileges.SubscribersOnly`, and the check constraint. Every novel with
 early access gets 7 days, and a chapter readers found locked stays locked, from the deploy (in production on 2026-10-06

@@ -29,13 +29,17 @@ public class EarlyAccessHttpTests(SardApiFactory api)
 
     private sealed record Lock(DateTime? From, DateTime? FreedAt);
 
-    private sealed record Listed(bool IsLocked, DateTime? UnlocksAt);
+    private sealed record Listed(bool IsLocked, DateTime? UnlocksAt, bool IsEarlyAccess = false, DateTime? LockedAt = null);
 
     private static readonly string[] PrivilegeFields =
     [
         "isEnabled", "subscriptionCost", "earlyAccessDays", "subscribersOnly", "lockedChaptersCount", "nextUnlockAt",
-        "privilegeStartSequence", "totalPublishedChapters", "subscribersCount", "isSubscribed", "subscribedAt", "canCancel"
+        "privilegeStartSequence", "totalPublishedChapters", "subscribersCount", "isSubscribed", "subscribedAt", "canCancel", "rules"
     ];
+
+    private static readonly string[] RuleFields = ["minCost", "maxCost", "freeChapters", "maxLockedOnEnable", "minDays", "maxDays", "defaultDays"];
+
+    private static readonly string[] SubscriberFields = ["userId", "userName", "displayName", "profilePhoto", "subscribedAt"];
 
     /// <summary>
     /// A public novel of a new author with <paramref name="published"/> published chapters (reading positions 1 to n, which
@@ -97,9 +101,14 @@ public class EarlyAccessHttpTests(SardApiFactory api)
     private async Task<Dictionary<Guid, Listed>> AuthorList(Shelf shelf) =>
         Listing(await (await api.Get($"/api/myworks/{shelf.Novel.Id}/chapters", shelf.Author)).OkJson());
 
-    private static Dictionary<Guid, Listed> Listing(JsonElement list) => list.EnumerateArray().ToDictionary(
+    /// <summary>
+    /// A list's chapters by id: isLocked and unlocksAt; isEarlyAccess (#96) when <paramref name="early"/>, and the author's
+    /// lockedAt when <paramref name="lockedAt"/>; left at their defaults otherwise.
+    /// </summary>
+    private static Dictionary<Guid, Listed> Listing(JsonElement list, bool early = false, bool lockedAt = false) => list.EnumerateArray().ToDictionary(
         item => item.GetProperty("id").GetGuid(),
-        item => new Listed(item.GetProperty("isLocked").GetBoolean(), Date(item.GetProperty("unlocksAt"))));
+        item => new Listed(item.GetProperty("isLocked").GetBoolean(), Date(item.GetProperty("unlocksAt")),
+            early && item.GetProperty("isEarlyAccess").GetBoolean(), lockedAt ? Date(item.GetProperty("lockedAt")) : null));
 
     /// <summary>Each chapter's lock as stored, by chapter.</summary>
     private async Task<Dictionary<Guid, Lock>> StoredLocks(Shelf shelf)
@@ -449,7 +458,7 @@ public class EarlyAccessHttpTests(SardApiFactory api)
         var subscriber = await Subscriber(shelf);
 
         await Ok(await Disable(shelf));
-        Assert.Equal(["isEnabled"], (await Privilege(shelf, null)).EnumerateObject().Select(p => p.Name));
+        Assert.Equal(["isEnabled", "rules"], (await Privilege(shelf, null)).EnumerateObject().Select(p => p.Name));
         Assert.All((await ReaderList(shelf, null)).Values, chapter => Assert.Equal(new Listed(false, null), chapter));
         Assert.False((await (await api.Get(shelf.Chapter(shelf.At(13)))).OkJson()).GetProperty("isLocked").GetBoolean());
 
@@ -540,5 +549,131 @@ public class EarlyAccessHttpTests(SardApiFactory api)
         Assert.Equal(locked.From, stored.EarlyAccessFrom);
         Assert.NotNull(stored.EarlyAccessFreedAt);
         Assert.False((await ReaderList(shelf, null))[shelf.At(12).Id].IsLocked);
+    }
+
+    // ===== Follow-ups (#96) =====
+
+    [Fact]
+    public async Task The_authors_lists_say_when_each_lock_started_while_it_runs()
+    {
+        var shelf = await SeedNovel(published: 14);
+        await Ok(await Enable(shelf, new { subscriptionCost = 200, earlyAccessDays = 7 }));
+        await LockedSince(shelf.At(11), DateTime.UtcNow.AddDays(-8)); // over
+        await Ok(await Unlock(shelf, shelf.At(13))); // freed
+        var from = (await StoredLocks(shelf))[shelf.At(12).Id].From!.Value;
+
+        var list = Listing(await (await api.Get($"/api/myworks/{shelf.Novel.Id}/chapters", shelf.Author)).OkJson(), lockedAt: true);
+        Assert.All(Positions(1, 11).Append(13), p => Assert.Null(list[shelf.At(p).Id].LockedAt));
+        Assert.All(new[] { 12, 14 }, p => Assert.Equal(from, list[shelf.At(p).Id].LockedAt));
+        var raw = (await (await api.Get($"/api/myworks/{shelf.Novel.Id}/chapters", shelf.Author)).OkJson()).EnumerateArray()
+            .Single(item => item.GetProperty("id").GetGuid() == shelf.At(12).Id);
+        Assert.EndsWith("Z", raw.GetProperty("lockedAt").GetString());
+
+        // Subscribers only: the still-locked ones keep their start, and it shows how new days would end them.
+        await Ok(await Change(shelf, new { subscribersOnly = true }));
+        var chapter = await (await api.Get($"/api/myworks/{shelf.Novel.Id}/chapters/{shelf.At(12).Id}", shelf.Author)).OkJson();
+        Assert.Equal((true, (DateTime?)null, (DateTime?)from),
+            (chapter.GetProperty("isLocked").GetBoolean(), Date(chapter.GetProperty("unlocksAt")), Date(chapter.GetProperty("lockedAt"))));
+        Assert.Null(Date((await (await api.Get($"/api/myworks/{shelf.Novel.Id}/chapters/{shelf.At(11).Id}", shelf.Author)).OkJson())
+            .GetProperty("lockedAt")));
+    }
+
+    [Fact]
+    public async Task The_reader_list_says_which_chapters_are_early_whoever_reads_it()
+    {
+        var shelf = await SeedNovel(published: 12);
+        await Ok(await Enable(shelf, new { subscriptionCost = 200 }));
+        var subscriber = await Subscriber(shelf);
+        var until = (await StoredLocks(shelf))[shelf.At(11).Id].From!.Value.AddDays(7);
+
+        foreach (var (reader, locked) in new[] { (subscriber, false), (shelf.Author, false), (null, true), (await api.SignUp(), true) })
+        {
+            var list = Listing(await (await api.Get($"/api/novel/{shelf.Novel.Id}/chapter", reader)).OkJson(), early: true);
+            Assert.All(Positions(1, 10), p => Assert.Equal(new Listed(false, null), list[shelf.At(p).Id]));
+            Assert.All(Positions(11, 12), p => Assert.Equal(new Listed(locked, locked ? until : null, IsEarlyAccess: true), list[shelf.At(p).Id]));
+        }
+
+        // Freed, it is no longer early for anyone.
+        await Ok(await Unlock(shelf, shelf.At(11)));
+        var afterUnlock = Listing(await (await api.Get($"/api/novel/{shelf.Novel.Id}/chapter", subscriber)).OkJson(), early: true);
+        Assert.Equal((false, true), (afterUnlock[shelf.At(11).Id].IsEarlyAccess, afterUnlock[shelf.At(12).Id].IsEarlyAccess));
+    }
+
+    [Fact]
+    public async Task A_price_is_whole_points()
+    {
+        var shelf = await SeedNovel(published: 12);
+
+        Assert.Equal("InvalidSubscriptionCost", await Refused(await Enable(shelf, new { subscriptionCost = 150.5m })));
+        await Ok(await Enable(shelf, new { subscriptionCost = 150m }));
+        Assert.Equal("InvalidSubscriptionCost", await Refused(await Change(shelf, new { newSubscriptionCost = 200.25m })));
+        Assert.Equal("InvalidSubscriptionCost", await Refused(await Change(shelf, new { newSubscriptionCost = 2000.5m })));
+        await Ok(await Change(shelf, new { newSubscriptionCost = 2000m }));
+        Assert.Equal(2000m, (await Privilege(shelf, null)).GetProperty("subscriptionCost").GetDecimal());
+    }
+
+    [Fact]
+    public async Task The_author_lists_the_subscribers_newest_first_page_by_page()
+    {
+        var shelf = await SeedNovel(published: 12);
+        await Ok(await Enable(shelf, new { subscriptionCost = 200 }));
+        var subscribers = new List<ApiUser>();
+        for (var i = 0; i < 3; i++)
+        {
+            subscribers.Add(await Subscriber(shelf));
+        }
+        // They subscribed a day apart, the last one first.
+        var start = DateTime.UtcNow.AddDays(-10);
+        await using (var db = api.Db())
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                var userId = subscribers[i].Id;
+                await db.NovelPrivilegeSubscriptions.Where(s => s.UserId == userId && s.NovelId == shelf.Novel.Id)
+                    .ExecuteUpdateAsync(set => set.SetProperty(s => s.SubscribedAt, start.AddDays(i)));
+            }
+        }
+
+        var first = await (await api.Get(shelf.Privilege + "/subscribers?pageSize=2", shelf.Author)).OkJson();
+        Assert.Equal((3, 1, 2, 2), (first.GetProperty("totalCount").GetInt32(), first.GetProperty("pageNumber").GetInt32(),
+            first.GetProperty("pageSize").GetInt32(), first.GetProperty("totalPages").GetInt32()));
+        var items = first.GetProperty("subscribers").EnumerateArray().ToList();
+        Assert.All(items, item => Assert.Equal(SubscriberFields, item.EnumerateObject().Select(p => p.Name)));
+        Assert.Equal([subscribers[2].Id, subscribers[1].Id], items.Select(item => item.GetProperty("userId").GetString()));
+        Assert.Equal(subscribers[2].UserName, items[0].GetProperty("userName").GetString());
+        Assert.Equal(start.AddDays(2), items[0].GetProperty("subscribedAt").GetDateTime());
+        Assert.EndsWith("Z", items[0].GetProperty("subscribedAt").GetString());
+        var second = await (await api.Get(shelf.Privilege + "/subscribers?pageSize=2&pageNumber=2", shelf.Author)).OkJson();
+        Assert.Equal([subscribers[0].Id], second.GetProperty("subscribers").EnumerateArray().Select(item => item.GetProperty("userId").GetString()));
+
+        // Its author only; and still there while early access is off.
+        Assert.Equal("NotOwner", (await (await api.Get(shelf.Privilege + "/subscribers", subscribers[0])).Error(HttpStatusCode.Forbidden))
+            .GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await api.Get(shelf.Privilege + "/subscribers")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await api.Get($"/api/novel/{Guid.NewGuid()}/privilege/subscribers", shelf.Author)).StatusCode);
+        await Ok(await Disable(shelf));
+        Assert.Equal(3, (await (await api.Get(shelf.Privilege + "/subscribers", shelf.Author)).OkJson()).GetProperty("totalCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task The_rules_come_with_the_settings_on_or_off()
+    {
+        var shelf = await SeedNovel(published: 12);
+
+        void AssertRules(JsonElement answer)
+        {
+            var rules = answer.GetProperty("rules");
+            Assert.Equal(RuleFields, rules.EnumerateObject().Select(p => p.Name));
+            Assert.Equal((100m, 2000m, 10, 20, 1, 30, 7),
+                (rules.GetProperty("minCost").GetDecimal(), rules.GetProperty("maxCost").GetDecimal(), rules.GetProperty("freeChapters").GetInt32(),
+                    rules.GetProperty("maxLockedOnEnable").GetInt32(), rules.GetProperty("minDays").GetInt32(), rules.GetProperty("maxDays").GetInt32(),
+                    rules.GetProperty("defaultDays").GetInt32()));
+        }
+
+        var off = await Privilege(shelf, null);
+        Assert.False(off.GetProperty("isEnabled").GetBoolean());
+        AssertRules(off);
+        await Ok(await Enable(shelf, new { subscriptionCost = 200 }));
+        AssertRules(await Privilege(shelf, shelf.Author));
     }
 }
