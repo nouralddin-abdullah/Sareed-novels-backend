@@ -12,7 +12,8 @@ from the `appsettings*.json` files. An environment variable `Section__Key` sets 
 
 The mobile apps read this at startup: to force an update when an API change breaks older builds, to suggest one
 when a newer build is out, and to show a maintenance message. Each app reads its own section (`android`, `ios`). It is
-anonymous and cacheable for five minutes (`Cache-Control: public, max-age=300`). `gifts` says what gifts accept (#31):
+anonymous and cacheable for five minutes (`Cache-Control: public, max-age=300`). `HEAD /api/app/config` answers the same 200
+and headers without the body (#89), for uptime monitors that check with HEAD. `gifts` says what gifts accept (#31):
 clients show the gift message box only when `gifts.messageMaxLength` is there (an older server has no `gifts`). `posts`
 says what a new post accepts (#43, [Posts](#posts-writing-one-43)): the longest text in user-perceived characters, the
 largest picture in bytes and the picture types. Those are the rules in the code (`Application/Posts/PostRules.cs`), not
@@ -1782,7 +1783,7 @@ above. `totalRecharged`, `totalWithdrawn` and `totalSpent` are still read from c
   publish; they show it after that first run.
 - **Limits.** While the app is stopped, a due chapter waits for the next request, and its readers' notifications with
   it; `publishedAt` is when it came out, not `publishAt`. To publish on time at quiet hours, keep the app awake: an uptime
-  monitor calling `GET /api/app/config` every 5 minutes is enough. A save that sends `status: "Draft"` right after the
+  monitor calling `GET` or `HEAD /api/app/config` every 5 minutes is enough (#89). A save that sends `status: "Draft"` right after the
   chapter was published on schedule turns it back into a draft, as between two saves the last status sent wins (the web
   editor sends the status it shows); readers were told once, and the counts follow. A save without a status leaves it
   published, so the app should send `status` only when the author changes it.

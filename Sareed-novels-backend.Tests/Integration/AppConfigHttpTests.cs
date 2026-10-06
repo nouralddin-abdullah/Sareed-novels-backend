@@ -35,6 +35,19 @@ public class AppConfigHttpTests(SardApiFactory api)
     }
 
     [Fact]
+    public async Task Head_answers_like_get_without_a_body_for_uptime_monitors()
+    {
+        var get = await api.Get("/api/app/config");
+        var head = await api.CreateClient().SendAsync(new HttpRequestMessage(HttpMethod.Head, "/api/app/config"));
+
+        Assert.Equal(HttpStatusCode.OK, head.StatusCode);
+        Assert.Empty(await head.Content.ReadAsByteArrayAsync());
+        Assert.Equal(get.Content.Headers.ContentType?.MediaType, head.Content.Headers.ContentType?.MediaType);
+        Assert.True(head.Headers.CacheControl?.Public);
+        Assert.Equal(TimeSpan.FromMinutes(5), head.Headers.CacheControl?.MaxAge);
+    }
+
+    [Fact]
     public async Task Configured_values_are_served_and_changes_apply_without_a_restart()
     {
         await using var configured = With(new()
