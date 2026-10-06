@@ -13,7 +13,8 @@ namespace Sareed_novels_backend.Tests.Integration;
 /// #77 through the API as the apps use it: <c>publishAt</c> on creating and saving a chapter (left out keeps a schedule,
 /// null cancels it, a time that has come is refused in Arabic), the author's chapter list and chapter with
 /// <c>wordsCount</c> and <c>publishAt</c>, my works with the novel's <c>wordsCount</c>, and a due chapter coming out on
-/// the next request that reads its novel (the scheduler isn't running here, as when the host has stopped the app).
+/// the next request that reads its novel (the scheduler isn't running here, as when the host has stopped the app). #88:
+/// cancelling the schedule of a chapter that came out is refused, and a save answers the chapter's status and schedule.
 /// </summary>
 [Collection(ReaderApiCollection.Name)]
 public class ScheduledChaptersHttpTests(SardApiFactory api)
@@ -152,6 +153,83 @@ public class ScheduledChaptersHttpTests(SardApiFactory api)
     }
 
     [Fact]
+    public async Task Cancelling_the_schedule_of_a_published_chapter_says_it_came_out_and_saves_nothing()
+    {
+        // #88: alone, as the app cancels; with a status that keeps it out; with a title and text, which aren't saved
+        // either; and a dry run, which answers the same.
+        var author = await api.SignUp();
+        var novel = await api.AddNovel(author);
+        var chapterId = (await (await Create(author, novel, ChapterStatuses.Published, "<p>نص الفصل</p>")).OkJson()).GetProperty("id").GetGuid();
+        var before = await Stored(chapterId);
+
+        foreach (var (body, query) in new (object, string)[]
+                 {
+                     (new { publishAt = (DateTime?)null }, ""),
+                     (new { status = ChapterStatuses.Published, publishAt = (DateTime?)null }, ""),
+                     (new { title = "عنوان لا يحفظ", content = "<p>نص لا يحفظ</p>", publishAt = (DateTime?)null, baseRevision = 1 }, ""),
+                     (new { publishAt = (DateTime?)null }, "?dryRun=true")
+                 })
+        {
+            var refused = await (await api.Send(HttpMethod.Patch, $"/api/novel/{novel.Id}/chapter/{chapterId}{query}", author,
+                JsonContent.Create(body))).Error(HttpStatusCode.BadRequest);
+            Assert.Equal((ChapterSchedule.NotDraftCode, "نُشر هذا الفصل بالفعل"),
+                (refused.GetProperty("code").GetString(), refused.GetProperty("message").GetString()));
+        }
+
+        var after = await Stored(chapterId);
+        Assert.Equal((before.Status, before.PublishAt, before.PublishedAt, before.Title, before.Revision, before.UpdatedAt, before.WordsCount),
+            (after.Status, after.PublishAt, after.PublishedAt, after.Title, after.Revision, after.UpdatedAt, after.WordsCount));
+        Assert.Equal(ChapterStatuses.Published, after.Status);
+    }
+
+    [Fact]
+    public async Task Cancelling_on_a_scheduled_draft_clears_the_schedule_and_on_an_unscheduled_one_is_a_harmless_200()
+    {
+        var author = await api.SignUp();
+        var novel = await api.AddNovel(author);
+        var scheduled = (await (await Create(author, novel, ChapterStatuses.Draft, "<p>نص</p>", Truncated(DateTime.UtcNow.AddDays(1)))).OkJson())
+            .GetProperty("id").GetGuid();
+        var unscheduled = (await (await Create(author, novel, ChapterStatuses.Draft, "<p>نص</p>")).OkJson()).GetProperty("id").GetGuid();
+
+        foreach (var chapterId in new[] { scheduled, unscheduled })
+        {
+            var answer = await (await Save(author, novel, chapterId, new { publishAt = (DateTime?)null })).OkJson();
+
+            AssertSaved(answer, revision: 1, ChapterStatuses.Draft, publishAt: null);
+            var stored = await Stored(chapterId);
+            Assert.Equal((ChapterStatuses.Draft, (DateTime?)null), (stored.Status, stored.PublishAt));
+        }
+    }
+
+    [Fact]
+    public async Task A_saves_answer_has_the_chapters_status_and_schedule_as_stored()
+    {
+        // #88: every successful save, so the app shows them without loading the chapter again.
+        var author = await api.SignUp();
+        var novel = await api.AddNovel(author);
+        var chapterId = (await (await Create(author, novel, ChapterStatuses.Draft, "<p>نص الفصل</p>")).OkJson()).GetProperty("id").GetGuid();
+        var publishAt = Truncated(DateTime.UtcNow.AddDays(2));
+
+        // The schedule alone: the status it has, which wasn't sent, and the time, sent with an offset, in UTC.
+        AssertSaved(await (await Save(author, novel, chapterId, new { publishAt = publishAt.AddHours(3).ToString("yyyy-MM-ddTHH:mm:ss+03:00") })).OkJson(),
+            revision: 1, ChapterStatuses.Draft, publishAt);
+
+        // The status alone, or the title and text: the schedule they keep.
+        AssertSaved(await (await Save(author, novel, chapterId, new { status = ChapterStatuses.Draft })).OkJson(),
+            revision: 1, ChapterStatuses.Draft, publishAt);
+        AssertSaved(await (await Save(author, novel, chapterId, new { title = "فصل", content = "<p>نص جديد</p>" })).OkJson(),
+            revision: 2, ChapterStatuses.Draft, publishAt);
+
+        // Published by hand: the schedule it cleared. Then a draft again with publishAt: null (#77, as before #88).
+        AssertSaved(await (await Save(author, novel, chapterId, new { status = ChapterStatuses.Published })).OkJson(),
+            revision: 2, ChapterStatuses.Published, publishAt: null);
+        AssertSaved(await (await Save(author, novel, chapterId, new { status = ChapterStatuses.Draft, publishAt = (DateTime?)null })).OkJson(),
+            revision: 2, ChapterStatuses.Draft, publishAt: null);
+        var stored = await Stored(chapterId);
+        Assert.Equal((ChapterStatuses.Draft, (DateTime?)null, 2), (stored.Status, stored.PublishAt, stored.Revision));
+    }
+
+    [Fact]
     public async Task My_works_give_each_novels_words_over_all_its_chapters_drafts_included()
     {
         var author = await api.SignUp();
@@ -188,6 +266,25 @@ public class ScheduledChaptersHttpTests(SardApiFactory api)
         var body = await saved.OkJson();
         Assert.True(body.GetProperty("success").GetBoolean());
         return body.GetProperty("revision").GetInt32();
+    }
+
+    /// <summary>
+    /// A save's answer (#75, #88): success, its message, the revision, and the chapter's status and schedule as stored,
+    /// the time UTC with "Z".
+    /// </summary>
+    private static void AssertSaved(JsonElement answer, int revision, string status, DateTime? publishAt)
+    {
+        Assert.Equal((true, "حُفظ الفصل", revision, status),
+            (answer.GetProperty("success").GetBoolean(), answer.GetProperty("message").GetString(),
+                answer.GetProperty("revision").GetInt32(), answer.GetProperty("status").GetString()));
+        if (publishAt is null)
+        {
+            Assert.Equal(JsonValueKind.Null, answer.GetProperty("publishAt").ValueKind);
+        }
+        else
+        {
+            Assert.Equal(publishAt, Utc(answer, "publishAt"));
+        }
     }
 
     private static async Task AssertInvalid(HttpResponseMessage response, string message)

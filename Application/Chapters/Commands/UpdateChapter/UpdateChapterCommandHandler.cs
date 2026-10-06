@@ -59,9 +59,10 @@ public class UpdateChapterCommandHandler(
         }
 
         // A schedule (#77) is for a draft, at a time to come, as the chapter is now (the schedule may have published it
-        // meanwhile): refused before anything is saved. Null cancels it.
+        // meanwhile): refused before anything is saved. Null cancels it, but a chapter that has come out and stays out
+        // has no schedule left to cancel (#88): the app that still shows it as a scheduled draft is told it came out.
         var now = time.GetUtcNow().UtcDateTime;
-        if (request.SetsSchedule && ChapterSchedule.Refusal(request.PublishAt, request.Status ?? chapter.Status, now) is { } refusal)
+        if (request.SetsSchedule && ChapterSchedule.SaveRefusal(request.PublishAt, chapter.Status, request.Status, now) is { } refusal)
         {
             throw new BadRequestException(refusal.Message, refusal.Code);
         }
@@ -139,6 +140,18 @@ public class UpdateChapterCommandHandler(
             };
         }
 
+        // The chapter as this save stored it, with the chapter still held (#88): its revision, and its status and
+        // schedule, which the scheduler may have changed just before this save read it, so the app shows them without
+        // loading it.
+        var answer = new UpdateChapterResult
+        {
+            Success = true,
+            Message = "حُفظ الفصل",
+            Revision = chapter.Revision,
+            Status = chapter.Status,
+            PublishAt = chapter.PublishAt is { } publishAt ? DateTime.SpecifyKind(publishAt, DateTimeKind.Utc) : null
+        };
+
         await edit.CommitAsync();
 
         // Published or unpublished by this save: sequences, chapter count, last update, privileges and readers'
@@ -146,12 +159,7 @@ public class UpdateChapterCommandHandler(
         await new ChapterStatusEffects(sequenceService, novelsRepository, serviceProvider, logger)
             .ApplyAsync(novel.Id, chapter, statusBefore, saved);
 
-        return new UpdateChapterResult
-        {
-            Success = true,
-            Message = "حُفظ الفصل",
-            Revision = chapter.Revision
-        };
+        return answer;
     }
 
     /// <summary>

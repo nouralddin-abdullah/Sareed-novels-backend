@@ -12,7 +12,10 @@ using Microsoft.Extensions.Hosting;
 
 namespace Sareed_novels_backend.Tests.Unit;
 
-/// <summary>#77: only a draft is scheduled, only for a time to come, and the time a client sends is read as UTC.</summary>
+/// <summary>
+/// #77: only a draft is scheduled, only for a time to come, and the time a client sends is read as UTC. #88: a save
+/// cancels a schedule unless the chapter has come out and stays out.
+/// </summary>
 public class ChapterScheduleTests
 {
     private static readonly DateTime Now = new(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
@@ -46,6 +49,32 @@ public class ChapterScheduleTests
     {
         Assert.Null(ChapterSchedule.Refusal(null, ChapterStatuses.Draft, Now));
         Assert.Null(ChapterSchedule.Refusal(null, ChapterStatuses.Published, Now));
+    }
+
+    [Theory]
+    [InlineData(ChapterStatuses.Draft, null, false)]                    // a draft, scheduled or not: cancelled
+    [InlineData(ChapterStatuses.Draft, ChapterStatuses.Draft, false)]
+    [InlineData(ChapterStatuses.Draft, ChapterStatuses.Published, false)] // published by the same save, which clears it anyway
+    [InlineData(ChapterStatuses.Published, ChapterStatuses.Draft, false)] // a draft again by the same save
+    [InlineData(ChapterStatuses.Published, null, true)]                  // came out (#88), e.g. on schedule just before
+    [InlineData(ChapterStatuses.Published, ChapterStatuses.Published, true)]
+    public void A_save_cancels_a_schedule_unless_the_chapter_has_come_out_and_stays_out(string status, string? sentStatus, bool refused)
+    {
+        var refusal = ChapterSchedule.SaveRefusal(null, status, sentStatus, Now);
+
+        Assert.Equal(refused ? new ScheduleRefusal(ChapterSchedule.NotDraftCode, "نُشر هذا الفصل بالفعل") : null, refusal);
+    }
+
+    [Fact]
+    public void A_time_a_save_sends_is_checked_against_the_status_the_save_leaves()
+    {
+        var notDraft = new ScheduleRefusal(ChapterSchedule.NotDraftCode, "يمكن تحديد موعد نشر للمسودات فقط");
+        Assert.Null(ChapterSchedule.SaveRefusal(Now.AddHours(1), ChapterStatuses.Draft, null, Now));
+        Assert.Null(ChapterSchedule.SaveRefusal(Now.AddHours(1), ChapterStatuses.Published, ChapterStatuses.Draft, Now));
+        Assert.Equal(notDraft, ChapterSchedule.SaveRefusal(Now.AddHours(1), ChapterStatuses.Published, null, Now));
+        Assert.Equal(notDraft, ChapterSchedule.SaveRefusal(Now.AddHours(1), ChapterStatuses.Draft, ChapterStatuses.Published, Now));
+        Assert.Equal(new ScheduleRefusal(ChapterSchedule.InPastCode, "موعد النشر يجب أن يكون في المستقبل"),
+            ChapterSchedule.SaveRefusal(Now, ChapterStatuses.Draft, null, Now));
     }
 
     [Theory]
