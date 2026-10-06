@@ -33,6 +33,12 @@ public class ChaptersDTO
     /// subscribers-only novel, whose locks don't end by themselves.
     /// </summary>
     public DateTime? UnlocksAt { get; set; }
+
+    /// <summary>
+    /// Whether early access locks the chapter for non-subscribers now (#96), whoever reads the list: true for a
+    /// subscriber and the author too, to whom <see cref="IsLocked"/> is false. The app tells its early-access downloads by it.
+    /// </summary>
+    public bool IsEarlyAccess { get; set; }
 }
 
 /// <summary>
@@ -55,6 +61,12 @@ public class ChaptersAuthorDTO : ChaptersDTO
 
     /// <summary>When the draft publishes itself (#77, UTC with "Z"); null when it isn't scheduled (always, once published).</summary>
     public DateTime? PublishAt { get; set; }
+
+    /// <summary>
+    /// When the chapter's early-access lock started (#96), UTC with "Z", while it is locked for non-subscribers; null
+    /// otherwise. New days end it this many days after this.
+    /// </summary>
+    public DateTime? LockedAt { get; set; }
 }
 
 public class ChapterSingleAuthorDTO
@@ -93,6 +105,9 @@ public class ChapterSingleAuthorDTO
 
     /// <summary>When it opens to everyone (#94), as in the author's list (<see cref="ChaptersDTO.UnlocksAt"/>).</summary>
     public DateTime? UnlocksAt { get; set; }
+
+    /// <summary>When its lock started (#96), as in the author's list (<see cref="ChaptersAuthorDTO.LockedAt"/>).</summary>
+    public DateTime? LockedAt { get; set; }
 
     public List<ChapterParagraphDTO> Paragraphs { get; set; } = new();
 }

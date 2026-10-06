@@ -5,7 +5,10 @@ using Application.Privileges.Commands.ManualUnlock;
 using Application.Privileges.Commands.Subscribe;
 using Application.Privileges.Commands.UpdatePrivilege;
 using Application.Privileges.Queries.GetMySubscriptions;
+using Application.Privileges.Queries.GetNovelSubscribers;
 using Application.Privileges.Queries.GetPrivilegeInfo;
+using Application.Privileges.DTOs;
+using Application.Common;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,7 +24,7 @@ public class PrivilegeController(IMediator mediator) : ControllerBase
     /// <summary>
     /// A novel's early access, for anyone (#94): its settings (earlyAccessDays or subscribersOnly), its locked chapters
     /// now (lockedChaptersCount, nextUnlockAt, privilegeStartSequence), subscribersCount for its author, and the
-    /// signed-in member's subscription; <c>{ isEnabled: false }</c> while it is off.
+    /// signed-in member's subscription, and the settings' rules (#96); <c>{ isEnabled: false, rules }</c> while it is off.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetPrivilegeInfo([FromRoute] Guid novelId)
@@ -31,10 +34,32 @@ public class PrivilegeController(IMediator mediator) : ControllerBase
         
         if (result == null)
         {
-            return Ok(new { isEnabled = false });
+            return Ok(new { isEnabled = false, rules = EarlyAccessRulesDto.Current });
         }
         
         return Ok(result);
+    }
+
+    /// <summary>
+    /// The novel's subscribers, for its author only (#96), newest first: { subscribers: [{ userId, userName,
+    /// displayName, profilePhoto, subscribedAt }], totalCount, pageNumber, pageSize, totalPages }, pages as
+    /// GET /api/privilege/my-subscriptions. Also while early access is off (subscriptions stay). 403 NotOwner, 404
+    /// NovelNotFound.
+    /// </summary>
+    [HttpGet("subscribers")]
+    [Authorize]
+    public async Task<IActionResult> GetSubscribers([FromRoute] Guid novelId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20)
+    {
+        (pageNumber, pageSize) = Paging.Clamp(pageNumber, pageSize);
+        var (subscribers, totalCount) = await mediator.Send(new GetNovelSubscribersQuery(novelId, pageNumber, pageSize));
+        return Ok(new
+        {
+            subscribers,
+            totalCount,
+            pageNumber,
+            pageSize,
+            totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+        });
     }
     
     /// <summary>

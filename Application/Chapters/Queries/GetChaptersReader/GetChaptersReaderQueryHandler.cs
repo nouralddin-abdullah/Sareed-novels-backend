@@ -33,6 +33,7 @@ public class GetChaptersReaderQueryHandler(
             var chapter = byId[dto.Id];
             dto.IsLocked = view.IsLockedForViewer(chapter);
             dto.UnlocksAt = view.UnlocksAtForViewer(chapter);
+            dto.IsEarlyAccess = view.IsLocked(chapter);
         }
         
         return chapterDtos;

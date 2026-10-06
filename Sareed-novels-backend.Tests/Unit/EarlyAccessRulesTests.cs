@@ -122,4 +122,32 @@ public class EarlyAccessRulesTests
         Assert.Equal((true, From.AddDays(7)), (subscriber.IsLocked(chapter), subscriber.UnlocksAt(chapter)));
         Assert.Equal((false, (DateTime?)null), (subscriber.IsLockedForViewer(chapter), subscriber.UnlocksAtForViewer(chapter)));
     }
+
+    [Theory]
+    [InlineData("100", true)]
+    [InlineData("2000", true)]
+    [InlineData("150.00", true)]
+    [InlineData("150.5", false)]
+    [InlineData("1999.99", false)]
+    [InlineData("99", false)]
+    [InlineData("2001", false)]
+    [InlineData("0", false)]
+    public void A_price_is_whole_points_from_100_to_2000(string cost, bool valid) =>
+        Assert.Equal(valid, EarlyAccess.IsValidCost(decimal.Parse(cost, System.Globalization.CultureInfo.InvariantCulture)));
+
+    [Fact]
+    public void Locked_at_is_the_start_of_a_running_lock_only()
+    {
+        var now = From.AddDays(1);
+        var view = new EarlyAccessView(SevenDays, readsLockedChapters: true, now);
+
+        var running = new Chapter { Status = ChapterStatuses.Published, EarlyAccessFrom = DateTime.SpecifyKind(From, DateTimeKind.Unspecified) };
+        Assert.Equal(From, view.LockedAt(running));
+        Assert.Equal(DateTimeKind.Utc, view.LockedAt(running)!.Value.Kind);
+
+        Assert.Null(view.LockedAt(new Chapter { Status = ChapterStatuses.Published, EarlyAccessFrom = From.AddDays(-8) })); // over
+        Assert.Null(view.LockedAt(new Chapter { Status = ChapterStatuses.Published, EarlyAccessFrom = From, EarlyAccessFreedAt = From }));
+        Assert.Null(view.LockedAt(new Chapter { Status = ChapterStatuses.Published }));
+        Assert.Equal(From, new EarlyAccessView(SubscribersOnly, false, From.AddYears(1)).LockedAt(running));
+    }
 }

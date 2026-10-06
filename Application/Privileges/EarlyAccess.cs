@@ -44,6 +44,9 @@ public static class EarlyAccess
     public const decimal MinCost = 100;
     public const decimal MaxCost = 2000;
 
+    /// <summary>A subscription's price: whole points (#96), from <see cref="MinCost"/> to <see cref="MaxCost"/>.</summary>
+    public static bool IsValidCost(decimal cost) => cost is >= MinCost and <= MaxCost && decimal.Truncate(cost) == cost;
+
     /// <summary>Whether <paramref name="chapter"/> is locked for non-subscribers at <paramref name="now"/>.</summary>
     public static bool IsLocked(ChapterLock chapter, EarlyAccessSettings? settings, DateTime now) =>
         settings is { IsEnabled: true } on
@@ -108,6 +111,13 @@ public sealed class EarlyAccessView(EarlyAccessSettings? settings, bool readsLoc
 
     /// <summary>When the chapter's lock ends for everyone (null when it isn't locked, or never ends by itself).</summary>
     public DateTime? UnlocksAt(Chapter chapter) => EarlyAccess.UnlocksAt(ChapterLock.Of(chapter), settings, now);
+
+    /// <summary>
+    /// When the chapter's lock started (UTC, #96), while it is locked for non-subscribers; null otherwise. New days end a
+    /// still-locked chapter this many days after it.
+    /// </summary>
+    public DateTime? LockedAt(Chapter chapter) =>
+        IsLocked(chapter) ? DateTime.SpecifyKind(chapter.EarlyAccessFrom!.Value, DateTimeKind.Utc) : null;
 
     /// <summary>Whether the chapter is locked for this viewer: never for the novel's author or a subscriber.</summary>
     public bool IsLockedForViewer(Chapter chapter) => !readsLockedChapters && IsLocked(chapter);

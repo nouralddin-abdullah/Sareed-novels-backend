@@ -32,6 +32,7 @@ public class PrivilegeService(
     public const string BothModesMessage = "اختر واحدًا: عدد أيام الوصول المبكر أو للمشتركين فقط";
     public const string InvalidDaysMessage = "عدد أيام الوصول المبكر يجب أن يكون من 1 إلى 30";
     public const string NoChangesMessage = "لم يتغير شيء في الإعدادات";
+    public const string InvalidCostMessage = "سعر الاشتراك يجب أن يكون عددًا صحيحًا من النقاط، من 100 إلى 2000";
     public const string FirstChaptersFreeMessage =
         "تبقى الفصول العشرة الأولى مجانية للقرّاء، فالوصول المبكر يبدأ من الفصل 11 أو بعده.";
 
@@ -99,9 +100,9 @@ public class PrivilegeService(
         var only = subscribersOnly == true;
         var days = only ? (int?)null : earlyAccessDays ?? EarlyAccess.DefaultDays;
 
-        if (subscriptionCost is < EarlyAccess.MinCost or > EarlyAccess.MaxCost)
+        if (!EarlyAccess.IsValidCost(subscriptionCost))
         {
-            return Fail("InvalidSubscriptionCost", "سعر الاشتراك يجب أن يكون من 100 إلى 2000 نقطة");
+            return Fail("InvalidSubscriptionCost", InvalidCostMessage);
         }
         if (privilegeStartSequence is <= EarlyAccess.FreeChapters)
         {
@@ -186,9 +187,9 @@ public class PrivilegeService(
         {
             return Fail("InvalidEarlyAccessDays", InvalidDaysMessage);
         }
-        if (newSubscriptionCost is < EarlyAccess.MinCost or > EarlyAccess.MaxCost)
+        if (newSubscriptionCost is { } newCost && !EarlyAccess.IsValidCost(newCost))
         {
-            return Fail("InvalidSubscriptionCost", "سعر الاشتراك يجب أن يكون من 100 إلى 2000 نقطة");
+            return Fail("InvalidSubscriptionCost", InvalidCostMessage);
         }
         if (newPrivilegeStartSequence is <= EarlyAccess.FreeChapters)
         {
