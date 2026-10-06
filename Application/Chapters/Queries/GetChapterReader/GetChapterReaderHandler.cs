@@ -47,15 +47,14 @@ public class GetChapterReaderHandler(
             return chapterDTO;
         }
 
-        // Check if chapter is locked by privilege system (for non-authors)
-        var isLocked = await privilegeService.IsChapterLockedAsync(chapter.Id, currentUser?.Id);
-
-        if (isLocked)
+        // Locked by early access for this reader (#94): no text, and when it opens to everyone.
+        var earlyAccess = await privilegeService.GetViewAsync(novel.Id, novel.AuthorId, currentUser?.Id);
+        if (earlyAccess.IsLockedForViewer(chapter))
         {
-            // Chapter is locked - don't return content
             chapterDTO.IsLocked = true;
             chapterDTO.LockMessage = LockMessage;
-            chapterDTO.Paragraphs = new List<ChapterParagraphDTO>(); // Empty paragraphs
+            chapterDTO.UnlocksAt = earlyAccess.UnlocksAtForViewer(chapter);
+            chapterDTO.Paragraphs = new List<ChapterParagraphDTO>();
 
             return chapterDTO;
         }

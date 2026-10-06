@@ -10,8 +10,8 @@ namespace Application.Chapters.Publishing;
 /// <summary>
 /// What publishing or unpublishing a chapter does beyond its row, once the save that changed its status is committed:
 /// the novel's published sequences and readers' progress, its chapter count, and its last update when the chapter comes
-/// out (#39); publishing also extends the privilege window, and readers are told when the chapter comes out for the
-/// first time, unless the novel is hidden (<see cref="AnnounceNewChapterAsync"/>, #80). The author's save
+/// out (#39); when it comes out for the first time it locks in early access while the novel has it on (#94), and its
+/// readers are told, unless the novel is hidden (<see cref="AnnounceNewChapterAsync"/>, #80). The author's save
 /// (UpdateChapterCommandHandler) and the schedule (<c>ScheduledChapterPublisher</c>, #77) both run it, so a chapter
 /// published on schedule comes out exactly as one published by hand; a chapter created published is announced by it too.
 /// </summary>
@@ -48,21 +48,26 @@ public sealed class ChapterStatusEffects(
         // publishing it again after that, isn't an update to readers.
         await novelsRepository.RefreshChapterCountAsync(novelId, lastUpdatedAt: save.CameOut ? chapter.PublishedAt : null);
 
-        if (!published)
+        // Only a chapter that comes out is new: it locks in early access from when it came out (#94), and readers are told
+        // once (#39). Published again, it keeps the lock it had and isn't announced again, as the library's «فصول جديدة»
+        // doesn't show it again either; unpublishing locks or frees nothing.
+        if (published && save.CameOut)
         {
-            return;
+            await CameOutAsync(novelId, chapter);
         }
+    }
 
-        // Trigger privilege update: the chapter was published
-        var privilegeService = serviceProvider.GetRequiredService<IPrivilegeService>();
-        await privilegeService.OnChapterPublishedAsync(novelId);
-
-        // Readers are told once, when the chapter comes out (#39): published again, it isn't new, as the library's
-        // «فصول جديدة» doesn't show it again either.
-        if (save.CameOut)
-        {
-            await AnnounceNewChapterAsync(novelId, chapter);
-        }
+    /// <summary>
+    /// What a chapter coming out does beyond the novel's chapter count, once its published position is known (after the
+    /// recalculation): it locks in early access while the novel has it on (#94), and readers are told
+    /// (<see cref="AnnounceNewChapterAsync"/>). A chapter created published runs it too (CreateChapterCommandHandler).
+    /// True when it locked.
+    /// </summary>
+    public async Task<bool> CameOutAsync(Guid novelId, Chapter chapter)
+    {
+        var locked = await serviceProvider.GetRequiredService<IPrivilegeService>().OnChapterCameOutAsync(chapter.Id);
+        await AnnounceNewChapterAsync(novelId, chapter);
+        return locked;
     }
 
     /// <summary>

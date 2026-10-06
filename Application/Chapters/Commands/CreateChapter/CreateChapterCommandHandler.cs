@@ -73,6 +73,7 @@ public class CreateChapterCommandHandler(
         var cameOut = chapter.Status == ChapterStatuses.Published;
         await novelsRepository.RefreshChapterCountAsync(novel.Id, lastUpdatedAt: cameOut ? chapter.PublishedAt : null);
 
+        var locked = false;
         if (cameOut)
         {
             logger.LogInformation(
@@ -81,17 +82,22 @@ public class CreateChapterCommandHandler(
             
             await sequenceService.RecalculateSequencesForNovelAsync(novel.Id);
             
-            // Trigger privilege update (extend lock window)
-            var privilegeService = serviceProvider.GetRequiredService<IPrivilegeService>();
-            await privilegeService.OnChapterPublishedAsync(novel.Id);
-            
-            // Readers with the novel in their library are told, as when a draft is published (none while the novel is
-            // hidden, #80).
-            await new ChapterStatusEffects(sequenceService, novelsRepository, serviceProvider, logger)
-                .AnnounceNewChapterAsync(novel.Id, chapter);
+            // It locks in early access while the novel has it on (#94), and readers with the novel in their library are
+            // told, as when a draft is published (none while the novel is hidden, #80).
+            locked = await new ChapterStatusEffects(sequenceService, novelsRepository, serviceProvider, logger)
+                .CameOutAsync(novel.Id, chapter);
         }
 
         var chapterDto = mapper.Map<ChapterSingleAuthorDTO>(chapter);
+        if (locked)
+        {
+            // Locked from when it came out, as stored: the answer says so, as the author's chapter does.
+            chapter.EarlyAccessFrom = chapter.PublishedAt;
+            var earlyAccess = await serviceProvider.GetRequiredService<IPrivilegeService>()
+                .GetViewAsync(novel.Id, novel.AuthorId, viewerId: null);
+            chapterDto.IsLocked = earlyAccess.IsLocked(chapter);
+            chapterDto.UnlocksAt = earlyAccess.UnlocksAt(chapter);
+        }
         
         logger.LogInformation("Chapter {ChapterId} created successfully with {ParagraphCount} paragraphs for novel {NovelId}", 
             chapter.Id, paragraphs.Count, novel.Id);

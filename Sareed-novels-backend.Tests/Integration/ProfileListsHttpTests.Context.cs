@@ -199,15 +199,14 @@ public partial class ProfileListsHttpTests
         var replyOnEarly = await api.Comment(member, OnParagraph(earlyParagraphs[0].Id), "رد", thread);
         var onChapter = await api.Comment(member, OnChapter(free.Id), "على الفصل");
 
-        // The second chapter is in early access: the privilege system locks it, and one reader has paid for it.
+        // The second chapter is in early access: its own lock (#94, started now), and one reader has paid for it.
         await using (var db = api.Db())
         {
             await db.Chapters.Where(c => c.Id == free.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.PublishedChapterSequence, 1));
-            await db.Chapters.Where(c => c.Id == early.Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.PublishedChapterSequence, 2));
-            db.NovelPrivileges.Add(new NovelPrivilege
-            {
-                Id = Guid.NewGuid(), NovelId = novel.Id, IsEnabled = true, CurrentLockedCount = 1, PrivilegeStartSequence = 2
-            });
+            await db.Chapters.Where(c => c.Id == early.Id).ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.PublishedChapterSequence, 2)
+                .SetProperty(c => c.EarlyAccessFrom, DateTime.UtcNow));
+            db.NovelPrivileges.Add(new NovelPrivilege { Id = Guid.NewGuid(), NovelId = novel.Id, IsEnabled = true });
             db.NovelPrivilegeSubscriptions.Add(new NovelPrivilegeSubscription
             {
                 Id = Guid.NewGuid(), NovelId = novel.Id, UserId = subscriber.Id, AmountPaid = 100, IsActive = true

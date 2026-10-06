@@ -20,11 +20,8 @@ public class EnablePrivilegeCommandHandler(
         var currentUser = userContext.GetCurrentUser() 
             ?? throw new ForbidException("سجّل الدخول للمتابعة", "NotSignedIn");
         
-        var result = await privilegeService.EnablePrivilegeAsync(
-            request.NovelId, 
-            currentUser.Id, 
-            request.SubscriptionCost,
-            request.PrivilegeStartSequence);
+        var result = await privilegeService.EnablePrivilegeAsync(request.NovelId, currentUser.Id, request.SubscriptionCost,
+            request.PrivilegeStartSequence, request.EarlyAccessDays, request.SubscribersOnly);
         
         return result;
     }

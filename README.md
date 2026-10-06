@@ -1811,7 +1811,7 @@ above. `totalRecharged`, `totalWithdrawn` and `totalSpent` are still read from c
   (#75), so a scheduled publish and a save of the same chapter run one after the other, each reading what the other
   stored; then stored by the author's save code (status, `publishedAt` when it actually came out, the schedule
   cleared), and followed by what a publish by hand does (`ChapterStatusEffects`): sequences, the chapter count, the
-  novel's `lastUpdatedAt`, the privilege window, and readers' notification and push (#33, #39). Its title and text
+  novel's `lastUpdatedAt`, its early-access lock (#94), and readers' notification and push (#33, #39). Its title and text
   don't change, so neither its `revision` nor its `updatedAt` moves. Once: a run that comes after another run, or after
   the author published, rescheduled or cancelled it, finds it no longer due. A chapter that came out before
   (unpublished, then scheduled) doesn't tell readers again. A deleted novel's chapters aren't published.
@@ -1873,3 +1873,75 @@ schedule). So the app shows them without loading the chapter again. Read them fr
 ### Writer studio follow-ups (#80)
 
 While a novel is hidden (a draft), a chapter of it that comes out (created published, published by its author, or on schedule) sends no `NewChapterInLibrary` notification or push: its readers can't open it. Publishing the novel later doesn't announce the chapters that came out meanwhile, since a chapter is announced once, when it comes out. The novel page (`GET /api/novel/{slug}`, `GET /api/novel/by-id/{id}`) has `isDraft`, `true` only on the author's own hidden novel (readers never get one); `GET /api/myworks` orders by `lastUpdatedAt`, then `id`, so its pages never repeat or skip a work; and `DELETE /api/novel/{novelId}/chapter/{chapterId}` for a chapter that isn't there answers 404 `ChapterNotFound` «الفصل غير موجود».
+
+### Early access by chapter (#94)
+
+Early access («الوصول المبكر») keeps a novel's newest chapters for its subscribers for a while. A lock is the chapter's
+own (`Chapters.EarlyAccessFrom`, when it started, and `Chapters.EarlyAccessFreedAt`, when it was freed for good), never a
+position among the published chapters. Its rules are in one place (`Application/Privileges/EarlyAccess.cs`), which the
+chapter read, both chapter lists, view tracking, comment excerpts and manual unlock all ask.
+
+**A chapter is locked** for a reader when early access is on, the chapter is published, its lock started and wasn't
+freed, the novel is subscribers only or the lock started less than `earlyAccessDays` ago, and the reader is neither the
+novel's author nor a subscriber. Nothing runs to unlock chapters: a lock ends by its own date, read whenever the chapter
+is read (the daily job is gone).
+
+| When | What locks |
+|---|---|
+| Turning it on: `POST …/privilege/enable` | the published chapters from `privilegeStartSequence` on (11 or after, at most 20; by default the last min(20, published − 10)), from now. Turned on again after `disable`, it starts afresh: those chapters lock from now, the rest are free |
+| A chapter comes out while it is on: published for the first time by hand, created published, or on schedule | that chapter, from when it came out (`publishedAt`), unless it is among the first 10 published chapters |
+| Unpublishing, publishing again, reordering, deleting | nothing: every chapter keeps the lock it had. Published again, a chapter keeps its lock, not renewed |
+| `POST …/privilege/manual-unlock/{chapterId}` | that chapter only is freed, for good |
+| Turning it off: `POST …/privilege/disable` | every chapter is open and new chapters don't lock; subscriptions stay |
+
+**Settings.** `earlyAccessDays` (1-30) or `subscribersOnly: true` (no automatic unlock), exactly one (a check
+constraint); `subscriptionCost` 100-2000, for new subscribers (subscriptions are permanent).
+
+- `POST /api/novel/{novelId}/privilege/enable` `{ subscriptionCost, privilegeStartSequence?, earlyAccessDays?, subscribersOnly? }`:
+  neither days nor `subscribersOnly` (the website) is 7 days; both is 400 `ValidationFailed`; days out of range
+  `InvalidEarlyAccessDays`; and as before `InvalidSubscriptionCost`, `FirstChaptersMustStayFree`, `InvalidPrivilegeStart`
+  («من 11 إلى P»), `TooManyLockedChapters`, `NotEnoughPublishedChapters`, `PrivilegeAlreadyEnabled` (only while it is
+  on), `NotOwner`, `NovelNotFound`.
+- `PATCH /api/novel/{novelId}/privilege` `{ newSubscriptionCost?, earlyAccessDays?, subscribersOnly?, newPrivilegeStartSequence? }`:
+  - New days or mode apply to the chapters that come out from then on and to those still locked, whose end is counted
+    from their own lock's start. A lock already over is frozen first (freed for good), so no change of the days ever
+    locks a chapter readers could read. Switching to subscribers only keeps the still-locked ones locked;
+    `subscribersOnly: false` alone goes back to days (the novel's, or 7).
+  - `newPrivilegeStartSequence` (the website): frees the locked chapters before that position; forward only
+    (`PrivilegeStartCannotMoveBack`), from 11 to the published count (`InvalidPrivilegeStart`).
+  - Nothing changed, the same cost included: 400 `NoChanges`.
+- `POST /api/novel/{novelId}/privilege/disable`: 200; 400 `PrivilegeNotEnabled` while it is off, `NotOwner`, `NovelNotFound`.
+- `POST /api/novel/{novelId}/privilege/manual-unlock/{chapterId}`: 400 `ChapterNotLocked`, `NotOwner`,
+  `PrivilegeNotEnabled`, `ChapterNotFound` (also for a chapter of another novel).
+
+Every settings change runs in a transaction holding the novel (`sp_getapplock`), and every write is one SQL statement
+with its condition in it, never a write-back of a row read earlier. A save of a chapter never writes its lock (EF ignores
+those two columns after the insert), so a save from an older copy can't undo an unlock.
+
+**`GET /api/novel/{novelId}/privilege`**, for anyone; `{ "isEnabled": false }` while it is off:
+
+```json
+{ "isEnabled": true, "subscriptionCost": 200, "earlyAccessDays": 7, "subscribersOnly": false,
+  "lockedChaptersCount": 3, "nextUnlockAt": "2026-10-13T09:40:00Z", "privilegeStartSequence": 13,
+  "totalPublishedChapters": 15, "subscribersCount": 4, "isSubscribed": false, "subscribedAt": null, "canCancel": false }
+```
+
+- `lockedChaptersCount` is counted from the chapters: those locked for non-subscribers now. `nextUnlockAt` is the
+  earliest end among them (null when none is locked, or subscribers only).
+- `privilegeStartSequence`: the published position of the first locked chapter; when none is locked, the number after
+  the last published chapter (what the website reads as "locking starts from").
+- `subscribersCount`: for the novel's author only, `null` for anyone else.
+
+**Chapters** have `isLocked` and `unlocksAt` (UTC with `Z`; null when not locked, or subscribers only):
+- in the reader list (`GET /api/novel/{novelId}/chapter`) and the reader chapter (`GET …/chapter/{chapterId}`, then
+  without paragraphs and with `lockMessage`): for that reader, so never for the novel's author or a subscriber;
+- in the author's list (`GET /api/myworks/{workId}/chapters`), the author's chapter
+  (`GET /api/myworks/{workId}/chapters/{chapterId}`) and a chapter created published (`POST …/chapter`): for
+  non-subscribers.
+
+**The migration `EarlyAccessByChapter`** adds `Chapters.EarlyAccessFrom`, `Chapters.EarlyAccessFreedAt`,
+`NovelPrivileges.EarlyAccessDays` and `NovelPrivileges.SubscribersOnly`, and the check constraint. Every novel with
+early access gets 7 days, and a chapter readers found locked stays locked, from the deploy (in production on 2026-10-06
+none was: the 5 novels with early access had nothing locked). The positional window's columns (`CurrentLockedCount`,
+`PrivilegeStartSequence`, `LastDailyUnlockDate`, ...) stay, unused, for one release, so that the version before can still
+run against the database; a later migration drops them.

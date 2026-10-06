@@ -1,5 +1,6 @@
 using Application.Chapters.DTOS;
 using Application.Chapters.Queries.GetChapterReader;
+using Application.Privileges;
 using Application.Services;
 using Application.Users;
 using AutoMapper;
@@ -38,6 +39,7 @@ public class GetChapterReaderHandlerTests
         userContext.GetCurrentUser().Returns(currentUserId == null ? null : new CurrentUser(currentUserId, "e", "u", "d"));
         mapper.Map<ChapterSingleReaderDTO>(chapter).Returns(new ChapterSingleReaderDTO());
         mapper.Map<List<ChapterParagraphDTO>>(Arg.Any<object>()).Returns([]);
+        privileges.GetViewAsync(novel.Id, novel.AuthorId, Arg.Any<string?>()).Returns(new EarlyAccessView(null, false, DateTime.UtcNow));
     }
 
     [Theory]
@@ -90,13 +92,17 @@ public class GetChapterReaderHandlerTests
     {
         // The web shows lockMessage as it is (it used to swap this sentence's English for Arabic itself).
         var chapter = ChapterOf(novel.Id, "Published");
+        var lockedFrom = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+        chapter.EarlyAccessFrom = lockedFrom;
         Setup(chapter, currentUserId: "reader-1");
-        privileges.IsChapterLockedAsync(chapter.Id, "reader-1").Returns(true);
+        privileges.GetViewAsync(novel.Id, novel.AuthorId, "reader-1")
+            .Returns(new EarlyAccessView(new EarlyAccessSettings(true, 7, false), false, lockedFrom.AddDays(1)));
 
         var result = await Handler().Handle(new GetChapterReaderQuery(novel.Id, chapter.Id), CancellationToken.None);
 
         Assert.True(result.IsLocked);
         Assert.Equal("هذا الفصل ضمن الوصول المبكر. اشترك لتقرأ الفصول المقفلة كلها فور نشرها.", result.LockMessage);
+        Assert.Equal(lockedFrom.AddDays(7), result.UnlocksAt);
         Assert.Empty(result.Paragraphs);
         await paragraphs.DidNotReceive().GetChapterParagraphs(Arg.Any<Guid>());
     }

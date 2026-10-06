@@ -61,7 +61,7 @@ public partial class EarningsHoldTests(SqlServerDatabase database) : IClassFixtu
 
         public PrivilegeService Privileges => new(NullLogger<PrivilegeService>.Instance, new NovelPrivilegeRepository(Db),
             new PrivilegeSubscriptionRepository(Db), new NovelsRepository(Db), new ChaptersRepository(Db), Wallet, Transactions,
-            Substitute.For<IServiceScopeFactory>());
+            Substitute.For<IServiceScopeFactory>(), TimeProvider.System);
 
         public RequestWithdrawalCommandHandler RequestWithdrawal(User user) => new(NullLogger<RequestWithdrawalCommandHandler>.Instance,
             SignedIn(user), new WithdrawalRequestRepository(Db), new PointCalculationService(), Wallet, Transactions);
