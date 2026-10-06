@@ -31,6 +31,7 @@ public class GetChapterAuthorQueryHandler(IChaptersRepository chaptersRepository
         var earlyAccess = await privilegeService.GetViewAsync(novel.Id, novel.AuthorId, viewerId: null);
         chapterDTO.IsLocked = earlyAccess.IsLocked(chapter);
         chapterDTO.UnlocksAt = earlyAccess.UnlocksAt(chapter);
+        chapterDTO.LockedAt = earlyAccess.LockedAt(chapter);
         
         return chapterDTO;
     }

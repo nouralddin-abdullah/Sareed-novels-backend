@@ -50,6 +50,9 @@ public class PrivilegeInfoDto
     public int? SubscribersCount { get; set; }
 
     public bool IsSubscribed { get; set; } // Does current user have subscription?
+
+    /// <summary>The limits of the settings (#96), so the app needn't hard-code them; also in the answer while it is off.</summary>
+    public EarlyAccessRulesDto Rules { get; set; } = EarlyAccessRulesDto.Current;
     /// <summary>When the signed-in reader's subscription began (UTC); null when not subscribed.</summary>
     public DateTime? SubscribedAt { get; set; }
     /// <summary>
@@ -75,15 +78,32 @@ public class PrivilegeSubscriptionDto
     public decimal AmountPaid { get; set; }
 }
 
-/// <summary>
-/// Novel subscriber info (for author view)
-/// </summary>
+/// <summary>A subscriber of the novel's early access, for its author (#96: GET .../privilege/subscribers).</summary>
 public class PrivilegeSubscriberDto
 {
     public string UserId { get; set; } = default!;
     public string UserName { get; set; } = default!;
     public string DisplayName { get; set; } = default!;
     public string? ProfilePhoto { get; set; }
+
+    /// <summary>When they subscribed, UTC with "Z".</summary>
     public DateTime SubscribedAt { get; set; }
-    public decimal AmountPaid { get; set; }
+}
+
+/// <summary>
+/// The limits of early access's settings (#96), from <see cref="EarlyAccess"/>: the subscription's price in whole points,
+/// the first chapters that always stay free, the most chapters enabling locks, and the days a lock can last (and the
+/// default when none is given).
+/// </summary>
+public class EarlyAccessRulesDto
+{
+    public static readonly EarlyAccessRulesDto Current = new();
+
+    public decimal MinCost => EarlyAccess.MinCost;
+    public decimal MaxCost => EarlyAccess.MaxCost;
+    public int FreeChapters => EarlyAccess.FreeChapters;
+    public int MaxLockedOnEnable => EarlyAccess.MaxLockedWhenEnabled;
+    public int MinDays => EarlyAccess.MinDays;
+    public int MaxDays => EarlyAccess.MaxDays;
+    public int DefaultDays => EarlyAccess.DefaultDays;
 }

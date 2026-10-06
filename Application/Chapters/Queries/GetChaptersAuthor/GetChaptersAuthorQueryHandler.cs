@@ -25,8 +25,9 @@ public class GetChaptersAuthorQueryHandler(ILogger<GetChaptersAuthorQueryHandler
         var earlyAccess = await privilegeService.GetViewAsync(novel.Id, novel.AuthorId, viewerId: null);
         foreach (var (dto, chapter) in result.Zip(chapters))
         {
-            dto.IsLocked = earlyAccess.IsLocked(chapter);
+            dto.IsLocked = dto.IsEarlyAccess = earlyAccess.IsLocked(chapter);
             dto.UnlocksAt = earlyAccess.UnlocksAt(chapter);
+            dto.LockedAt = earlyAccess.LockedAt(chapter);
         }
         return result;
     }
